@@ -51,3 +51,22 @@ def test_analyze_service_detects_reversal_pair(tmp_path) -> None:
     assert result.reconciliation.reversed_entries == 2
     statuses = [row.reconciliation_status for row in result.preview_transactions]
     assert statuses == ["reversed", "reversed"]
+
+
+def test_analyze_service_applies_single_normalizer_rules(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    service = AnalyzeService(storage=storage)
+    raw = (
+        b"date,description,amount,type\n"
+        b"2026-04-01,  ifood   sao paulo  ,-58.90,debito\n"
+        b"2026-04-02,salario,-2500.00,credito\n"
+    )
+
+    result = service.analyze(filename="sample.csv", raw_bytes=raw)
+
+    assert result.total_inflows == 2500.00
+    assert result.total_outflows == -58.90
+    assert result.net_total == 2441.10
+    assert result.preview_transactions[0].description == "IFOOD SAO PAULO"
+    assert result.preview_transactions[1].description == "SALARIO"
+    assert result.preview_transactions[1].amount == 2500.00

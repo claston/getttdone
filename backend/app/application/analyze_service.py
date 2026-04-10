@@ -4,6 +4,7 @@ from uuid import uuid4
 from app.application.csv_parser import parse_csv_transactions
 from app.application.errors import UnsupportedFileTypeError
 from app.application.models import AnalysisData, NormalizedTransaction, TransactionRow
+from app.application.normalizer import normalize_transactions
 from app.application.ofx_parser import parse_ofx_transactions
 from app.application.reconciliation import reconcile_transactions
 from app.application.storage_service import TempAnalysisStorage
@@ -30,7 +31,8 @@ class AnalyzeService:
             raise UnsupportedFileTypeError
 
         analysis_id = f"an_{uuid4().hex[:12]}"
-        transactions = self._build_transactions_for_extension(extension, raw_bytes)
+        parsed_transactions = self._build_transactions_for_extension(extension, raw_bytes)
+        transactions = normalize_transactions(parsed_transactions)
         reconciliation_result = reconcile_transactions(transactions)
         preview_rows = [
             TransactionRow(
