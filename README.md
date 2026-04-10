@@ -94,6 +94,13 @@ Stop-Process -Id <BACKEND_PID>,<FRONTEND_PID> -Force
 .\scripts\fix-frontend.ps1
 ```
 
+## CI no GitHub
+
+Workflows configurados:
+
+- `CI | Lint and Tests`: roda `ruff` e `pytest` do `backend` em push/PR.
+- `Security | CodeQL Scan`: roda analise de seguranca para Python em push/PR para `main` e agenda semanal.
+
 ## Endpoints fundacao
 
 - `GET /health`
