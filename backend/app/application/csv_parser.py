@@ -1,4 +1,5 @@
-import csv
+﻿import csv
+import unicodedata
 from datetime import datetime
 from io import StringIO
 
@@ -9,7 +10,7 @@ REQUIRED_FIELDS = {"date", "description", "amount"}
 
 FIELD_ALIASES = {
     "date": {"date", "data", "transaction_date", "posted_at"},
-    "description": {"description", "descricao", "historico", "histórico", "memo"},
+    "description": {"description", "descricao", "historico", "memo"},
     "amount": {"amount", "valor", "value"},
     "type": {"type", "tipo", "operation_type", "natureza"},
 }
@@ -83,7 +84,8 @@ def _resolve_field_map(fieldnames: list[str]) -> dict[str, str]:
 
 
 def _normalize_header(header: str) -> str:
-    return header.strip().lower()
+    value = unicodedata.normalize("NFKD", header.strip().lower())
+    return "".join(ch for ch in value if not unicodedata.combining(ch))
 
 
 def _require_value(row: dict[str, str], key: str, field_name: str) -> str:
@@ -127,9 +129,9 @@ def _parse_amount(raw: str) -> float:
 
 
 def _normalize_type(raw_type: str, amount: float) -> str:
-    value = raw_type.strip().lower()
-    if value in {"inflow", "credit", "entrada", "credito", "crédito"}:
+    value = _normalize_header(raw_type)
+    if value in {"inflow", "credit", "entrada", "credito"}:
         return "inflow"
-    if value in {"outflow", "debit", "saida", "saída", "debito", "débito"}:
+    if value in {"outflow", "debit", "saida", "debito"}:
         return "outflow"
     return "inflow" if amount >= 0 else "outflow"

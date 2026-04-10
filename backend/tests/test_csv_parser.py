@@ -38,3 +38,29 @@ def test_parse_csv_transactions_raises_for_missing_required_columns() -> None:
 
     with pytest.raises(InvalidFileContentError):
         parse_csv_transactions(raw)
+
+
+def test_parse_csv_transactions_accepts_accented_header_descricao() -> None:
+    raw = (
+        "Data,Valor,Identificador,Descricao\n"
+        "06/10/2023,-3500.00,abc123,Transferencia enviada\n"
+    ).encode("utf-8")
+
+    rows = parse_csv_transactions(raw)
+
+    assert len(rows) == 1
+    assert rows[0].date == "2023-10-06"
+    assert rows[0].amount == -3500.00
+    assert rows[0].description == "Transferencia enviada"
+
+
+def test_parse_csv_transactions_accepts_accented_header_descricao_utf8() -> None:
+    raw = (
+        "Data,Valor,Identificador,Descrição\n"
+        "06/10/2023,-3500.00,abc123,Transferência enviada\n"
+    ).encode("utf-8")
+
+    rows = parse_csv_transactions(raw)
+
+    assert len(rows) == 1
+    assert rows[0].description == "Transferência enviada"
