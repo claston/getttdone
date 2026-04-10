@@ -70,3 +70,19 @@ def test_analyze_service_applies_single_normalizer_rules(tmp_path) -> None:
     assert result.preview_transactions[0].description == "IFOOD"
     assert result.preview_transactions[1].description == "SALARIO"
     assert result.preview_transactions[1].amount == 2500.00
+
+
+def test_analyze_service_detects_possible_duplicate_group(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    service = AnalyzeService(storage=storage)
+    raw = (
+        b"date,description,amount\n"
+        b"2026-04-10,Compra mercado central,-120.00\n"
+        b"2026-04-11,Compra mercado central loja 1,-120.00\n"
+    )
+
+    result = service.analyze(filename="sample.csv", raw_bytes=raw)
+
+    assert result.reconciliation.potential_duplicates == 1
+    statuses = [row.reconciliation_status for row in result.preview_transactions]
+    assert statuses == ["grouped", "grouped"]

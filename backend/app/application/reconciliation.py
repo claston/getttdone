@@ -21,6 +21,7 @@ def reconcile_transactions(transactions: list[NormalizedTransaction]) -> Reconci
     used_indexes: set[int] = set()
     matched_groups = 0
     reversed_entries = 0
+    potential_duplicates = 0
 
     for i in range(len(transactions)):
         if i in used_indexes:
@@ -58,11 +59,26 @@ def reconcile_transactions(transactions: list[NormalizedTransaction]) -> Reconci
                 matched_groups += 1
                 break
 
+    for i in range(len(transactions)):
+        if i in used_indexes:
+            continue
+        for j in range(i + 1, len(transactions)):
+            if j in used_indexes:
+                continue
+            if not _is_possible_duplicate_pair(transactions[i], transactions[j]):
+                continue
+            statuses[i] = "grouped"
+            statuses[j] = "grouped"
+            used_indexes.add(i)
+            used_indexes.add(j)
+            potential_duplicates += 1
+            break
+
     return ReconciliationResult(
         statuses=statuses,
         matched_groups=matched_groups,
         reversed_entries=reversed_entries,
-        potential_duplicates=0,
+        potential_duplicates=potential_duplicates,
     )
 
 
@@ -87,6 +103,38 @@ def _normalize_text(value: str) -> str:
 
 def _is_opposite_amount(left: float, right: float) -> bool:
     return round(left + right, 2) == 0
+
+
+def _is_possible_duplicate_pair(left: NormalizedTransaction, right: NormalizedTransaction) -> bool:
+    if _same_sign(left.amount, right.amount) is False:
+        return False
+    if round(left.amount - right.amount, 2) != 0:
+        return False
+    if _days_between(left.date, right.date) > 1:
+        return False
+    return _is_similar_description(left.description, right.description)
+
+
+def _same_sign(left: float, right: float) -> bool:
+    return (left > 0 and right > 0) or (left < 0 and right < 0)
+
+
+def _is_similar_description(left: str, right: str) -> bool:
+    left_text = _normalize_text(left)
+    right_text = _normalize_text(right)
+    if left_text == right_text:
+        return True
+    if left_text in right_text or right_text in left_text:
+        return True
+
+    left_tokens = {token for token in left_text.split() if len(token) > 2 and not token.isdigit()}
+    right_tokens = {token for token in right_text.split() if len(token) > 2 and not token.isdigit()}
+    if not left_tokens or not right_tokens:
+        return False
+
+    overlap = len(left_tokens.intersection(right_tokens))
+    similarity = overlap / max(len(left_tokens), len(right_tokens))
+    return similarity >= 0.6
 
 
 def _days_between(left_date: str, right_date: str) -> int:
