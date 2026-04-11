@@ -1,6 +1,19 @@
+from io import BytesIO
+
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 
 from app.main import app
+
+
+def _build_xlsx_bytes(rows: list[list[object]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    for row in rows:
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def test_reconcile_happy_path_accepts_bank_and_sheet_files() -> None:
@@ -21,6 +34,7 @@ def test_reconcile_happy_path_accepts_bank_and_sheet_files() -> None:
     assert payload["bank_file_type"] == "ofx"
     assert payload["sheet_filename"] == "sheet.csv"
     assert payload["sheet_file_type"] == "csv"
+    assert payload["sheet_rows_parsed"] == 1
 
 
 def test_reconcile_rejects_unsupported_bank_file_type() -> None:
@@ -51,3 +65,46 @@ def test_reconcile_rejects_unsupported_sheet_file_type() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Unsupported sheet file type. Use CSV or XLSX."
+
+
+def test_reconcile_returns_422_when_sheet_is_missing_required_columns() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/reconcile",
+        files={
+            "bank_file": ("bank.csv", b"date,description,amount\n2026-04-01,TEST,10", "text/csv"),
+            "sheet_file": ("sheet.csv", b"descricao,valor\nTEST,100", "text/csv"),
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Sheet is missing required columns: date, amount, description."
+
+
+def test_reconcile_accepts_sheet_xlsx_with_alias_columns() -> None:
+    client = TestClient(app)
+    sheet_raw = _build_xlsx_bytes(
+        [
+            ["dt_lancamento", "vlr", "historico"],
+            ["01/04/2026", "1200,00", "RECEBIMENTO CLIENTE"],
+            ["02/04/2026", "-250,50", "PAGAMENTO FORNECEDOR"],
+        ]
+    )
+
+    response = client.post(
+        "/reconcile",
+        files={
+            "bank_file": ("bank.ofx", b"<OFX>...</OFX>", "application/octet-stream"),
+            "sheet_file": (
+                "sheet.xlsx",
+                sheet_raw,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sheet_file_type"] == "xlsx"
+    assert payload["sheet_rows_parsed"] == 2
