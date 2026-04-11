@@ -16,6 +16,13 @@
     </header>
 
     <section class="card">
+      <div class="trust-box">
+        <h2>Privacidade e confiança</h2>
+        <p>Seus dados são processados de forma temporária.</p>
+        <p>Não mantemos histórico pessoal nesta versão inicial.</p>
+        <p id="expires-info" class="trust-expiry">Processamento temporário: suas análises expiram automaticamente.</p>
+      </div>
+
       <form id="analyze-form" class="upload-form">
         <label for="file-input">Arquivo do extrato</label>
         <input id="file-input" name="file" type="file" accept=".csv,.xlsx,.ofx" required />
@@ -31,6 +38,7 @@
 
     <section id="result" class="card" hidden>
       <h2>Preview da análise</h2>
+      <p id="result-expires-info" class="trust-expiry">Processamento temporário: suas análises expiram automaticamente.</p>
       <div id="stats" class="stats"></div>
 
       <h3>Antes vs Depois</h3>

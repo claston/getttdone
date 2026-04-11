@@ -7,6 +7,8 @@ const submitBtn = document.getElementById("submit-btn");
 const errorNode = document.getElementById("error");
 const resultNode = document.getElementById("result");
 const statsNode = document.getElementById("stats");
+const expiresInfoNode = document.getElementById("expires-info");
+const resultExpiresInfoNode = document.getElementById("result-expires-info");
 const beforeAfterWrap = document.getElementById("before-after-wrap");
 const beforeAfterBody = document.getElementById("before-after-body");
 const previewBody = document.getElementById("preview-body");
@@ -22,6 +24,31 @@ function formatCurrency(value) {
     style: "currency",
     currency: "BRL"
   }).format(Number(value || 0));
+}
+
+function updateTrustMessage(expiresAt) {
+  const formattedExpiresAt = formatExpiresAt(expiresAt);
+  const message = formattedExpiresAt
+    ? `Processamento temporário: esta análise expira em ${formattedExpiresAt}.`
+    : "Processamento temporário: suas análises expiram automaticamente.";
+  expiresInfoNode.textContent = message;
+  resultExpiresInfoNode.textContent = message;
+}
+
+function formatExpiresAt(expiresAt) {
+  if (!expiresAt) {
+    return "";
+  }
+
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
 }
 
 function setError(message) {
@@ -145,6 +172,7 @@ form.addEventListener("submit", async (event) => {
   const baseUrl = normalizeApiBase(apiBaseInput.value);
   const formData = new FormData();
   formData.append("file", file);
+  updateTrustMessage("");
 
   submitBtn.disabled = true;
   submitBtn.textContent = "Processando...";
@@ -163,6 +191,7 @@ form.addEventListener("submit", async (event) => {
     renderStats(payload);
     renderPreviewRows(payload.preview_transactions || []);
     renderBeforeAfterRows(payload.preview_before_after || []);
+    updateTrustMessage(payload.expires_at);
     downloadLink.href = `${baseUrl}/report/${payload.analysis_id}`;
     resultNode.hidden = false;
   } catch (error) {
@@ -177,5 +206,6 @@ form.addEventListener("submit", async (event) => {
 (function init() {
   const savedBase = localStorage.getItem("gettdone_api_base");
   apiBaseInput.value = normalizeApiBase(savedBase || DEFAULT_API_BASE);
+  updateTrustMessage("");
   checkApi();
 })();
