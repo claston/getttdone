@@ -1,0 +1,41 @@
+from pathlib import Path
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
+from app.schemas import ReconcileIntakeResponse
+
+router = APIRouter()
+
+_BANK_ALLOWED_EXTENSIONS = {"csv", "xlsx", "ofx"}
+_SHEET_ALLOWED_EXTENSIONS = {"csv", "xlsx"}
+
+
+def _file_extension(filename: str | None) -> str:
+    if not filename:
+        return ""
+    return Path(filename).suffix.lower().lstrip(".")
+
+
+@router.post("/reconcile", response_model=ReconcileIntakeResponse)
+async def reconcile(
+    bank_file: UploadFile = File(...),
+    sheet_file: UploadFile = File(...),
+) -> ReconcileIntakeResponse:
+    bank_filename = bank_file.filename or ""
+    sheet_filename = sheet_file.filename or ""
+    bank_extension = _file_extension(bank_filename)
+    sheet_extension = _file_extension(sheet_filename)
+
+    if bank_extension not in _BANK_ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported bank file type. Use CSV, XLSX, or OFX.")
+
+    if sheet_extension not in _SHEET_ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported sheet file type. Use CSV or XLSX.")
+
+    return ReconcileIntakeResponse(
+        status="accepted",
+        bank_filename=bank_filename,
+        bank_file_type=bank_extension,
+        sheet_filename=sheet_filename,
+        sheet_file_type=sheet_extension,
+    )

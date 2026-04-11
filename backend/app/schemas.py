@@ -65,3 +65,11 @@ class AnalyzeResponse(BaseModel):
     preview_transactions: list[TransactionPreview]
     preview_before_after: list[BeforeAfterPreview]
     expires_at: str | None
+
+
+class ReconcileIntakeResponse(BaseModel):
+    status: str
+    bank_filename: str
+    bank_file_type: str
+    sheet_filename: str
+    sheet_file_type: str

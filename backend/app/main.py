@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.dependencies import get_analyze_service, get_report_service
-from app.routers import analyze_router, health_router, report_router
+from app.routers import analyze_router, health_router, reconcile_router, report_router
 
 app = FastAPI(title="gettdone API", version="0.1.0")
 
@@ -22,6 +22,7 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(analyze_router)
+app.include_router(reconcile_router)
 app.include_router(report_router)
 
 
@@ -41,4 +42,3 @@ __all__ = [
     "get_analyze_service",
     "get_report_service",
 ]
-
