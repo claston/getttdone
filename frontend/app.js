@@ -33,11 +33,15 @@ function setError(message) {
 }
 
 function renderStats(data) {
+  const operational = data.operational_summary || {};
   const metrics = [
     ["Transações", String(data.transactions_total)],
     ["Entradas", formatCurrency(data.total_inflows)],
     ["Saídas", formatCurrency(data.total_outflows)],
-    ["Saldo", formatCurrency(data.net_total)]
+    ["Saldo", formatCurrency(data.net_total)],
+    ["Volume Total", formatCurrency(operational.total_volume || 0)],
+    ["Qtd Entradas", String(operational.inflow_count || 0)],
+    ["Qtd Saídas", String(operational.outflow_count || 0)]
   ];
 
   statsNode.innerHTML = "";
