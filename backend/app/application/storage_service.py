@@ -28,6 +28,7 @@ class TempAnalysisStorage:
         analysis_dir.mkdir(parents=True, exist_ok=True)
         now = self.now_provider()
         expires_at = now + timedelta(seconds=self.ttl_seconds)
+        report_rows = data.report_transactions or data.preview_transactions
 
         json_path = analysis_dir / "analysis.json"
         json_path.write_text(
@@ -37,6 +38,7 @@ class TempAnalysisStorage:
                     "created_at": now.isoformat(),
                     "expires_at": expires_at.isoformat(),
                     "preview_transactions": [asdict(item) for item in data.preview_transactions],
+                    "report_transactions": [asdict(item) for item in report_rows],
                 },
                 ensure_ascii=True,
                 indent=2,
@@ -48,7 +50,7 @@ class TempAnalysisStorage:
         sheet = workbook.active
         sheet.title = "Transacoes"
         sheet.append(["date", "description", "amount", "category", "reconciliation_status"])
-        for item in data.preview_transactions:
+        for item in report_rows:
             sheet.append([item.date, item.description, item.amount, item.category, item.reconciliation_status])
         self._format_transacoes_sheet(sheet)
         self._add_conciliacao_sheet(workbook, data)

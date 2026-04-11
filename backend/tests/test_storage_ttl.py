@@ -77,3 +77,34 @@ def test_save_analysis_formats_report_for_readability(tmp_path) -> None:
     assert sheet.column_dimensions["B"].width is not None
     assert sheet.column_dimensions["B"].width >= 12
     assert "Conciliacao" in workbook.sheetnames
+
+
+def test_save_analysis_writes_full_transaction_set_to_report(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    full_rows = [
+        TransactionRow(
+            date=f"2026-04-{index:02d}",
+            description=f"TX {index}",
+            amount=float(-index),
+            category="Outros",
+            reconciliation_status="unmatched",
+        )
+        for index in range(1, 26)
+    ]
+    data = AnalysisData(
+        analysis_id="an_full_report",
+        file_type="csv",
+        transactions_total=len(full_rows),
+        total_inflows=0.0,
+        total_outflows=-325.0,
+        net_total=-325.0,
+        preview_transactions=full_rows[:20],
+        report_transactions=full_rows,
+    )
+
+    storage.save_analysis(data)
+
+    report_path = tmp_path / "an_full_report" / "report.xlsx"
+    workbook = load_workbook(report_path)
+    sheet = workbook["Transacoes"]
+    assert sheet.max_row == 26

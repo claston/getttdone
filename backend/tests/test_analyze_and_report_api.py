@@ -7,6 +7,7 @@ from app.dependencies import get_analyze_service, get_report_service
 from app.main import app
 from app.schemas import (
     AnalyzeResponse,
+    BeforeAfterPreview,
     CategorySummary,
     Insight,
     OperationalSummary,
@@ -65,6 +66,15 @@ class FakeAnalyzeService:
                     amount=-20.0,
                     category="Outros",
                     reconciliation_status="unmatched",
+                )
+            ],
+            preview_before_after=[
+                BeforeAfterPreview(
+                    date="2026-04-01",
+                    description_before="test",
+                    description_after="TEST",
+                    amount_before=-20.0,
+                    amount_after=-20.0,
                 )
             ],
             expires_at=None,

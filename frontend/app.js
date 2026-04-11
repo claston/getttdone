@@ -7,6 +7,8 @@ const submitBtn = document.getElementById("submit-btn");
 const errorNode = document.getElementById("error");
 const resultNode = document.getElementById("result");
 const statsNode = document.getElementById("stats");
+const beforeAfterWrap = document.getElementById("before-after-wrap");
+const beforeAfterBody = document.getElementById("before-after-body");
 const previewBody = document.getElementById("preview-body");
 const downloadLink = document.getElementById("download-link");
 const apiStatus = document.getElementById("api-status");
@@ -81,6 +83,34 @@ function renderPreviewRows(rows) {
   }
 }
 
+function renderBeforeAfterRows(rows) {
+  beforeAfterBody.innerHTML = "";
+  const hasRows = Array.isArray(rows) && rows.length > 0;
+  beforeAfterWrap.hidden = !hasRows;
+  if (!hasRows) {
+    return;
+  }
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const values = [
+      row.date,
+      row.description_before,
+      row.description_after,
+      formatCurrency(row.amount_before),
+      formatCurrency(row.amount_after)
+    ];
+
+    for (const value of values) {
+      const td = document.createElement("td");
+      td.textContent = String(value);
+      tr.appendChild(td);
+    }
+
+    beforeAfterBody.appendChild(tr);
+  }
+}
+
 async function checkApi() {
   const baseUrl = normalizeApiBase(apiBaseInput.value);
   try {
@@ -132,6 +162,7 @@ form.addEventListener("submit", async (event) => {
 
     renderStats(payload);
     renderPreviewRows(payload.preview_transactions || []);
+    renderBeforeAfterRows(payload.preview_before_after || []);
     downloadLink.href = `${baseUrl}/report/${payload.analysis_id}`;
     resultNode.hidden = false;
   } catch (error) {
