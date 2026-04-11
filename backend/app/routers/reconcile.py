@@ -1,9 +1,10 @@
 ﻿from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.application import (
     InvalidFileContentError,
+    ReportService,
     classify_reconciliation_rows,
     generate_reconciliation_problems,
     match_exact_then_date_tolerance_then_description_similarity_1to1,
@@ -12,6 +13,7 @@ from app.application import (
 )
 from app.application.models import NormalizedTransaction
 from app.application.normalizer import normalize_transactions
+from app.dependencies import get_report_service
 from app.schemas import ReconcileIntakeResponse
 
 router = APIRouter()
@@ -30,6 +32,7 @@ def _file_extension(filename: str | None) -> str:
 async def reconcile(
     bank_file: UploadFile = File(...),
     sheet_file: UploadFile = File(...),
+    report_service: ReportService = Depends(get_report_service),
 ) -> ReconcileIntakeResponse:
     bank_filename = bank_file.filename or ""
     sheet_filename = sheet_file.filename or ""
@@ -139,8 +142,14 @@ async def reconcile(
         "pending_count": classification_result.pending_count,
         "divergent_count": classification_result.divergent_count,
     }
+    analysis_id, expires_at = report_service.save_reconcile_report(
+        summary=summary,
+        reconciliation_rows=reconciliation_rows,
+        problems=problems,
+    )
 
     return ReconcileIntakeResponse(
+        analysis_id=analysis_id,
         status="accepted",
         bank_filename=bank_filename,
         bank_file_type=bank_extension,
@@ -165,6 +174,7 @@ async def reconcile(
         reconciliation_rows=reconciliation_rows,
         problems=problems,
         summary=summary,
+        expires_at=expires_at,
     )
 
 

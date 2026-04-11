@@ -3,6 +3,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
+from uuid import uuid4
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -67,6 +68,94 @@ class TempAnalysisStorage:
             raise AnalysisNotFoundError
         return report_path
 
+    def save_reconcile_report(
+        self,
+        summary: dict[str, int],
+        reconciliation_rows: list[dict[str, str | float | None]],
+        problems: list[dict[str, str]],
+    ) -> tuple[str, str]:
+        analysis_id = self._build_analysis_id(prefix="rc")
+        analysis_dir = self.root_dir / analysis_id
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        now = self.now_provider()
+        expires_at = now + timedelta(seconds=self.ttl_seconds)
+
+        json_path = analysis_dir / "reconcile.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "analysis_id": analysis_id,
+                    "created_at": now.isoformat(),
+                    "expires_at": expires_at.isoformat(),
+                    "summary": summary,
+                    "reconciliation_rows": reconciliation_rows,
+                    "problems": problems,
+                },
+                ensure_ascii=True,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        workbook = Workbook()
+        summary_sheet = workbook.active
+        summary_sheet.title = "Resumo"
+        summary_sheet.append(["metric", "value"])
+        summary_sheet.append(["total_bank_rows", summary.get("total_bank_rows", 0)])
+        summary_sheet.append(["total_sheet_rows", summary.get("total_sheet_rows", 0)])
+        summary_sheet.append(["conciliated_count", summary.get("conciliated_count", 0)])
+        summary_sheet.append(["pending_count", summary.get("pending_count", 0)])
+        summary_sheet.append(["divergent_count", summary.get("divergent_count", 0)])
+        self._format_transacoes_sheet(summary_sheet)
+
+        detail_sheet = workbook.create_sheet(title="Conciliacao_Detalhada")
+        detail_headers = [
+            "row_id",
+            "source",
+            "date",
+            "description",
+            "amount",
+            "status",
+            "match_rule",
+            "matched_row_id",
+            "reason",
+        ]
+        detail_sheet.append(detail_headers)
+        for row in reconciliation_rows:
+            detail_sheet.append([row.get(header) for header in detail_headers])
+        self._format_transacoes_sheet(detail_sheet)
+
+        problems_sheet = workbook.create_sheet(title="Problemas")
+        problems_sheet.append(["type", "title", "description"])
+        for problem in problems:
+            problems_sheet.append([problem.get("type"), problem.get("title"), problem.get("description")])
+        if len(problems) == 0:
+            problems_sheet.append(["none", "No problems detected", "No pending/divergent issues were detected."])
+        self._format_transacoes_sheet(problems_sheet)
+
+        workbook.save(analysis_dir / "reconcile_report.xlsx")
+
+        csv_headers = detail_headers
+        csv_lines = [",".join(csv_headers)]
+        for row in reconciliation_rows:
+            values = [self._escape_csv_value(row.get(header)) for header in csv_headers]
+            csv_lines.append(",".join(values))
+        (analysis_dir / "reconcile_report.csv").write_text("\n".join(csv_lines), encoding="utf-8")
+
+        return analysis_id, expires_at.isoformat()
+
+    def get_reconcile_report_path(self, analysis_id: str, file_format: str) -> Path:
+        analysis_dir = self.root_dir / analysis_id
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+
+        suffix = "xlsx" if file_format == "xlsx" else "csv"
+        report_path = analysis_dir / f"reconcile_report.{suffix}"
+        if not report_path.exists():
+            raise AnalysisNotFoundError
+        return report_path
+
     def _is_expired(self, analysis_dir: Path) -> bool:
         metadata_path = analysis_dir / "analysis.json"
         try:
@@ -80,6 +169,8 @@ class TempAnalysisStorage:
             return False
 
     def _cleanup_analysis(self, analysis_dir: Path) -> None:
+        if not analysis_dir.exists():
+            return
         for file in analysis_dir.glob("**/*"):
             if file.is_file():
                 file.unlink(missing_ok=True)
@@ -116,3 +207,12 @@ class TempAnalysisStorage:
             sheet.append(["-", "No reconciled entries in preview", "", "", "unmatched"])
 
         self._format_transacoes_sheet(sheet)
+
+    def _build_analysis_id(self, prefix: str) -> str:
+        return f"{prefix}_{uuid4().hex[:12]}"
+
+    def _escape_csv_value(self, value: object) -> str:
+        text = "" if value is None else str(value)
+        if any(char in text for char in [",", "\"", "\n", "\r"]):
+            return f"\"{text.replace('\"', '\"\"')}\""
+        return text

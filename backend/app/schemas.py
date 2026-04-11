@@ -76,6 +76,7 @@ class AnalyzeResponse(BaseModel):
 
 
 class ReconcileIntakeResponse(BaseModel):
+    analysis_id: str
     status: str
     bank_filename: str
     bank_file_type: str
@@ -100,3 +101,4 @@ class ReconcileIntakeResponse(BaseModel):
     reconciliation_rows: list[dict[str, str | float | None]]
     problems: list[Insight]
     summary: ReconcileSummary
+    expires_at: str | None

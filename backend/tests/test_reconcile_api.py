@@ -29,6 +29,7 @@ def test_reconcile_happy_path_accepts_bank_and_sheet_files() -> None:
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["analysis_id"].startswith("rc_")
     assert payload["status"] == "accepted"
     assert payload["bank_filename"] == "bank.csv"
     assert payload["bank_file_type"] == "csv"
@@ -66,6 +67,7 @@ def test_reconcile_happy_path_accepts_bank_and_sheet_files() -> None:
     assert len(payload["normalization_preview"]) == 2
     assert payload["normalization_preview"][0]["source"] == "bank"
     assert payload["normalization_preview"][1]["source"] == "sheet"
+    assert payload["expires_at"] is not None
 
 
 def test_reconcile_rejects_unsupported_bank_file_type() -> None:
@@ -394,3 +396,32 @@ def test_reconcile_generates_operational_problem_insights() -> None:
         "pending_count": 2,
         "divergent_count": 2,
     }
+
+
+def test_reconcile_report_happy_path_csv_and_not_found() -> None:
+    client = TestClient(app)
+    intake = client.post(
+        "/reconcile",
+        files={
+            "bank_file": ("bank.csv", b"date,description,amount\n2026-04-01,TEST,-100", "text/csv"),
+            "sheet_file": ("sheet.csv", b"data,valor,descricao\n2026-04-01,-100,TEST", "text/csv"),
+        },
+    )
+    assert intake.status_code == 200
+    analysis_id = intake.json()["analysis_id"]
+
+    xlsx_report = client.get(f"/reconcile-report/{analysis_id}")
+    assert xlsx_report.status_code == 200
+    assert (
+        xlsx_report.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    csv_report = client.get(f"/reconcile-report/{analysis_id}?format=csv")
+    assert csv_report.status_code == 200
+    assert csv_report.headers["content-type"].startswith("text/csv")
+    assert "row_id,source,date,description,amount,status,match_rule,matched_row_id,reason" in csv_report.text
+
+    missing = client.get("/reconcile-report/rc_missing_id")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "Analysis not found"
