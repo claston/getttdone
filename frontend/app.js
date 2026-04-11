@@ -1,18 +1,23 @@
-﻿const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE = "http://127.0.0.1:8000";
 
 const form = document.getElementById("analyze-form");
-const fileInput = document.getElementById("file-input");
+const bankFileInput = document.getElementById("bank-file-input");
+const sheetFileInput = document.getElementById("sheet-file-input");
 const apiBaseInput = document.getElementById("api-base");
+const analyzeBtn = document.getElementById("analyze-btn");
 const submitBtn = document.getElementById("submit-btn");
 const errorNode = document.getElementById("error");
+const uploadSuccessNode = document.getElementById("upload-success");
 const resultNode = document.getElementById("result");
+const resultTitle = document.getElementById("result-title");
 const statsNode = document.getElementById("stats");
-const expiresInfoNode = document.getElementById("expires-info");
-const resultExpiresInfoNode = document.getElementById("result-expires-info");
+const analyzePreviewNode = document.getElementById("analyze-preview");
 const beforeAfterWrap = document.getElementById("before-after-wrap");
 const beforeAfterBody = document.getElementById("before-after-body");
 const previewBody = document.getElementById("preview-body");
 const downloadLink = document.getElementById("download-link");
+const expiresInfoNode = document.getElementById("expires-info");
+const resultExpiresInfoNode = document.getElementById("result-expires-info");
 const apiStatus = document.getElementById("api-status");
 
 function normalizeApiBase(value) {
@@ -24,15 +29,6 @@ function formatCurrency(value) {
     style: "currency",
     currency: "BRL"
   }).format(Number(value || 0));
-}
-
-function updateTrustMessage(expiresAt) {
-  const formattedExpiresAt = formatExpiresAt(expiresAt);
-  const message = formattedExpiresAt
-    ? `Processamento temporário: esta análise expira em ${formattedExpiresAt}.`
-    : "Processamento temporário: suas análises expiram automaticamente.";
-  expiresInfoNode.textContent = message;
-  resultExpiresInfoNode.textContent = message;
 }
 
 function formatExpiresAt(expiresAt) {
@@ -51,6 +47,15 @@ function formatExpiresAt(expiresAt) {
   }).format(date);
 }
 
+function updateTrustMessage(expiresAt) {
+  const formattedExpiresAt = formatExpiresAt(expiresAt);
+  const message = formattedExpiresAt
+    ? `Processamento temporario: esta analise expira em ${formattedExpiresAt}.`
+    : "Processamento temporario: suas analises expiram automaticamente.";
+  expiresInfoNode.textContent = message;
+  resultExpiresInfoNode.textContent = message;
+}
+
 function setError(message) {
   if (!message) {
     errorNode.hidden = true;
@@ -61,18 +66,24 @@ function setError(message) {
   errorNode.textContent = message;
 }
 
-function renderStats(data) {
-  const operational = data.operational_summary || {};
-  const metrics = [
-    ["Transações", String(data.transactions_total)],
-    ["Entradas", formatCurrency(data.total_inflows)],
-    ["Saídas", formatCurrency(data.total_outflows)],
-    ["Saldo", formatCurrency(data.net_total)],
-    ["Volume Total", formatCurrency(operational.total_volume || 0)],
-    ["Qtd Entradas", String(operational.inflow_count || 0)],
-    ["Qtd Saídas", String(operational.outflow_count || 0)]
-  ];
+function setSuccess(message) {
+  if (!message) {
+    uploadSuccessNode.hidden = true;
+    uploadSuccessNode.textContent = "";
+    return;
+  }
+  uploadSuccessNode.hidden = false;
+  uploadSuccessNode.textContent = message;
+}
 
+function setLoading(isLoading, submitText, analyzeText) {
+  submitBtn.disabled = isLoading;
+  analyzeBtn.disabled = isLoading;
+  submitBtn.textContent = submitText;
+  analyzeBtn.textContent = analyzeText;
+}
+
+function renderStats(metrics) {
   statsNode.innerHTML = "";
   for (const [label, value] of metrics) {
     const item = document.createElement("div");
@@ -88,9 +99,30 @@ function renderStats(data) {
   }
 }
 
+function renderAnalyzeStats(data) {
+  const operational = data.operational_summary || {};
+  renderStats([
+    ["Transacoes", String(data.transactions_total || 0)],
+    ["Entradas", formatCurrency(data.total_inflows)],
+    ["Saidas", formatCurrency(data.total_outflows)],
+    ["Saldo", formatCurrency(data.net_total)],
+    ["Volume Total", formatCurrency(operational.total_volume || 0)],
+    ["Qtd Entradas", String(operational.inflow_count || 0)],
+    ["Qtd Saidas", String(operational.outflow_count || 0)]
+  ]);
+}
+
+function renderReconcileStats(data) {
+  renderStats([
+    ["Status", String(data.status || "-")],
+    ["Extrato", `${data.bank_filename || "-"} (${(data.bank_file_type || "-").toUpperCase()})`],
+    ["Planilha", `${data.sheet_filename || "-"} (${(data.sheet_file_type || "-").toUpperCase()})`]
+  ]);
+}
+
 function renderPreviewRows(rows) {
   previewBody.innerHTML = "";
-  for (const row of rows) {
+  for (const row of rows || []) {
     const tr = document.createElement("tr");
     const values = [
       row.date,
@@ -102,7 +134,7 @@ function renderPreviewRows(rows) {
 
     for (const value of values) {
       const td = document.createElement("td");
-      td.textContent = String(value);
+      td.textContent = String(value || "");
       tr.appendChild(td);
     }
 
@@ -130,11 +162,19 @@ function renderBeforeAfterRows(rows) {
 
     for (const value of values) {
       const td = document.createElement("td");
-      td.textContent = String(value);
+      td.textContent = String(value || "");
       tr.appendChild(td);
     }
 
     beforeAfterBody.appendChild(tr);
+  }
+}
+
+async function parseJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch (_error) {
+    return {};
   }
 }
 
@@ -151,31 +191,21 @@ async function checkApi() {
   }
 }
 
-apiBaseInput.addEventListener("change", () => {
-  const baseUrl = normalizeApiBase(apiBaseInput.value);
-  localStorage.setItem("gettdone_api_base", baseUrl);
-  apiBaseInput.value = baseUrl;
-  checkApi();
-});
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function runAnalyze() {
   setError("");
+  setSuccess("");
   resultNode.hidden = true;
 
-  if (!fileInput.files || !fileInput.files[0]) {
-    setError("Selecione um arquivo CSV, XLSX ou OFX.");
+  if (!bankFileInput.files || !bankFileInput.files[0]) {
+    setError("Selecione um arquivo de extrato (CSV, XLSX ou OFX).");
     return;
   }
 
-  const file = fileInput.files[0];
   const baseUrl = normalizeApiBase(apiBaseInput.value);
   const formData = new FormData();
-  formData.append("file", file);
-  updateTrustMessage("");
+  formData.append("file", bankFileInput.files[0]);
 
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Processando...";
+  setLoading(true, "Enviar para conciliacao", "Analisando...");
 
   try {
     const response = await fetch(`${baseUrl}/analyze`, {
@@ -183,14 +213,16 @@ form.addEventListener("submit", async (event) => {
       body: formData
     });
 
-    const payload = await response.json();
+    const payload = await parseJsonSafe(response);
     if (!response.ok) {
-      throw new Error(payload.detail || "Falha ao processar arquivo.");
+      throw new Error(payload.detail || "Falha ao analisar extrato.");
     }
 
-    renderStats(payload);
+    resultTitle.textContent = "Preview da analise";
+    renderAnalyzeStats(payload);
     renderPreviewRows(payload.preview_transactions || []);
     renderBeforeAfterRows(payload.preview_before_after || []);
+    analyzePreviewNode.hidden = false;
     updateTrustMessage(payload.expires_at);
     downloadLink.href = `${baseUrl}/report/${payload.analysis_id}`;
     resultNode.hidden = false;
@@ -198,9 +230,71 @@ form.addEventListener("submit", async (event) => {
     const message = error instanceof Error ? error.message : "Erro inesperado.";
     setError(message);
   } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Analisar extrato";
+    setLoading(false, "Enviar para conciliacao", "Analisar extrato (preview)");
   }
+}
+
+async function runReconcile() {
+  setError("");
+  setSuccess("");
+  resultNode.hidden = true;
+
+  if (!bankFileInput.files || !bankFileInput.files[0]) {
+    setError("Selecione um arquivo de extrato (CSV, XLSX ou OFX).");
+    return;
+  }
+
+  if (!sheetFileInput.files || !sheetFileInput.files[0]) {
+    setError("Selecione um arquivo de planilha (CSV ou XLSX).");
+    return;
+  }
+
+  const baseUrl = normalizeApiBase(apiBaseInput.value);
+  const formData = new FormData();
+  formData.append("bank_file", bankFileInput.files[0]);
+  formData.append("sheet_file", sheetFileInput.files[0]);
+
+  setLoading(true, "Enviando...", "Analisar extrato (preview)");
+
+  try {
+    const response = await fetch(`${baseUrl}/reconcile`, {
+      method: "POST",
+      body: formData
+    });
+
+    const payload = await parseJsonSafe(response);
+    if (!response.ok) {
+      throw new Error(payload.detail || "Falha ao enviar os arquivos.");
+    }
+
+    resultTitle.textContent = "Upload recebido";
+    renderReconcileStats(payload);
+    analyzePreviewNode.hidden = true;
+    updateTrustMessage("");
+    setSuccess("Upload aceito com sucesso. Proxima etapa: parsing e matching.");
+    resultNode.hidden = false;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro inesperado.";
+    setError(message);
+  } finally {
+    setLoading(false, "Enviar para conciliacao", "Analisar extrato (preview)");
+  }
+}
+
+apiBaseInput.addEventListener("change", () => {
+  const baseUrl = normalizeApiBase(apiBaseInput.value);
+  localStorage.setItem("gettdone_api_base", baseUrl);
+  apiBaseInput.value = baseUrl;
+  checkApi();
+});
+
+analyzeBtn.addEventListener("click", () => {
+  runAnalyze();
+});
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await runReconcile();
 });
 
 (function init() {

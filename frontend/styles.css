@@ -45,6 +45,11 @@ body {
 .sub, .muted { color: var(--muted); }
 
 .upload-form { display: grid; gap: 10px; }
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 
 .trust-box {
   margin-bottom: 14px;
@@ -95,6 +100,12 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   font-weight: 600;
 }
 
+.success {
+  color: var(--primary-strong);
+  margin: 8px 0 0;
+  font-weight: 600;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -137,3 +148,9 @@ th, td {
 }
 
 .download:hover { text-decoration: underline; }
+
+@media (max-width: 720px) {
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
