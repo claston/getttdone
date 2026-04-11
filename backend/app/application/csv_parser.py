@@ -9,9 +9,9 @@ from app.application.models import NormalizedTransaction
 REQUIRED_FIELDS = {"date", "description", "amount"}
 
 FIELD_ALIASES = {
-    "date": {"date", "data", "transaction_date", "posted_at"},
+    "date": {"date", "data", "dt", "dt_lancamento", "transaction_date", "posted_at"},
     "description": {"description", "descricao", "historico", "memo"},
-    "amount": {"amount", "valor", "value"},
+    "amount": {"amount", "valor", "vlr", "valor_liquido", "value"},
     "type": {"type", "tipo", "operation_type", "natureza"},
 }
 

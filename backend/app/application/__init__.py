@@ -1,6 +1,7 @@
 from app.application.analyze_service import AnalyzeService
 from app.application.errors import AnalysisNotFoundError, InvalidFileContentError, UnsupportedFileTypeError
 from app.application.report_service import ReportService
+from app.application.sheet_parser import parse_operational_sheet_rows
 from app.application.storage_service import TempAnalysisStorage
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "ReportService",
     "TempAnalysisStorage",
     "UnsupportedFileTypeError",
+    "parse_operational_sheet_rows",
 ]

@@ -73,3 +73,4 @@ class ReconcileIntakeResponse(BaseModel):
     bank_file_type: str
     sheet_filename: str
     sheet_file_type: str
+    sheet_rows_parsed: int
