@@ -15,6 +15,8 @@ const analyzePreviewNode = document.getElementById("analyze-preview");
 const reconcilePreviewNode = document.getElementById("reconcile-preview");
 const reconcileHeadlineNode = document.getElementById("reconcile-headline");
 const reconcileRowsBody = document.getElementById("reconcile-rows-body");
+const reconcileDownloadXlsx = document.getElementById("reconcile-download-xlsx");
+const reconcileDownloadCsv = document.getElementById("reconcile-download-csv");
 const beforeAfterWrap = document.getElementById("before-after-wrap");
 const beforeAfterBody = document.getElementById("before-after-body");
 const previewBody = document.getElementById("preview-body");
@@ -368,6 +370,8 @@ async function runReconcile() {
     renderReconcileStats(payload);
     analyzePreviewNode.hidden = true;
     renderReconcilePreview(payload);
+    reconcileDownloadXlsx.href = `${baseUrl}/reconcile-report/${payload.analysis_id}?format=xlsx`;
+    reconcileDownloadCsv.href = `${baseUrl}/reconcile-report/${payload.analysis_id}?format=csv`;
     updateTrustMessage("");
     setSuccess("Conciliacao concluida. Revise as pendencias e divergencias destacadas.");
     resultNode.hidden = false;

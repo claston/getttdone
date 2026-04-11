@@ -51,6 +51,10 @@ body {
   gap: 10px;
 }
 
+.actions-inline {
+  margin-bottom: 8px;
+}
+
 .trust-box {
   margin-bottom: 14px;
   padding: 12px;
