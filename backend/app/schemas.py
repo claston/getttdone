@@ -42,6 +42,14 @@ class TransactionPreview(BaseModel):
     reconciliation_status: str
 
 
+class BeforeAfterPreview(BaseModel):
+    date: str
+    description_before: str
+    description_after: str
+    amount_before: float
+    amount_after: float
+
+
 class AnalyzeResponse(BaseModel):
     analysis_id: str
     file_type: str
@@ -55,4 +63,5 @@ class AnalyzeResponse(BaseModel):
     top_expenses: list[TopExpense]
     insights: list[Insight]
     preview_transactions: list[TransactionPreview]
+    preview_before_after: list[BeforeAfterPreview]
     expires_at: str | None

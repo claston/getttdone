@@ -79,6 +79,10 @@ def test_analyze_service_applies_single_normalizer_rules(tmp_path) -> None:
     assert result.preview_transactions[0].description == "IFOOD"
     assert result.preview_transactions[1].description == "SALARIO"
     assert result.preview_transactions[1].amount == 2500.00
+    assert result.preview_before_after[0].description_before == "ifood   sao paulo"
+    assert result.preview_before_after[0].description_after == "IFOOD"
+    assert result.preview_before_after[1].amount_before == -2500.00
+    assert result.preview_before_after[1].amount_after == 2500.00
 
 
 def test_analyze_service_detects_possible_duplicate_group(tmp_path) -> None:
