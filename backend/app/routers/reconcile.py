@@ -4,6 +4,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.application import (
     InvalidFileContentError,
+    match_exact_1to1,
     parse_bank_statement_rows,
     parse_operational_sheet_rows,
 )
@@ -56,6 +57,10 @@ async def reconcile(
 
     normalized_bank_rows = normalize_transactions(_clear_type_hints(bank_rows))
     normalized_sheet_rows = normalize_transactions(_clear_type_hints(parsed_sheet.rows))
+    ledger_match_result = match_exact_1to1(
+        bank_rows=normalized_bank_rows,
+        sheet_rows=normalized_sheet_rows,
+    )
 
     preview: list[dict[str, str | float]] = []
     for row in normalized_bank_rows[:3]:
@@ -79,6 +84,19 @@ async def reconcile(
             }
         )
 
+    exact_matches_preview: list[dict[str, str | int | float]] = []
+    for match in ledger_match_result.matches[:10]:
+        exact_matches_preview.append(
+            {
+                "bank_index": match.bank_index,
+                "sheet_index": match.sheet_index,
+                "date": match.date,
+                "amount": match.amount,
+                "match_rule": match.match_rule,
+                "reason": match.reason,
+            }
+        )
+
     return ReconcileIntakeResponse(
         status="accepted",
         bank_filename=bank_filename,
@@ -89,6 +107,10 @@ async def reconcile(
         sheet_rows_parsed=len(parsed_sheet.rows),
         sheet_mapping_detected=parsed_sheet.mapping_detected,
         normalization_preview=preview,
+        exact_matches_count=ledger_match_result.exact_matches_count,
+        bank_unmatched_count=ledger_match_result.bank_unmatched_count,
+        sheet_unmatched_count=ledger_match_result.sheet_unmatched_count,
+        exact_matches_preview=exact_matches_preview,
     )
 
 

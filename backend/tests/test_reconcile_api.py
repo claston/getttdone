@@ -41,6 +41,10 @@ def test_reconcile_happy_path_accepts_bank_and_sheet_files() -> None:
         "amount": "valor",
         "description": "descricao",
     }
+    assert payload["exact_matches_count"] == 0
+    assert payload["bank_unmatched_count"] == 1
+    assert payload["sheet_unmatched_count"] == 1
+    assert payload["exact_matches_preview"] == []
     assert len(payload["normalization_preview"]) == 2
     assert payload["normalization_preview"][0]["source"] == "bank"
     assert payload["normalization_preview"][1]["source"] == "sheet"
@@ -173,3 +177,7 @@ def test_reconcile_normalization_preview_aligns_sign_with_same_semantic_descript
     assert preview[1]["amount"] == -980.0
     assert preview[0]["type"] == "outflow"
     assert preview[1]["type"] == "outflow"
+    assert payload["exact_matches_count"] == 1
+    assert payload["bank_unmatched_count"] == 0
+    assert payload["sheet_unmatched_count"] == 0
+    assert payload["exact_matches_preview"][0]["match_rule"] == "exact"
