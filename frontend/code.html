@@ -124,11 +124,19 @@
             font-weight: 700;
             font-size: 0.875rem;
         }
+        .top-nav-shell {
+            transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease;
+        }
+        .top-nav-shell.is-hidden {
+            transform: translateY(-115%);
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="bg-background text-on-background font-body selection:bg-primary-fixed selection:text-on-primary-fixed">
 <!-- Top Navigation -->
-<nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-100">
+<nav id="top-nav" class="top-nav-shell fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-100">
 <div class="flex justify-between items-center max-w-7xl mx-auto px-8 h-20">
 <div class="text-2xl font-bold tracking-tighter text-slate-900">GettDone</div>
 <div class="hidden md:flex items-center gap-8">
@@ -216,7 +224,7 @@
 </div>
 </section>
 <!-- Reconciliation Report Preview -->
-<section id="reconcile-report-preview" class="max-w-7xl mx-auto px-8 mb-24 hidden">
+<section id="reconcile-report-preview" class="w-full px-8 mb-24 hidden">
 <div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-12">
 <div>
 <h2 class="font-headline text-3xl font-bold tracking-tight text-on-surface mb-2">Relat&oacute;rio de Concilia&ccedil;&atilde;o</h2>
@@ -258,7 +266,7 @@
 </div>
 </div>
 </section>
-<section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+<section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
 <div class="bg-surface-container-lowest p-5 rounded-xl flex items-center gap-4 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
 <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant">
 <span class="material-symbols-outlined" data-icon="account_balance">account_balance</span>
@@ -288,66 +296,141 @@
 </div>
 </div>
 </section>
-<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/15">
+<section class="bg-surface-container-lowest rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+<div class="px-8 py-6 border-b border-surface-container flex justify-between items-center bg-white/50 backdrop-blur-sm">
+<h3 class="text-lg font-bold">Detalhamento da Concilia&ccedil;&atilde;o</h3>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm material-symbols-outlined" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm w-64 focus:ring-2 focus:ring-primary/20" placeholder="Filtrar resultados..." type="text"/>
+</div>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container rounded-lg" type="button">
+<span class="material-symbols-outlined" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+</div>
 <div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">
 <thead>
-<tr class="bg-surface-container-low text-on-surface-variant text-xs font-bold uppercase tracking-wider">
-<th class="px-6 py-4">Linha</th>
-<th class="px-6 py-4">Fonte</th>
-<th class="px-6 py-4">Data</th>
-<th class="px-6 py-4">Descri&ccedil;&atilde;o</th>
-<th class="px-6 py-4">Valor</th>
-<th class="px-6 py-4">Status</th>
-<th class="px-6 py-4">Match</th>
-<th class="px-6 py-4">Motivo</th>
-<th class="px-6 py-4">Linha Pareada</th>
+<tr class="bg-surface-container-low/50">
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Linha</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Fonte</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Data</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Descri&ccedil;&atilde;o</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Valor</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Match %</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Motivo</th>
+<th class="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Linha Pareada</th>
 </tr>
 </thead>
-<tbody class="text-sm divide-y-0" id="reconcile-rows-body">
+<tbody class="divide-y divide-surface-container" id="reconcile-rows-body">
 <tr class="hover:bg-surface-container-low transition-colors group">
-<td class="px-6 py-5 text-on-surface-variant font-mono">001</td>
-<td class="px-6 py-5">Extrato</td>
-<td class="px-6 py-5">12/10/24</td>
-<td class="px-6 py-5 font-medium">PIX RECEBIDO - ID9382</td>
-<td class="px-6 py-5 font-semibold">R$ 450,00</td>
-<td class="px-6 py-5">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase">Matched</span>
+<td class="px-6 py-4 text-sm font-medium">001</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant px-2 py-1 bg-surface-container rounded-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="account_balance">account_balance</span> BANCO
+                                </span>
 </td>
-<td class="px-6 py-5 text-secondary"><span class="material-symbols-outlined text-sm">check_circle</span> 100%</td>
-<td class="px-6 py-5 text-on-surface-variant">-</td>
-<td class="px-6 py-5 font-mono text-xs">P-124</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">12/05/2024</td>
+<td class="px-6 py-4 text-sm font-semibold">PIX RECEBIDO - CLIENTE A</td>
+<td class="px-6 py-4 text-sm font-bold">R$ 450,00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-secondary-container text-on-secondary-container">Matched</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-secondary font-bold text-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                    100%
+                                </div>
+</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">-</td>
+<td class="px-6 py-4 text-xs font-mono text-primary font-medium">#PLN-42</td>
 </tr>
 <tr class="hover:bg-surface-container-low transition-colors group">
-<td class="px-6 py-5 text-on-surface-variant font-mono">002</td>
-<td class="px-6 py-5">Planilha</td>
-<td class="px-6 py-5">12/10/24</td>
-<td class="px-6 py-5 font-medium">TAXA MANUTENCAO CONTA</td>
-<td class="px-6 py-5 font-semibold text-error">R$ 42,90</td>
-<td class="px-6 py-5">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-bold uppercase">Cr&iacute;tico</span>
+<td class="px-6 py-4 text-sm font-medium">002</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant px-2 py-1 bg-surface-container rounded-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="description">description</span> PLANILHA
+                                </span>
 </td>
-<td class="px-6 py-5 text-error"><span class="material-symbols-outlined text-sm">cancel</span> 0%</td>
-<td class="px-6 py-5 text-on-surface-variant">Valor n&atilde;o encontrado no banco</td>
-<td class="px-6 py-5 font-mono text-xs">-</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">12/05/2024</td>
+<td class="px-6 py-4 text-sm font-semibold">PAGAMENTO FORNECEDOR XYZ</td>
+<td class="px-6 py-4 text-sm font-bold">R$ 1.200,00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-surface-container-high text-on-surface-variant">Divergente</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-bold text-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+                                    85%
+                                </div>
+</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">Diferen&ccedil;a de valor (R$ 12,00)</td>
+<td class="px-6 py-4 text-xs font-mono text-primary font-medium">#BNC-108</td>
 </tr>
 <tr class="hover:bg-surface-container-low transition-colors group">
-<td class="px-6 py-5 text-on-surface-variant font-mono">003</td>
-<td class="px-6 py-5">Extrato</td>
-<td class="px-6 py-5">13/10/24</td>
-<td class="px-6 py-5 font-medium">TRANSF. EMITIDA JOAO S.</td>
-<td class="px-6 py-5 font-semibold">R$ 1.200,00</td>
-<td class="px-6 py-5">
-<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-[10px] font-bold uppercase">Divergente</span>
+<td class="px-6 py-4 text-sm font-medium">003</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant px-2 py-1 bg-surface-container rounded-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="account_balance">account_balance</span> BANCO
+                                </span>
 </td>
-<td class="px-6 py-5 text-on-tertiary-fixed-variant"><span class="material-symbols-outlined text-sm">info</span> 85%</td>
-<td class="px-6 py-5 text-on-surface-variant">Data difere (15/10 na planilha)</td>
-<td class="px-6 py-5 font-mono text-xs">P-156</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">13/05/2024</td>
+<td class="px-6 py-4 text-sm font-semibold">TARIFA BANCARIA MANUTENCAO</td>
+<td class="px-6 py-4 text-sm font-bold">R$ 55,00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-error-container text-on-error-container">Cr&iacute;tico</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-error font-bold text-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span>
+                                    0%
+                                </div>
+</td>
+<td class="px-6 py-4 text-xs text-error font-medium">N&atilde;o encontrado na planilha</td>
+<td class="px-6 py-4 text-xs font-mono text-on-surface-variant opacity-30">-</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-6 py-4 text-sm font-medium">004</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant px-2 py-1 bg-surface-container rounded-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="description">description</span> PLANILHA
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">13/05/2024</td>
+<td class="px-6 py-4 text-sm font-semibold">VENDA SOFTWARE SUBSCRIPTION</td>
+<td class="px-6 py-4 text-sm font-bold">R$ 137,00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-secondary-container text-on-secondary-container">Matched</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-secondary font-bold text-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                    100%
+                                </div>
+</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">-</td>
+<td class="px-6 py-4 text-xs font-mono text-primary font-medium">#BNC-112</td>
 </tr>
 </tbody>
 </table>
 </div>
+<div class="px-8 py-4 bg-surface-container-low/30 border-t border-surface-container flex justify-between items-center">
+<span class="text-xs text-on-surface-variant font-medium">Mostrando 1-10 de 162 registros</span>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-on-primary font-bold text-xs" type="button">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant text-xs font-bold transition-colors" type="button">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant text-xs font-bold transition-colors" type="button">3</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
 </div>
+</div>
+</section>
 </section>
 <!-- Flow Indicator -->
 <section class="max-w-4xl mx-auto px-8 mb-40">
@@ -617,7 +700,10 @@
     const sheetFileInput = document.getElementById("sheet-file-input");
     const bankDropzone = document.getElementById("bank-dropzone");
     const sheetDropzone = document.getElementById("sheet-dropzone");
+    const topNav = document.getElementById("top-nav");
     const reconcileReportPreview = document.getElementById("reconcile-report-preview");
+    let reportFocusMode = false;
+    let hideNavTimer = null;
 
     function hasSelectedFile(input) {
         return Boolean(input && input.files && input.files.length > 0);
@@ -677,6 +763,57 @@
         sheetFileInput.addEventListener("change", updateReportGateState);
     }
 
+    function clearHideNavTimer() {
+        if (hideNavTimer) {
+            clearTimeout(hideNavTimer);
+            hideNavTimer = null;
+        }
+    }
+
+    function setTopNavHidden(hidden) {
+        if (!topNav) {
+            return;
+        }
+        topNav.classList.toggle("is-hidden", hidden);
+    }
+
+    function isReportInFocusArea() {
+        if (!reconcileReportPreview || reconcileReportPreview.classList.contains("hidden")) {
+            return false;
+        }
+
+        const rect = reconcileReportPreview.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        return rect.top < viewportHeight * 0.66 && rect.bottom > 120;
+    }
+
+    function scheduleTopNavHide() {
+        clearHideNavTimer();
+        if (!reportFocusMode || !isReportInFocusArea()) {
+            return;
+        }
+        hideNavTimer = setTimeout(function () {
+            setTopNavHidden(true);
+        }, 900);
+    }
+
+    function handleScrollNavFocus() {
+        if (!reportFocusMode) {
+            return;
+        }
+
+        if (!isReportInFocusArea()) {
+            clearHideNavTimer();
+            setTopNavHidden(false);
+            return;
+        }
+
+        setTopNavHidden(false);
+        scheduleTopNavHide();
+    }
+
+    window.addEventListener("scroll", handleScrollNavFocus, { passive: true });
+
     updateReportGateState();
 
     if (showReportBtn && reconcileReportPreview) {
@@ -687,7 +824,11 @@
             }
 
             reconcileReportPreview.classList.remove("hidden");
+            reportFocusMode = true;
+            clearHideNavTimer();
+            setTopNavHidden(true);
             reconcileReportPreview.scrollIntoView({ behavior: "smooth", block: "start" });
+            scheduleTopNavHide();
         });
     }
 </script></body></html>
