@@ -103,6 +103,10 @@
             border-color: rgba(0, 62, 199, 0.42) !important;
             background: rgba(0, 82, 255, 0.05) !important;
         }
+        .upload-dropzone.is-invalid {
+            border-color: rgba(186, 26, 26, 0.55) !important;
+            background: rgba(186, 26, 26, 0.07) !important;
+        }
         .upload-dropzone:focus-visible {
             border-color: rgba(0, 62, 199, 0.6) !important;
             box-shadow: 0 0 0 4px rgba(183, 196, 255, 0.55);
@@ -113,6 +117,12 @@
         }
         .upload-step-head {
             min-height: 3.5rem;
+        }
+        .upload-validation {
+            margin: 0 0 1rem;
+            color: #ba1a1a;
+            font-weight: 700;
+            font-size: 0.875rem;
         }
     </style>
 </head>
@@ -189,10 +199,11 @@
 </div>
 </div>
 <div class="flex flex-col items-center">
-<button class="primary-gradient-cta text-on-primary font-headline text-xl font-extrabold px-16 py-6 rounded-2xl transition-all hover:scale-[1.03] active:scale-95 flex items-center gap-4 mb-4">
+<button id="show-report-btn" type="button" class="primary-gradient-cta text-on-primary font-headline text-xl font-extrabold px-16 py-6 rounded-2xl transition-all hover:scale-[1.03] active:scale-95 flex items-center gap-4 mb-4">
                         Encontrar erros agora
                         <span class="material-symbols-outlined text-2xl" data-icon="analytics">analytics</span>
 </button>
+<p id="upload-validation" class="upload-validation" hidden></p>
 <p class="text-sm font-bold text-primary mb-8 flex items-center gap-1.5">
 <span class="material-symbols-outlined text-sm">bolt</span>
                         ⚡ Leva menos de 10 segundos
@@ -201,6 +212,140 @@
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span> Processamento Imediato</span>
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-sm" data-icon="shield" style="font-variation-settings: 'FILL' 1;">shield</span> Criptografia SSL</span>
 </div>
+</div>
+</div>
+</section>
+<!-- Reconciliation Report Preview -->
+<section id="reconcile-report-preview" class="max-w-7xl mx-auto px-8 mb-24 hidden">
+<div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-12">
+<div>
+<h2 class="font-headline text-3xl font-bold tracking-tight text-on-surface mb-2">Relat&oacute;rio de Concilia&ccedil;&atilde;o</h2>
+<p class="text-on-surface-variant">An&aacute;lise completa das diverg&ecirc;ncias detectadas.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2.5 bg-surface-container-high rounded-lg text-sm font-semibold hover:bg-surface-container-highest transition-colors" id="reconcile-download-xlsx" type="button">
+<span class="material-symbols-outlined text-sm">download</span> Baixar XLSX
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2.5 bg-surface-container-high rounded-lg text-sm font-semibold hover:bg-surface-container-highest transition-colors" id="reconcile-download-csv" type="button">
+<span class="material-symbols-outlined text-sm">csv</span> Baixar CSV
+                    </button>
+</div>
+</div>
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+<div class="bg-secondary-container/20 p-6 rounded-xl border border-secondary-container/30 flex flex-col justify-between group hover:bg-secondary-container/30 transition-all duration-500">
+<span class="text-on-secondary-container font-bold text-xs tracking-widest uppercase">Conciliados</span>
+<div class="mt-4 flex items-baseline gap-2">
+<span class="text-4xl font-extrabold text-on-secondary-container">152</span>
+<span class="text-secondary font-semibold text-sm">+4%</span>
+</div>
+</div>
+<div class="bg-orange-50 dark:bg-orange-900/10 p-6 rounded-xl border border-orange-100 flex flex-col justify-between hover:bg-orange-100/50 transition-all duration-500">
+<span class="text-orange-700 dark:text-orange-400 font-bold text-xs tracking-widest uppercase">Pendentes</span>
+<div class="mt-4">
+<span class="text-4xl font-extrabold text-orange-800 dark:text-orange-300">12</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant/20 flex flex-col justify-between hover:bg-surface-container transition-all duration-500">
+<span class="text-on-surface-variant font-bold text-xs tracking-widest uppercase">Divergentes</span>
+<div class="mt-4">
+<span class="text-4xl font-extrabold text-on-surface">08</span>
+</div>
+</div>
+<div class="bg-primary/5 p-6 rounded-xl border border-primary/10 flex flex-col justify-between hover:bg-primary/10 transition-all duration-500">
+<span class="text-primary font-bold text-xs tracking-widest uppercase">Pend&ecirc;ncia Total</span>
+<div class="mt-4">
+<span class="text-3xl font-extrabold text-primary">R$ 1.842,00</span>
+</div>
+</div>
+</section>
+<section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+<div class="bg-surface-container-lowest p-5 rounded-xl flex items-center gap-4 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="account_balance">account_balance</span>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Linhas do Extrato</p>
+<p class="text-xl font-bold">162</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl flex items-center gap-4 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Linhas da Planilha</p>
+<p class="text-xl font-bold">159</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl grid grid-cols-2 gap-4 shadow-[0_2px_4px_rgba(0,0,0,0.02)] items-center">
+<div class="border-r border-outline-variant/30 pr-4">
+<p class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Na Planilha</p>
+<p class="text-xl font-bold text-error">07</p>
+</div>
+<div class="pl-2">
+<p class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">No Banco</p>
+<p class="text-xl font-bold text-tertiary">05</p>
+</div>
+</div>
+</section>
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/15">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant text-xs font-bold uppercase tracking-wider">
+<th class="px-6 py-4">Linha</th>
+<th class="px-6 py-4">Fonte</th>
+<th class="px-6 py-4">Data</th>
+<th class="px-6 py-4">Descri&ccedil;&atilde;o</th>
+<th class="px-6 py-4">Valor</th>
+<th class="px-6 py-4">Status</th>
+<th class="px-6 py-4">Match</th>
+<th class="px-6 py-4">Motivo</th>
+<th class="px-6 py-4">Linha Pareada</th>
+</tr>
+</thead>
+<tbody class="text-sm divide-y-0" id="reconcile-rows-body">
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-6 py-5 text-on-surface-variant font-mono">001</td>
+<td class="px-6 py-5">Extrato</td>
+<td class="px-6 py-5">12/10/24</td>
+<td class="px-6 py-5 font-medium">PIX RECEBIDO - ID9382</td>
+<td class="px-6 py-5 font-semibold">R$ 450,00</td>
+<td class="px-6 py-5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase">Matched</span>
+</td>
+<td class="px-6 py-5 text-secondary"><span class="material-symbols-outlined text-sm">check_circle</span> 100%</td>
+<td class="px-6 py-5 text-on-surface-variant">-</td>
+<td class="px-6 py-5 font-mono text-xs">P-124</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-6 py-5 text-on-surface-variant font-mono">002</td>
+<td class="px-6 py-5">Planilha</td>
+<td class="px-6 py-5">12/10/24</td>
+<td class="px-6 py-5 font-medium">TAXA MANUTENCAO CONTA</td>
+<td class="px-6 py-5 font-semibold text-error">R$ 42,90</td>
+<td class="px-6 py-5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-bold uppercase">Cr&iacute;tico</span>
+</td>
+<td class="px-6 py-5 text-error"><span class="material-symbols-outlined text-sm">cancel</span> 0%</td>
+<td class="px-6 py-5 text-on-surface-variant">Valor n&atilde;o encontrado no banco</td>
+<td class="px-6 py-5 font-mono text-xs">-</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="px-6 py-5 text-on-surface-variant font-mono">003</td>
+<td class="px-6 py-5">Extrato</td>
+<td class="px-6 py-5">13/10/24</td>
+<td class="px-6 py-5 font-medium">TRANSF. EMITIDA JOAO S.</td>
+<td class="px-6 py-5 font-semibold">R$ 1.200,00</td>
+<td class="px-6 py-5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-[10px] font-bold uppercase">Divergente</span>
+</td>
+<td class="px-6 py-5 text-on-tertiary-fixed-variant"><span class="material-symbols-outlined text-sm">info</span> 85%</td>
+<td class="px-6 py-5 text-on-surface-variant">Data difere (15/10 na planilha)</td>
+<td class="px-6 py-5 font-mono text-xs">P-156</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </section>
@@ -397,6 +542,7 @@
             if (fileInput.files && fileInput.files.length > 0) {
                 fileName.textContent = fileInput.files[0].name;
                 dropzone.classList.add("is-filled");
+                dropzone.classList.remove("is-invalid");
             } else {
                 fileName.textContent = config.emptyLabel;
                 dropzone.classList.remove("is-filled");
@@ -464,6 +610,86 @@
         fileNameId: "sheet-file-name",
         emptyLabel: "Nenhum arquivo selecionado"
     });
+
+    const showReportBtn = document.getElementById("show-report-btn");
+    const uploadValidation = document.getElementById("upload-validation");
+    const bankFileInput = document.getElementById("bank-file-input");
+    const sheetFileInput = document.getElementById("sheet-file-input");
+    const bankDropzone = document.getElementById("bank-dropzone");
+    const sheetDropzone = document.getElementById("sheet-dropzone");
+    const reconcileReportPreview = document.getElementById("reconcile-report-preview");
+
+    function hasSelectedFile(input) {
+        return Boolean(input && input.files && input.files.length > 0);
+    }
+
+    function updateReportGateState() {
+        if (!showReportBtn) {
+            return false;
+        }
+
+        const ready = hasSelectedFile(bankFileInput) && hasSelectedFile(sheetFileInput);
+        showReportBtn.disabled = !ready;
+        showReportBtn.classList.toggle("opacity-70", !ready);
+        showReportBtn.classList.toggle("cursor-not-allowed", !ready);
+        showReportBtn.classList.toggle("pointer-events-none", !ready);
+
+        if (ready && uploadValidation) {
+            uploadValidation.hidden = true;
+            uploadValidation.textContent = "";
+        }
+
+        return ready;
+    }
+
+    function showMissingFilesFeedback() {
+        const missing = [];
+
+        if (!hasSelectedFile(bankFileInput)) {
+            missing.push("extrato bancario");
+            if (bankDropzone) {
+                bankDropzone.classList.add("is-invalid");
+            }
+        } else if (bankDropzone) {
+            bankDropzone.classList.remove("is-invalid");
+        }
+
+        if (!hasSelectedFile(sheetFileInput)) {
+            missing.push("planilha");
+            if (sheetDropzone) {
+                sheetDropzone.classList.add("is-invalid");
+            }
+        } else if (sheetDropzone) {
+            sheetDropzone.classList.remove("is-invalid");
+        }
+
+        if (uploadValidation) {
+            uploadValidation.textContent = `Selecione ${missing.join(" e ")} para gerar o relatorio.`;
+            uploadValidation.hidden = false;
+        }
+    }
+
+    if (bankFileInput) {
+        bankFileInput.addEventListener("change", updateReportGateState);
+    }
+
+    if (sheetFileInput) {
+        sheetFileInput.addEventListener("change", updateReportGateState);
+    }
+
+    updateReportGateState();
+
+    if (showReportBtn && reconcileReportPreview) {
+        showReportBtn.addEventListener("click", function () {
+            if (!updateReportGateState()) {
+                showMissingFilesFeedback();
+                return;
+            }
+
+            reconcileReportPreview.classList.remove("hidden");
+            reconcileReportPreview.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }
 </script></body></html>
 
 
