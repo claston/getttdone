@@ -160,6 +160,9 @@ Fora de escopo nesta fase:
 - Estimativa: 3h
 - Dependencias: itens 20, 21
 - Pronto quando: fica claro o ganho operacional apos processamento
+- Backend expõe um bloco estruturado com os dados da narrativa antes/depois para alimentar o front
+- Backend expõe os dados que sustentam o bloco de problemas em destaque e o resumo acionavel
+- Front mostra uma leitura executiva curta com estado antes, estado depois e percentual de conciliacao capado em 100%
 
 23. `P1` Filtro rapido por status
 - Estimativa: 3h
@@ -191,6 +194,52 @@ Fora de escopo nesta fase:
 - Dependencias: itens P0 concluidos
 - Pronto quando: demo ponta-a-ponta mostra valor pratico com dados reais
 
+## EPIC 8 - VALIDACAO DE SALDO (FUTURO, NAO ENTRA NA V2-MVP)
+
+28. `P2` Definir contrato de saldo na planilha operacional
+- Estimativa: 3h
+- Dependencias: item 2
+- Pronto quando:
+  - existe layout documentado para metadados de saldo (`saldo_inicial`, `saldo_final`, `periodo_inicio`, `periodo_fim`, `conta`)
+  - layout antigo continua aceito sem quebra (campos de saldo opcionais)
+
+29. `P2` Extrair saldo do OFX (`LEDGERBAL`/`DTASOF`)
+- Estimativa: 4h
+- Dependencias: item 4
+- Pronto quando:
+  - parser OFX retorna saldo e data de referencia quando presentes
+  - ausencia de saldo no OFX nao quebra o pipeline (apenas marca indisponivel)
+
+30. `P2` Motor de validacao de saldo de abertura e fechamento
+- Estimativa: 6h
+- Dependencias: itens 28 e 29
+- Pronto quando:
+  - compara saldo inicial da planilha com saldo de abertura/mais proximo do OFX
+  - aplica tolerancia configuravel (ex.: `0,01`)
+  - valida fechamento por periodo (`saldo_inicial + movimentacoes = saldo_final`)
+  - classifica resultado em `ok`, `atencao`, `inconsistente`
+
+31. `P2` Expor `balance_check` no contrato da API de conciliacao
+- Estimativa: 3h
+- Dependencias: item 30
+- Pronto quando:
+  - resposta do `POST /reconcile` inclui bloco `balance_check`
+  - bloco traz status, diferenca, regra aplicada e mensagem objetiva
+
+32. `P2` Exibir validacao de saldo no preview e no relatorio exportado
+- Estimativa: 4h
+- Dependencias: itens 18 e 31
+- Pronto quando:
+  - preview mostra status da validacao de saldo
+  - `XLSX`/`CSV` exportado inclui informacao de saldo validado e diferencas
+
+33. `P2` Cobertura de testes para validacao de saldo
+- Estimativa: 4h
+- Dependencias: itens 29, 30 e 31
+- Pronto quando:
+  - testes unitarios cobrem casos `ok`, `atencao`, `inconsistente`
+  - teste de integracao cobre caminho feliz e caminho sem saldo disponivel
+
 ---
 
 ## Corte recomendado para demo V2-MVP (contador)
@@ -207,6 +256,12 @@ Itens:
 - `15` Criticidade de problemas
 - `19` Aba extra de problemas no relatorio
 - `23` Filtro rapido por status
+- `28` Contrato de saldo da planilha (futuro)
+- `29` Extracao de saldo no OFX (futuro)
+- `30` Motor de validacao de saldo (futuro)
+- `31` `balance_check` na API (futuro)
+- `32` Exibicao de saldo no preview/export (futuro)
+- `33` Testes de validacao de saldo (futuro)
 
 ---
 
