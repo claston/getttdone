@@ -301,6 +301,15 @@ Plano detalhado: `doc/plan-pdf-ofx-inferencia.md`
   - existe fila de novos layouts para cobertura incremental sem quebrar existentes
   - backlog de melhoria continua e atualizado com base em dados reais
 
+41. `P1` Classificacao de erro PDF (escaneado vs layout nao suportado)
+- Estimativa: 3h
+- Dependencias: itens 35 e 36
+- Pronto quando:
+  - backend diferencia erro de PDF sem camada de texto (provavel escaneado)
+  - backend diferencia erro de PDF com texto extraido, mas layout ainda nao suportado
+  - resposta retorna mensagem orientativa para proximo passo (ex.: tentar PDF texto-nativo ou aguardar suporte de layout)
+  - trilha de OCR futuro fica registrada sem bloquear o fluxo atual
+
 ---
 
 ## Corte recomendado para demo V2-MVP (contador)
@@ -330,6 +339,7 @@ Itens:
 - `38` Endpoint de download do OFX bonus (futuro imediato)
 - `39` Testes do fluxo PDF (futuro imediato)
 - `40` Observabilidade e expansao de layouts (futuro imediato)
+- `41` Classificacao de erro PDF + orientacao ao usuario (futuro imediato)
 
 ---
 
