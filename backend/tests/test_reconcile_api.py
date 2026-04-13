@@ -1,9 +1,9 @@
 ﻿from io import BytesIO
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
+from app.application.models import NormalizedTransaction
 from app.main import app
 
 
@@ -86,15 +86,27 @@ def test_reconcile_rejects_unsupported_bank_file_type() -> None:
     assert response.json()["detail"] == "Unsupported bank file type. Use CSV, XLSX, OFX, or PDF."
 
 
-def test_reconcile_accepts_bank_pdf_sample_file() -> None:
+def test_reconcile_accepts_bank_pdf_without_sample_dependency(monkeypatch) -> None:
+    from app.routers import reconcile as reconcile_router
+
+    monkeypatch.setattr(
+        reconcile_router,
+        "parse_bank_statement_rows",
+        lambda filename, raw_bytes: [
+            NormalizedTransaction(
+                date="2023-11-06",
+                description="PIX RECEBIDO",
+                amount=1069.04,
+                type="inflow",
+            )
+        ],
+    )
     client = TestClient(app)
-    sample_path = Path(__file__).resolve().parents[1] / "samples" / "NU_150702837_01NOV2023_30NOV2023.pdf"
-    bank_pdf = sample_path.read_bytes()
 
     response = client.post(
         "/reconcile",
         files={
-            "bank_file": ("bank.pdf", bank_pdf, "application/pdf"),
+            "bank_file": ("bank.pdf", b"%PDF synthetic", "application/pdf"),
             "sheet_file": ("sheet.csv", b"data,valor,descricao\n2023-11-06,1069.04,PIX RECEBIDO", "text/csv"),
         },
     )
@@ -102,7 +114,7 @@ def test_reconcile_accepts_bank_pdf_sample_file() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["bank_file_type"] == "pdf"
-    assert payload["bank_rows_parsed"] > 0
+    assert payload["bank_rows_parsed"] == 1
 
 
 def test_reconcile_rejects_unsupported_sheet_file_type() -> None:
