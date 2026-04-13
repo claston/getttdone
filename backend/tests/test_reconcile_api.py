@@ -1,4 +1,5 @@
 ﻿from io import BytesIO
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
@@ -76,13 +77,32 @@ def test_reconcile_rejects_unsupported_bank_file_type() -> None:
     response = client.post(
         "/reconcile",
         files={
-            "bank_file": ("bank.pdf", b"%PDF", "application/pdf"),
+            "bank_file": ("bank.txt", b"not-supported", "text/plain"),
             "sheet_file": ("sheet.xlsx", b"fake-xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         },
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Unsupported bank file type. Use CSV, XLSX, or OFX."
+    assert response.json()["detail"] == "Unsupported bank file type. Use CSV, XLSX, OFX, or PDF."
+
+
+def test_reconcile_accepts_bank_pdf_sample_file() -> None:
+    client = TestClient(app)
+    sample_path = Path(__file__).resolve().parents[1] / "samples" / "NU_150702837_01NOV2023_30NOV2023.pdf"
+    bank_pdf = sample_path.read_bytes()
+
+    response = client.post(
+        "/reconcile",
+        files={
+            "bank_file": ("bank.pdf", bank_pdf, "application/pdf"),
+            "sheet_file": ("sheet.csv", b"data,valor,descricao\n2023-11-06,1069.04,PIX RECEBIDO", "text/csv"),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["bank_file_type"] == "pdf"
+    assert payload["bank_rows_parsed"] > 0
 
 
 def test_reconcile_rejects_unsupported_sheet_file_type() -> None:
@@ -481,3 +501,4 @@ def test_reconcile_report_includes_fallback_problem_row_when_no_issues() -> None
         "none",
         None,
     ]
+

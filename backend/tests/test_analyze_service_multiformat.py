@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 
 from openpyxl import Workbook
 
@@ -78,4 +79,33 @@ VERSION:102
     assert result.net_total == 2441.10
     assert result.preview_transactions[0].description == "IFOOD"
     assert result.preview_transactions[1].description == "SALARIO"
+
+
+def test_analyze_service_uses_real_pdf_content_with_layout_inference(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    service = AnalyzeService(storage=storage)
+    sample_path = Path(__file__).resolve().parents[1] / "samples" / "NU_150702837_01NOV2023_30NOV2023.pdf"
+    raw = sample_path.read_bytes()
+
+    result = service.analyze(filename="sample.pdf", raw_bytes=raw)
+
+    assert result.file_type == "pdf"
+    assert result.transactions_total > 0
+    assert result.layout_inference_name is not None
+    assert result.layout_inference_confidence is not None
+    assert result.layout_inference_confidence >= 0.2
+
+
+def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    service = AnalyzeService(storage=storage)
+    sample_path = Path(__file__).resolve().parents[1] / "samples" / "itau_extrato_032026.pdf"
+    raw = sample_path.read_bytes()
+
+    result = service.analyze(filename="itau.pdf", raw_bytes=raw)
+
+    assert result.file_type == "pdf"
+    assert result.transactions_total > 0
+    assert result.layout_inference_name in {"itau_statement_ptbr", "generic_statement_ptbr"}
+    assert result.layout_inference_confidence is not None
 
