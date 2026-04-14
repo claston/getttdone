@@ -124,6 +124,10 @@ async def reconcile(
             "match_rule": row.match_rule,
             "matched_row_id": row.matched_row_id,
             "reason": row.reason,
+            "suggestion_type": row.suggestion_type,
+            "suggested_fee_row_id": row.suggested_fee_row_id,
+            "suggested_delta_amount": row.suggested_delta_amount,
+            "suggestion_reason": row.suggestion_reason,
         }
         for row in classification_result.rows
     ]

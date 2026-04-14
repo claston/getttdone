@@ -140,3 +140,56 @@ def test_classify_reconciliation_rows_marks_date_out_of_tolerance_as_divergent()
     assert result.rows[0].reason == "date_out_of_tolerance_window"
     assert result.rows[1].status == "divergente"
     assert result.rows[1].reason == "date_out_of_tolerance_window"
+
+
+def test_classify_reconciliation_rows_suggests_fee_row_for_small_amount_delta() -> None:
+    bank_rows = [
+        NormalizedTransaction(
+            date="2026-04-01",
+            description="PAGAMENTO FORNECEDOR ALFA",
+            amount=-103.0,
+            type="outflow",
+        ),
+    ]
+    sheet_rows = [
+        NormalizedTransaction(
+            date="2026-04-01",
+            description="PAGAMENTO FORNECEDOR ALFA",
+            amount=-100.0,
+            type="outflow",
+        ),
+        NormalizedTransaction(
+            date="2026-04-01",
+            description="TARIFA BANCARIA PACOTE SERVICOS",
+            amount=-3.0,
+            type="outflow",
+        ),
+    ]
+    match_result = LedgerMatchResult(
+        matches=[],
+        exact_matches_count=0,
+        date_tolerance_matches_count=0,
+        description_similarity_matches_count=0,
+        total_matches_count=0,
+        bank_unmatched_count=1,
+        sheet_unmatched_count=2,
+    )
+
+    result = classify_reconciliation_rows(bank_rows=bank_rows, sheet_rows=sheet_rows, match_result=match_result)
+
+    bank_divergent = next(row for row in result.rows if row.source == "bank" and row.status == "divergente")
+    sheet_divergent = next(
+        row
+        for row in result.rows
+        if row.source == "sheet" and row.status == "divergente" and row.description == "PAGAMENTO FORNECEDOR ALFA"
+    )
+
+    assert bank_divergent.reason == "amount_mismatch"
+    assert bank_divergent.suggestion_type == "fee_adjustment_candidate"
+    assert bank_divergent.suggested_fee_row_id == "sheet_002"
+    assert bank_divergent.suggested_delta_amount == 3.0
+    assert bank_divergent.suggestion_reason == "possible_fee_row_for_amount_delta"
+
+    assert sheet_divergent.suggestion_type == "fee_adjustment_candidate"
+    assert sheet_divergent.suggested_fee_row_id == "sheet_002"
+    assert sheet_divergent.suggested_delta_amount == 3.0

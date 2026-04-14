@@ -357,6 +357,40 @@ def test_reconcile_marks_amount_mismatch_as_divergent() -> None:
     assert payload["problems"][0]["type"] == "amount_mismatch"
 
 
+def test_reconcile_amount_mismatch_exposes_fee_adjustment_suggestion_when_delta_matches_fee_line() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/reconcile",
+        files={
+            "bank_file": (
+                "bank.csv",
+                b"date,description,amount\n2026-04-01,PAGAMENTO FORNECEDOR ALFA,-103.00",
+                "text/csv",
+            ),
+            "sheet_file": (
+                "sheet.csv",
+                (
+                    b"data,valor,descricao\n"
+                    b"2026-04-01,-100.00,PAGAMENTO FORNECEDOR ALFA\n"
+                    b"2026-04-01,-3.00,TARIFA BANCARIA PACOTE SERVICOS"
+                ),
+                "text/csv",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    divergent_rows = [row for row in payload["reconciliation_rows"] if row["status"] == "divergente"]
+    assert len(divergent_rows) == 2
+    assert all(row["reason"] == "amount_mismatch" for row in divergent_rows)
+    assert all(row["suggestion_type"] == "fee_adjustment_candidate" for row in divergent_rows)
+    assert all(row["suggested_fee_row_id"] == "sheet_002" for row in divergent_rows)
+    assert all(row["suggested_delta_amount"] == 3.0 for row in divergent_rows)
+    assert all(row["suggestion_reason"] == "possible_fee_row_for_amount_delta" for row in divergent_rows)
+
+
 def test_reconcile_marks_date_out_of_tolerance_as_divergent() -> None:
     client = TestClient(app)
 

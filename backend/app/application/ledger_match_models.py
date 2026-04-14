@@ -33,6 +33,10 @@ class LedgerReconciliationRow:
     match_rule: str
     matched_row_id: str | None
     reason: str
+    suggestion_type: str | None = None
+    suggested_fee_row_id: str | None = None
+    suggested_delta_amount: float | None = None
+    suggestion_reason: str | None = None
 
 
 @dataclass
