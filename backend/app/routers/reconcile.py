@@ -21,7 +21,7 @@ router = APIRouter()
 
 _BANK_ALLOWED_EXTENSIONS = {"csv", "xlsx", "ofx", "pdf"}
 _SHEET_ALLOWED_EXTENSIONS = {"csv", "xlsx"}
-_SHEET_BANK_STATEMENT_BLOCK_THRESHOLD = 0.55
+_SHEET_BANK_STATEMENT_WARN_THRESHOLD = 0.55
 
 
 def _file_extension(filename: str | None) -> str:
@@ -56,17 +56,6 @@ async def reconcile(
 
     sheet_bytes = await sheet_file.read()
     sheet_classification = classify_document(filename=sheet_filename, raw_bytes=sheet_bytes)
-    if (
-        sheet_classification.semantic_type == "extrato_bancario"
-        and sheet_classification.confidence >= _SHEET_BANK_STATEMENT_BLOCK_THRESHOLD
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "The uploaded sheet looks like a bank statement. "
-                "Please upload the operational sheet in the sheet field."
-            ),
-        )
     try:
         parsed_sheet = parse_operational_sheet_rows(filename=sheet_filename, raw_bytes=sheet_bytes)
     except InvalidFileContentError as exc:
@@ -150,6 +139,21 @@ async def reconcile(
         }
         for problem in generate_reconciliation_problems(classification_result.rows)
     ]
+    if (
+        sheet_classification.semantic_type == "extrato_bancario"
+        and sheet_classification.confidence >= _SHEET_BANK_STATEMENT_WARN_THRESHOLD
+    ):
+        problems.insert(
+            0,
+            {
+                "type": "sheet_looks_like_bank_statement",
+                "title": "Planilha parece extrato bancario",
+                "description": (
+                    "O arquivo enviado no campo de planilha parece um extrato bancario "
+                    "e deve ser revisado antes da conciliacao."
+                ),
+            },
+        )
     summary = {
         "total_bank_rows": len(normalized_bank_rows),
         "total_sheet_rows": len(normalized_sheet_rows),

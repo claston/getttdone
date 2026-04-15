@@ -24,5 +24,7 @@ def test_reconcile_rejects_bank_statement_uploaded_as_sheet() -> None:
         },
     )
 
-    assert response.status_code == 422
-    assert "bank statement" in response.json()["detail"].lower()
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sheet_semantic_type"] == "extrato_bancario"
+    assert any(problem["type"] == "sheet_looks_like_bank_statement" for problem in payload["problems"])
