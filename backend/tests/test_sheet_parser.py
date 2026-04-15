@@ -62,6 +62,79 @@ def test_parse_operational_sheet_rows_xlsx_with_aliases() -> None:
     }
 
 
+def test_parse_operational_sheet_rows_xlsx_ignores_intro_rows_and_detects_mapping() -> None:
+    raw = _build_xlsx_bytes(
+        [
+            ["Extrato bancario", None, None],
+            ["Conta", "000123-4", None],
+            ["Data Movimento", "Valor Bruto", "Descricao"],
+            ["2026-04-01", 1200.00, "RECEBIMENTO CLIENTE"],
+            ["2026-04-02", -250.50, "PAGAMENTO FORNECEDOR"],
+        ]
+    )
+
+    parsed = parse_operational_sheet_rows(filename="sheet.xlsx", raw_bytes=raw)
+
+    assert len(parsed.rows) == 2
+    assert parsed.rows[0].date == "2026-04-01"
+    assert parsed.rows[0].amount == 1200.00
+    assert parsed.rows[0].description == "RECEBIMENTO CLIENTE"
+    assert parsed.rows[1].amount == -250.50
+    assert parsed.mapping_detected == {
+        "date": "Data Movimento",
+        "amount": "Valor Bruto",
+        "description": "Descricao",
+    }
+
+
+def test_parse_operational_sheet_rows_csv_with_split_debit_credit_columns() -> None:
+    raw = (
+        "data_movimento;historico_lanc;vlr_debito;vlr_credito\n"
+        "01/04/2026;PAGAMENTO FORNECEDOR;250,50;\n"
+        "02/04/2026;RECEBIMENTO CLIENTE;;1200,00\n"
+    ).encode("utf-8")
+
+    parsed = parse_operational_sheet_rows(filename="sheet.csv", raw_bytes=raw)
+
+    assert len(parsed.rows) == 2
+    assert parsed.rows[0].date == "2026-04-01"
+    assert parsed.rows[0].amount == -250.50
+    assert parsed.rows[0].description == "PAGAMENTO FORNECEDOR"
+    assert parsed.rows[1].date == "2026-04-02"
+    assert parsed.rows[1].amount == 1200.00
+    assert parsed.rows[1].description == "RECEBIMENTO CLIENTE"
+    assert parsed.mapping_detected == {
+        "date": "data_movimento",
+        "amount": "debit/credit",
+        "description": "historico_lanc",
+    }
+
+
+def test_parse_operational_sheet_rows_xlsx_with_split_debit_credit_columns() -> None:
+    raw = _build_xlsx_bytes(
+        [
+            ["Data Movimento", "Histórico Lanc.", "Vlr Débito", "Vlr Crédito"],
+            ["2026-04-01", "PAGAMENTO FORNECEDOR", "250,50", None],
+            ["2026-04-02", "RECEBIMENTO CLIENTE", None, "1200,00"],
+        ]
+    )
+
+    parsed = parse_operational_sheet_rows(filename="sheet.xlsx", raw_bytes=raw)
+
+    assert len(parsed.rows) == 2
+    assert parsed.rows[0].date == "2026-04-01"
+    assert parsed.rows[0].amount == -250.50
+    assert parsed.rows[0].description == "PAGAMENTO FORNECEDOR"
+    assert parsed.rows[1].date == "2026-04-02"
+    assert parsed.rows[1].amount == 1200.00
+    assert parsed.rows[1].description == "RECEBIMENTO CLIENTE"
+    assert parsed.mapping_detected == {
+        "date": "Data Movimento",
+        "amount": "debit/credit",
+        "description": "Histórico Lanc.",
+    }
+
+
 def test_parse_operational_sheet_rows_raises_for_missing_required_columns() -> None:
     raw = b"descricao,valor\nTESTE,100\n"
 
