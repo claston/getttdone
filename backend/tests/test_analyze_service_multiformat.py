@@ -120,6 +120,8 @@ def test_analyze_service_uses_pdf_content_with_layout_inference(tmp_path, monkey
     assert result.layout_inference_name is not None
     assert result.layout_inference_confidence is not None
     assert result.layout_inference_confidence >= 0.2
+    assert result.semantic_type == "extrato_bancario"
+    assert result.semantic_confidence is not None
 
 
 def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path, monkeypatch) -> None:

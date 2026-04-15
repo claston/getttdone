@@ -2,6 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.application.csv_parser import parse_csv_transactions
+from app.application.document_classifier import classify_document
 from app.application.errors import UnsupportedFileTypeError
 from app.application.models import AnalysisData, BeforeAfterRow, NormalizedTransaction, TransactionRow
 from app.application.normalizer import normalize_transactions
@@ -37,6 +38,12 @@ class AnalyzeService:
         parsed_transactions, layout_inference_name, layout_inference_confidence = self._build_transactions_for_extension(
             extension,
             raw_bytes,
+        )
+        classification_result = classify_document(
+            filename=filename,
+            raw_bytes=raw_bytes,
+            layout_inference_name=layout_inference_name,
+            layout_inference_confidence=layout_inference_confidence,
         )
         transactions = normalize_transactions(parsed_transactions)
         reconciliation_result = reconcile_transactions(transactions)
@@ -100,6 +107,9 @@ class AnalyzeService:
         return AnalyzeResponse(
             analysis_id=analysis_id,
             file_type=extension,
+            semantic_type=classification_result.semantic_type,
+            semantic_confidence=classification_result.confidence,
+            semantic_evidence=classification_result.evidence,
             transactions_total=analysis_data.transactions_total,
             total_inflows=analysis_data.total_inflows,
             total_outflows=analysis_data.total_outflows,

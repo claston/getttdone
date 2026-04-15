@@ -61,6 +61,9 @@ class BeforeAfterPreview(BaseModel):
 class AnalyzeResponse(BaseModel):
     analysis_id: str
     file_type: str
+    semantic_type: str | None = None
+    semantic_confidence: float | None = None
+    semantic_evidence: list[str] | None = None
     transactions_total: int
     total_inflows: float
     total_outflows: float
@@ -82,8 +85,14 @@ class ReconcileIntakeResponse(BaseModel):
     status: str
     bank_filename: str
     bank_file_type: str
+    bank_semantic_type: str | None = None
+    bank_semantic_confidence: float | None = None
+    bank_semantic_evidence: list[str] | None = None
     sheet_filename: str
     sheet_file_type: str
+    sheet_semantic_type: str | None = None
+    sheet_semantic_confidence: float | None = None
+    sheet_semantic_evidence: list[str] | None = None
     bank_rows_parsed: int
     sheet_rows_parsed: int
     sheet_mapping_detected: dict[str, str]
