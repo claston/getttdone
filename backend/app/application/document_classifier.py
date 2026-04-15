@@ -210,6 +210,7 @@ def classify_document(
     _score_headers(profile.header_text, scores, evidence)
     _score_body(profile.body_text, scores, evidence)
     _score_structure(profile, scores, evidence)
+    _apply_operational_guardrail(profile, scores, evidence)
 
     if extension in {"pdf", "ofx"}:
         _add_score(scores, evidence, _SEMANTIC_EXTRATO_BANCARIO, 40.0, f"file extension suggests bank statement: {extension}")
@@ -247,6 +248,15 @@ def classify_document(
         )
 
     confidence = _confidence_from_scores(best_score, second_score)
+    confidence = _apply_confidence_floor(
+        best_type=best_type,
+        best_score=best_score,
+        second_score=second_score,
+        extension=extension,
+        confidence=confidence,
+        layout_inference_name=layout_inference_name,
+        layout_inference_confidence=layout_inference_confidence,
+    )
     top_evidence = evidence.get(best_type, [])[:_MAX_EVIDENCE]
     if best_type == _SEMANTIC_GENERICO and confidence < 0.35:
         return DocumentClassification(
@@ -427,6 +437,55 @@ def _maybe_add_generic_fallback(profile: _DocumentProfile, scores: dict[str, flo
         _add_score(scores, evidence, _SEMANTIC_GENERICO, generic_signals, "generic financial rows and columns detected")
 
 
+def _apply_operational_guardrail(
+    profile: _DocumentProfile,
+    scores: dict[str, float],
+    evidence: dict[str, list[str]],
+) -> None:
+    if profile.extension not in {"csv", "xlsx"}:
+        return
+
+    combined_text = _normalize_joined([profile.header_text, profile.body_text])
+    bank_hits = _matched_terms(
+        combined_text,
+        {
+            "pix",
+            "ted",
+            "doc",
+            "tarifa",
+            "estorno",
+            "transferencia",
+            "extrato",
+            "movimentacao bancaria",
+        },
+    )
+    operational_hits = _matched_terms(
+        combined_text,
+        {
+            "fornecedor",
+            "cliente",
+            "centro de custo",
+            "categoria",
+            "orcamento",
+            "despesa",
+            "receita",
+            "contas a pagar",
+            "contas a receber",
+            "nota fiscal",
+            "vencimento",
+        },
+    )
+
+    if len(operational_hits) >= 3 and len(bank_hits) <= 1:
+        _subtract_score(
+            scores,
+            evidence,
+            _SEMANTIC_EXTRATO_BANCARIO,
+            14.0,
+            "operational sheet terms outweigh bank statement terms",
+        )
+
+
 def _score_terms(
     text: str,
     scores: dict[str, float],
@@ -462,11 +521,62 @@ def _add_score(
         bucket.append(message)
 
 
+def _subtract_score(
+    scores: dict[str, float],
+    evidence: dict[str, list[str]],
+    semantic_type: str,
+    score: float,
+    message: str,
+) -> None:
+    current = scores.get(semantic_type, 0.0)
+    scores[semantic_type] = max(0.0, current - score)
+    bucket = evidence.setdefault(semantic_type, [])
+    if len(bucket) < _MAX_EVIDENCE:
+        bucket.append(message)
+
+
 def _confidence_from_scores(best_score: float, second_score: float) -> float:
     if best_score <= 0:
         return 0.0
     confidence = best_score / (best_score + second_score + 10.0)
     return round(min(0.99, max(0.0, confidence)), 2)
+
+
+def _apply_confidence_floor(
+    *,
+    best_type: str,
+    best_score: float,
+    second_score: float,
+    extension: str,
+    confidence: float,
+    layout_inference_name: str | None,
+    layout_inference_confidence: float | None,
+) -> float:
+    adjusted = confidence
+    if best_type == _SEMANTIC_EXTRATO_BANCARIO and extension == "ofx":
+        adjusted = max(adjusted, 0.87)
+    if best_type == _SEMANTIC_EXTRATO_BANCARIO and extension == "pdf":
+        layout_name = normalize_header(layout_inference_name or "")
+        if "statement" in layout_name and (layout_inference_confidence or 0.0) >= 0.8:
+            adjusted = max(adjusted, 0.84)
+    if (
+        extension in {"csv", "xlsx"}
+        and best_type
+        in {
+            _SEMANTIC_CONTAS_A_PAGAR,
+            _SEMANTIC_CONTAS_A_RECEBER,
+            _SEMANTIC_CONTROLE_FINANCEIRO,
+            _SEMANTIC_PLANILHA_CONTABIL,
+            _SEMANTIC_FLUXO_CAIXA,
+        }
+        and (best_score - second_score) >= 4.0
+    ):
+        adjusted = max(adjusted, 0.56)
+    return round(min(0.99, max(0.0, adjusted)), 2)
+
+
+def _matched_terms(text: str, terms: Iterable[str]) -> list[str]:
+    return [term for term in terms if _contains_any(text, {term})]
 
 
 def _contains_any(text: str, terms: Iterable[str]) -> bool:

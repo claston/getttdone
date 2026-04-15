@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 
 from openpyxl import Workbook
 
@@ -58,3 +59,53 @@ def test_classify_accounting_sheet_xlsx() -> None:
     assert result.semantic_type == "planilha_contabil_debito_credito"
     assert result.confidence >= 0.5
     assert result.evidence
+
+
+def test_classify_real_ofx_sample_with_high_confidence() -> None:
+    sample_path = Path(__file__).resolve().parents[1] / "samples" / "NU_150702837_01NOV2023_30NOV2023.ofx"
+    raw = sample_path.read_bytes()
+
+    result = classify_document("NU_150702837_01NOV2023_30NOV2023.ofx", raw)
+
+    assert result.semantic_type == "extrato_bancario"
+    assert result.confidence >= 0.85
+    assert result.evidence
+
+
+def test_operational_sheet_is_not_misclassified_as_bank_statement() -> None:
+    raw = (
+        "data,descricao,fornecedor,categoria,centro de custo,valor\n"
+        "2026-04-01,Pagamento fornecedor mensal,ACME LTDA,Despesa Operacional,Administrativo,-950.00\n"
+        "2026-04-02,Pagamento servico infraestrutura,Cloud Corp,Despesa TI,Tecnologia,-420.00\n"
+        "2026-04-03,Recebimento cliente contrato,Cliente XPTO,Receita,Comercial,2100.00\n"
+        "2026-04-04,Transferencia entre centros de custo,Interno,Reclassificacao,Financeiro,-50.00\n"
+    ).encode("utf-8")
+
+    result = classify_document("planilha_operacional_abril.csv", raw)
+
+    assert result.semantic_type != "extrato_bancario"
+    assert result.semantic_type in {"contas_a_pagar", "controle_financeiro", "contas_a_receber"}
+    assert result.confidence >= 0.5
+
+
+def test_operational_sheet_with_bank_terms_still_avoids_bank_statement() -> None:
+    raw = (
+        "data,descricao,fornecedor,categoria,centro de custo,valor\n"
+        "2026-04-01,PIX pagamento fornecedor,ACME LTDA,Despesa Operacional,Administrativo,-500.00\n"
+        "2026-04-02,TED servico infraestrutura,Cloud Corp,Despesa TI,Tecnologia,-300.00\n"
+        "2026-04-03,Estorno ajuste de categoria,Interno,Reclassificacao,Financeiro,80.00\n"
+    ).encode("utf-8")
+
+    result = classify_document("sheet_operacional.csv", raw)
+
+    assert result.semantic_type != "extrato_bancario"
+
+
+def test_classify_real_operational_sheet_sample_with_consistent_confidence() -> None:
+    sample_path = Path(__file__).resolve().parents[1] / "samples" / "stress_sheet_detalhado_2026-04.csv"
+    raw = sample_path.read_bytes()
+
+    result = classify_document("stress_sheet_detalhado_2026-04.csv", raw)
+
+    assert result.semantic_type != "extrato_bancario"
+    assert result.confidence >= 0.55
