@@ -4,10 +4,18 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from app.application.column_mapping import REQUIRED_FIELDS, normalize_header
-from app.application.csv_parser import DATE_FORMATS, _parse_amount, _resolve_field_map
+from app.application.column_mapping import (
+    FIELD_ALIASES,
+    REQUIRED_FIELDS,
+    normalize_header,
+    resolve_sheet_field_map,
+    _score_header_for_field,
+)
+from app.application.csv_parser import DATE_FORMATS, _parse_amount
 from app.application.errors import InvalidFileContentError
 from app.application.models import NormalizedTransaction
+
+_HEADER_SCAN_LIMIT = 20
 
 
 def parse_xlsx_transactions(raw_bytes: bytes) -> list[NormalizedTransaction]:
@@ -18,8 +26,12 @@ def parse_xlsx_transactions(raw_bytes: bytes) -> list[NormalizedTransaction]:
 def parse_xlsx_transactions_with_mapping(
     raw_bytes: bytes,
     resolver: Callable[[list[str]], dict[str, str]] | None = None,
+    required_fields: set[str] | None = None,
+    amount_resolver: Callable[[list[object], list[str], dict[str, str]], float] | None = None,
 ) -> tuple[list[NormalizedTransaction], dict[str, str]]:
-    field_resolver = resolver or _resolve_field_map
+    field_resolver = resolver or resolve_sheet_field_map
+    required = required_fields or REQUIRED_FIELDS
+    resolve_amount = amount_resolver or _resolve_amount_from_amount_column
     try:
         workbook = load_workbook(filename=BytesIO(raw_bytes), data_only=True, read_only=True)
     except Exception as exc:  # pragma: no cover - openpyxl exception details are not stable.
@@ -29,22 +41,11 @@ def parse_xlsx_transactions_with_mapping(
         raise InvalidFileContentError("XLSX does not contain worksheets.")
 
     sheet = workbook.worksheets[0]
-    rows_iter = sheet.iter_rows(values_only=True)
-    header_row = next(rows_iter, None)
-    if not header_row:
-        raise InvalidFileContentError("XLSX does not contain headers.")
-
-    fieldnames = [str(item).strip() if item is not None else "" for item in header_row]
-    if not any(fieldnames):
-        raise InvalidFileContentError("XLSX does not contain headers.")
-
-    field_map = field_resolver(fieldnames)
-    missing = REQUIRED_FIELDS - set(field_map)
-    if missing:
-        raise InvalidFileContentError(f"XLSX is missing required columns: {sorted(missing)}.")
+    rows = [list(row) for row in sheet.iter_rows(values_only=True)]
+    header_row_index, fieldnames, field_map = _locate_header_row(rows, field_resolver, required)
 
     transactions: list[NormalizedTransaction] = []
-    for raw_row in rows_iter:
+    for raw_row in rows[header_row_index + 1 :]:
         if not raw_row:
             continue
         row_values = list(raw_row)
@@ -53,10 +54,9 @@ def parse_xlsx_transactions_with_mapping(
 
         date_raw = _require_value(row_values, fieldnames, field_map["date"], "date")
         description_raw = _require_value(row_values, fieldnames, field_map["description"], "description")
-        amount_raw = _require_value(row_values, fieldnames, field_map["amount"], "amount")
         type_raw = _get_optional_value(row_values, fieldnames, field_map.get("type"))
 
-        amount = _parse_amount(str(amount_raw))
+        amount = resolve_amount(row_values, fieldnames, field_map)
         transactions.append(
             NormalizedTransaction(
                 date=_parse_date(date_raw),
@@ -71,6 +71,50 @@ def parse_xlsx_transactions_with_mapping(
     return transactions, field_map
 
 
+def _locate_header_row(
+    rows: list[list[object]],
+    field_resolver: Callable[[list[str]], dict[str, str]],
+    required: set[str],
+) -> tuple[int, list[str], dict[str, str]]:
+    best_candidate: tuple[int, list[str], dict[str, str], int] | None = None
+    first_error: InvalidFileContentError | None = None
+
+    for row_index, raw_row in enumerate(rows[:_HEADER_SCAN_LIMIT]):
+        fieldnames = [str(item).strip() if item is not None else "" for item in raw_row]
+        if not any(fieldnames):
+            continue
+
+        try:
+            field_map = field_resolver(fieldnames)
+        except InvalidFileContentError as exc:
+            if first_error is None:
+                first_error = exc
+            continue
+
+        if required - set(field_map):
+            continue
+
+        score = _score_header_row(field_map)
+        candidate = (row_index, fieldnames, field_map, score)
+        if best_candidate is None or score > best_candidate[3]:
+            best_candidate = candidate
+
+    if best_candidate is None:
+        if first_error is not None:
+            raise first_error
+        raise InvalidFileContentError("XLSX does not contain headers.")
+
+    return best_candidate[0], best_candidate[1], best_candidate[2]
+
+
+def _score_header_row(field_map: dict[str, str]) -> int:
+    score = 0
+    for canonical in REQUIRED_FIELDS:
+        raw_header = field_map.get(canonical, "")
+        score += _score_header_for_field(raw_header, FIELD_ALIASES[canonical], canonical)
+    return score
+
+
 def _require_value(row_values: list[object], headers: list[str], mapped_header: str, field_name: str) -> object:
     value = _extract_value(row_values, headers, mapped_header)
     if value is None or str(value).strip() == "":
@@ -83,6 +127,15 @@ def _get_optional_value(row_values: list[object], headers: list[str], mapped_hea
         return ""
     value = _extract_value(row_values, headers, mapped_header)
     return "" if value is None else str(value)
+
+
+def _resolve_amount_from_amount_column(
+    row_values: list[object],
+    headers: list[str],
+    field_map: dict[str, str],
+) -> float:
+    amount_raw = _require_value(row_values, headers, field_map["amount"], "amount")
+    return _parse_amount(str(amount_raw))
 
 
 def _extract_value(row_values: list[object], headers: list[str], mapped_header: str) -> object | None:

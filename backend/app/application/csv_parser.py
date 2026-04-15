@@ -18,8 +18,12 @@ def parse_csv_transactions(raw_bytes: bytes) -> list[NormalizedTransaction]:
 def parse_csv_transactions_with_mapping(
     raw_bytes: bytes,
     resolver: Callable[[list[str]], dict[str, str]] | None = None,
+    required_fields: set[str] | None = None,
+    amount_resolver: Callable[[dict[str, str], dict[str, str]], float] | None = None,
 ) -> tuple[list[NormalizedTransaction], dict[str, str]]:
     field_resolver = resolver or _resolve_field_map
+    required = required_fields or REQUIRED_FIELDS
+    resolve_amount = amount_resolver or _resolve_amount_from_amount_column
     text = _decode_csv_bytes(raw_bytes)
     delimiter = _detect_delimiter(text)
     reader = csv.DictReader(StringIO(text), delimiter=delimiter)
@@ -27,7 +31,7 @@ def parse_csv_transactions_with_mapping(
         raise InvalidFileContentError("CSV does not contain headers.")
 
     field_map = field_resolver(reader.fieldnames)
-    missing = REQUIRED_FIELDS - set(field_map)
+    missing = required - set(field_map)
     if missing:
         raise InvalidFileContentError(f"CSV is missing required columns: {sorted(missing)}.")
 
@@ -35,10 +39,9 @@ def parse_csv_transactions_with_mapping(
     for row in reader:
         date_raw = _require_value(row, field_map["date"], "date")
         description_raw = _require_value(row, field_map["description"], "description")
-        amount_raw = _require_value(row, field_map["amount"], "amount")
         type_raw = row.get(field_map["type"], "") if "type" in field_map else ""
 
-        amount = _parse_amount(amount_raw)
+        amount = resolve_amount(row, field_map)
         txn_type = _normalize_type(type_raw, amount)
         transactions.append(
             NormalizedTransaction(
@@ -93,6 +96,11 @@ def _require_value(row: dict[str, str], key: str, field_name: str) -> str:
     if value is None or not str(value).strip():
         raise InvalidFileContentError(f"CSV row has empty '{field_name}' value.")
     return str(value)
+
+
+def _resolve_amount_from_amount_column(row: dict[str, str], field_map: dict[str, str]) -> float:
+    amount_raw = _require_value(row, field_map["amount"], "amount")
+    return _parse_amount(amount_raw)
 
 
 def _parse_date(raw: str) -> str:

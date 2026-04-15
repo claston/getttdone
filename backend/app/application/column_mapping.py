@@ -6,16 +6,64 @@ from app.application.errors import InvalidFileContentError
 REQUIRED_FIELDS = {"date", "description", "amount"}
 
 FIELD_ALIASES = {
-    "date": {"date", "data", "dt", "dt_lancamento", "transaction_date", "posted_at"},
-    "description": {"description", "descricao", "historico", "memo"},
-    "amount": {"amount", "valor", "vlr", "valor_liquido", "value"},
+    "date": {
+        "date",
+        "data",
+        "data_movimento",
+        "data_pgto",
+        "dt",
+        "dt_lancamento",
+        "dt_movimento",
+        "transaction_date",
+        "posted_at",
+    },
+    "description": {
+        "description",
+        "descricao",
+        "descricao_lancamento",
+        "historico",
+        "historico_lanc",
+        "memo",
+        "narrativa",
+    },
+    "amount": {
+        "amount",
+        "value",
+        "valor",
+        "valor_bruto",
+        "valor_liquido",
+        "valor_total",
+        "vlr",
+        "vlr_bruto",
+        "vlr_liquido",
+    },
+    "debit": {
+        "debit",
+        "debito",
+        "débito",
+        "valor_debito",
+        "valor_debito_total",
+        "vlr_debito",
+        "vlr_débito",
+    },
+    "credit": {
+        "credit",
+        "credito",
+        "crédito",
+        "valor_credito",
+        "valor_credito_total",
+        "vlr_credito",
+        "vlr_crédito",
+    },
     "type": {"type", "tipo", "operation_type", "natureza"},
 }
 
 _KEYWORD_HINTS = {
-    "date": {"data", "date", "dt", "lancamento", "posted"},
-    "description": {"descricao", "description", "historico", "memo", "hist"},
-    "amount": {"valor", "amount", "vlr", "liquido", "value"},
+    "date": {"data", "date", "dt", "lancamento", "movimento", "posted", "pgto"},
+    "description": {"descricao", "description", "historico", "memo", "hist", "narrativa"},
+    "amount": {"valor", "amount", "vlr", "liquido", "bruto", "total", "value"},
+    "debit": {"debit", "debito", "débito", "saida", "outflow"},
+    "credit": {"credit", "credito", "crédito", "entrada", "inflow"},
 }
 
 
@@ -59,6 +107,11 @@ def _score_header_for_field(raw_header: str, aliases: set[str], canonical: str) 
     header_compact = header_norm.replace(" ", "")
     if not header_norm:
         return 0
+
+    if canonical == "amount":
+        header_tokens = set(header_norm.split(" "))
+        if header_tokens & {"debit", "debito", "débito", "credit", "credito", "crédito"}:
+            return 0
 
     best = 0
     for alias in aliases:
