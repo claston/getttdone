@@ -98,6 +98,8 @@ function bindDropzone(config) {
     const topCtaStart = document.getElementById("top-cta-start");
     const loadDemoFilesBtn = document.getElementById("load-demo-files-btn");
     const uploadValidation = document.getElementById("upload-validation");
+    const bankSemanticHint = document.getElementById("bank-semantic-hint");
+    const sheetSemanticHint = document.getElementById("sheet-semantic-hint");
     const bankFileInput = document.getElementById("bank-file-input");
     const sheetFileInput = document.getElementById("sheet-file-input");
     const bankDropzone = document.getElementById("bank-dropzone");
@@ -224,6 +226,51 @@ function bindDropzone(config) {
         }
 
         sheetDropzone.classList.toggle("is-invalid", Boolean(isInvalid));
+    }
+
+    function semanticTypeLabel(semanticType) {
+        const labels = {
+            extrato_bancario: "Extrato bancario",
+            controle_financeiro: "Controle financeiro",
+            fluxo_caixa: "Fluxo de caixa",
+            contas_a_receber: "Contas a receber",
+            contas_a_pagar: "Contas a pagar",
+            planilha_contabil_debito_credito: "Planilha contabil debito/credito",
+            generico_financeiro: "Documento financeiro generico"
+        };
+        return labels[semanticType] || "Documento financeiro";
+    }
+
+    function buildSemanticHint(semanticType, semanticConfidence) {
+        if (!semanticType) {
+            return "";
+        }
+
+        const confidence = Number(semanticConfidence);
+        const hasConfidence = Number.isFinite(confidence);
+        const confidencePercent = hasConfidence ? Math.max(0, Math.min(100, Math.round(confidence * 100))) : null;
+        const confidenceSuffix = confidencePercent === null ? "" : ` (${confidencePercent}% confianca)`;
+        return `Classificacao detectada: ${semanticTypeLabel(semanticType)}${confidenceSuffix}`;
+    }
+
+    function setSemanticHint(node, text) {
+        if (!node) {
+            return;
+        }
+
+        if (!text) {
+            node.hidden = true;
+            node.textContent = "";
+            return;
+        }
+
+        node.hidden = false;
+        node.textContent = text;
+    }
+
+    function clearSemanticHints() {
+        setSemanticHint(bankSemanticHint, "");
+        setSemanticHint(sheetSemanticHint, "");
     }
 
     function problemTypeMeta(type) {
@@ -918,6 +965,7 @@ ${meta.percent}
         showReportBtn.innerHTML = '<span class="material-symbols-outlined text-2xl" data-icon="progress_activity">progress_activity</span> Processando...';
         updateReportGateState();
         setValidationMessage("");
+        clearSemanticHints();
 
         try {
             const response = await fetch(`${apiBase}/reconcile`, {
@@ -935,6 +983,14 @@ ${meta.percent}
             }
 
             setSheetValidationErrorState(false);
+            setSemanticHint(
+                bankSemanticHint,
+                buildSemanticHint(payload.bank_semantic_type, payload.bank_semantic_confidence)
+            );
+            setSemanticHint(
+                sheetSemanticHint,
+                buildSemanticHint(payload.sheet_semantic_type, payload.sheet_semantic_confidence)
+            );
             renderBeforeAfterNarrative(payload);
             renderReconcileTotals(payload);
             renderProblemHighlights(payload);
@@ -960,6 +1016,7 @@ ${meta.percent}
     if (bankFileInput) {
         bankFileInput.addEventListener("change", function () {
             updateReportGateState();
+            clearSemanticHints();
             if (reconcileReportPreview && !reconcileReportPreview.classList.contains("hidden")) {
                 reconcileReportPreview.classList.add("hidden");
                 reportFocusMode = false;
@@ -971,6 +1028,7 @@ ${meta.percent}
     if (sheetFileInput) {
         sheetFileInput.addEventListener("change", function () {
             updateReportGateState();
+            clearSemanticHints();
             if (reconcileReportPreview && !reconcileReportPreview.classList.contains("hidden")) {
                 reconcileReportPreview.classList.add("hidden");
                 reportFocusMode = false;
