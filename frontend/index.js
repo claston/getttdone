@@ -249,8 +249,8 @@ function bindDropzone(config) {
         const confidence = Number(semanticConfidence);
         const hasConfidence = Number.isFinite(confidence);
         const confidencePercent = hasConfidence ? Math.max(0, Math.min(100, Math.round(confidence * 100))) : null;
-        const confidenceSuffix = confidencePercent === null ? "" : ` (${confidencePercent}% confianca)`;
-        return `Classificacao detectada: ${semanticTypeLabel(semanticType)}${confidenceSuffix}`;
+        const confidenceLabel = confidencePercent === null ? "n/a" : `${confidencePercent}%`;
+        return `Tipo detectado: ${semanticTypeLabel(semanticType)} | Confianca: ${confidenceLabel}`;
     }
 
     function setSemanticHint(node, text) {
