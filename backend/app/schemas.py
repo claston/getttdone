@@ -80,14 +80,6 @@ class AnalyzeResponse(BaseModel):
     layout_inference_confidence: float | None = None
 
 
-class ConvertResponse(BaseModel):
-    processing_id: str
-    quota_remaining: int | None = None
-    quota_limit: int | None = None
-    analysis: AnalyzeResponse
-    mode: str
-
-
 class ReconcileIntakeResponse(BaseModel):
     analysis_id: str
     status: str
@@ -121,3 +113,27 @@ class ReconcileIntakeResponse(BaseModel):
     problems: list[Insight]
     summary: ReconcileSummary
     expires_at: str | None
+
+
+class ConvertResponse(BaseModel):
+    processing_id: str
+    quota_remaining: int
+    quota_limit: int
+    identity_type: str
+    analysis: AnalyzeResponse
+
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class RegisterResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    user_token: str
+    quota_remaining: int
+    quota_limit: int
+

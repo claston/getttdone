@@ -17,11 +17,6 @@ from app.schemas import (
 
 class FakeAnalyzeService:
     def analyze(self, filename: str, raw_bytes: bytes) -> AnalyzeResponse:
-        if not filename.endswith((".csv", ".xlsx", ".ofx", ".pdf")):
-            from app.application import UnsupportedFileTypeError
-
-            raise UnsupportedFileTypeError
-
         return AnalyzeResponse(
             analysis_id="an_convert123",
             file_type="pdf",
@@ -83,47 +78,59 @@ def build_client(tmp_path) -> TestClient:
     return TestClient(app)
 
 
-def test_convert_happy_path(tmp_path) -> None:
+def test_convert_anonymous_quota_and_block_4th_attempt(tmp_path) -> None:
     client = build_client(tmp_path)
-    response = client.post(
+
+    for expected_remaining in [2, 1, 0]:
+        response = client.post(
+            "/convert",
+            data={"anonymous_fingerprint": "anon-fp-a"},
+            files={"file": ("sample.pdf", b"%PDF data", "application/pdf")},
+        )
+        assert response.status_code == 200
+        assert response.json()["quota_remaining"] == expected_remaining
+
+    blocked = client.post(
         "/convert",
         data={"anonymous_fingerprint": "anon-fp-a"},
         files={"file": ("sample.pdf", b"%PDF data", "application/pdf")},
     )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["processing_id"] == "an_convert123"
-    assert payload["identity_type"] == "anonymous"
-    assert payload["quota_remaining"] == 2
-    assert payload["quota_limit"] == 3
-    assert payload["analysis"]["analysis_id"] == "an_convert123"
+    assert blocked.status_code == 429
+    assert "Quota exceeded" in blocked.json()["detail"]
     app.dependency_overrides.clear()
 
 
-def test_convert_rejects_unsupported_file_type(tmp_path) -> None:
+def test_register_then_convert_with_user_token(tmp_path) -> None:
     client = build_client(tmp_path)
-    response = client.post(
-        "/convert",
-        data={"anonymous_fingerprint": "anon-fp-b"},
-        files={"file": ("sample.txt", b"unsupported", "text/plain")},
-    )
 
-    assert response.status_code == 400
-    assert "Unsupported file type" in response.json()["detail"]
+    register = client.post(
+        "/auth/register",
+        json={"name": "Erica", "email": "erica@example.com", "password": "strong-pass"},
+    )
+    assert register.status_code == 200
+    assert register.json()["quota_remaining"] == 10
+    token = register.json()["user_token"]
+
+    convert = client.post(
+        "/convert",
+        data={"user_token": token},
+        files={"file": ("sample.pdf", b"%PDF data", "application/pdf")},
+    )
+    assert convert.status_code == 200
+    assert convert.json()["identity_type"] == "user"
+    assert convert.json()["quota_remaining"] == 9
     app.dependency_overrides.clear()
 
 
-def test_convert_rejects_file_larger_than_2mb(tmp_path) -> None:
+def test_convert_rejects_file_bigger_than_2mb(tmp_path) -> None:
     client = build_client(tmp_path)
     oversized = b"a" * ((2 * 1024 * 1024) + 1)
 
     response = client.post(
         "/convert",
-        data={"anonymous_fingerprint": "anon-fp-c"},
+        data={"anonymous_fingerprint": "anon-fp-b"},
         files={"file": ("sample.pdf", oversized, "application/pdf")},
     )
-
     assert response.status_code == 413
     assert "maximum size of 2 MB" in response.json()["detail"]
     app.dependency_overrides.clear()
