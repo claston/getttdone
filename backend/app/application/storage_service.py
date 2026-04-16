@@ -9,7 +9,8 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from app.application.errors import AnalysisNotFoundError
-from app.application.models import AnalysisData
+from app.application.models import AnalysisData, NormalizedTransaction, TransactionRow
+from app.application.ofx_writer import build_ofx_statement
 
 
 class TempAnalysisStorage:
@@ -56,11 +57,22 @@ class TempAnalysisStorage:
         self._format_transacoes_sheet(sheet)
         self._add_conciliacao_sheet(workbook, data)
         workbook.save(analysis_dir / "report.xlsx")
+        self._write_convert_artifact(analysis_dir / "converted.ofx", report_rows)
         return expires_at.isoformat()
 
     def get_report_path(self, analysis_id: str) -> Path:
         analysis_dir = self.root_dir / analysis_id
         report_path = analysis_dir / "report.xlsx"
+        if not report_path.exists():
+            raise AnalysisNotFoundError
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+        return report_path
+
+    def get_convert_report_path(self, analysis_id: str) -> Path:
+        analysis_dir = self.root_dir / analysis_id
+        report_path = analysis_dir / "converted.ofx"
         if not report_path.exists():
             raise AnalysisNotFoundError
         if self._is_expired(analysis_dir):
@@ -215,6 +227,22 @@ class TempAnalysisStorage:
         if not report_path.exists():
             raise AnalysisNotFoundError
         return report_path
+
+    def _write_convert_artifact(self, report_path: Path, report_rows: list[TransactionRow]) -> None:
+        report_path.write_text(
+            build_ofx_statement(
+                [
+                    NormalizedTransaction(
+                        date=item.date,
+                        description=item.description,
+                        amount=item.amount,
+                        type="inflow" if item.amount >= 0 else "outflow",
+                    )
+                    for item in report_rows
+                ]
+            ),
+            encoding="utf-8",
+        )
 
     def _is_expired(self, analysis_dir: Path) -> bool:
         metadata_path = analysis_dir / "analysis.json"

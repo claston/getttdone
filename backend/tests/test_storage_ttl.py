@@ -5,6 +5,7 @@ from openpyxl import load_workbook
 
 from app.application import AnalysisNotFoundError, TempAnalysisStorage
 from app.application.models import AnalysisData, TransactionRow
+from app.application.ofx_parser import parse_ofx_transactions
 
 
 def _build_analysis_data(analysis_id: str = "an_testttl") -> AnalysisData:
@@ -108,3 +109,15 @@ def test_save_analysis_writes_full_transaction_set_to_report(tmp_path) -> None:
     workbook = load_workbook(report_path)
     sheet = workbook["Transacoes"]
     assert sheet.max_row == 26
+
+
+def test_save_analysis_writes_convert_ofx_artifact(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    storage.save_analysis(_build_analysis_data())
+
+    ofx_path = tmp_path / "an_testttl" / "converted.ofx"
+    assert ofx_path.exists()
+
+    parsed = parse_ofx_transactions(ofx_path.read_bytes())
+    assert len(parsed) == 1
+    assert parsed[0].description == "TEST"
