@@ -200,6 +200,57 @@ th:nth-child(2), td:nth-child(2) {
   min-width: 520px;
 }
 
+th:last-child, td:last-child {
+  width: 180px;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.btn-inline {
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
+.btn-ghost:hover {
+  background: #f7f9fd;
+}
+
+.cell-input {
+  width: 100%;
+  min-width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: #fff;
+}
+
+.cell-input-date {
+  min-width: 110px;
+}
+
+.cell-input-description {
+  min-width: 320px;
+}
+
+.cell-input-money {
+  min-width: 120px;
+  text-align: right;
+}
+
 .download-row {
   display: flex;
   justify-content: space-between;

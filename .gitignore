@@ -14,3 +14,7 @@ backend/samples/
 
 .env
 .env.local
+
+# Local/private notes and drafts (do not version)
+local/
+doc/backlog-v1-conversor-pdf-multiformato.md

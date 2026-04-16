@@ -10,7 +10,7 @@ from uuid import uuid4
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from app.application.errors import AnalysisNotFoundError
+from app.application.errors import AnalysisAccessDeniedError, AnalysisEditConflictError, AnalysisNotFoundError
 from app.application.models import AnalysisData, NormalizedTransaction, TransactionRow
 from app.application.ofx_writer import build_ofx_statement
 
@@ -33,6 +33,7 @@ class TempAnalysisStorage:
         now = self.now_provider()
         expires_at = now + timedelta(seconds=self.ttl_seconds)
         report_rows = data.report_transactions or data.preview_transactions
+        updated_at = data.updated_at or now.isoformat()
 
         json_path = analysis_dir / "analysis.json"
         json_path.write_text(
@@ -40,6 +41,7 @@ class TempAnalysisStorage:
                 {
                     **asdict(data),
                     "created_at": now.isoformat(),
+                    "updated_at": updated_at,
                     "expires_at": expires_at.isoformat(),
                     "preview_transactions": [asdict(item) for item in data.preview_transactions],
                     "report_transactions": [asdict(item) for item in report_rows],
@@ -102,6 +104,128 @@ class TempAnalysisStorage:
             return None
         name = raw_name.strip()
         return name or None
+
+    def set_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
+        analysis_dir = self.root_dir / analysis_id
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+
+        metadata_path = analysis_dir / "analysis.json"
+        if not metadata_path.exists():
+            raise AnalysisNotFoundError
+        try:
+            content = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raise AnalysisNotFoundError from None
+
+        owner_type = str(content.get("owner_identity_type") or "").strip()
+        owner_id = str(content.get("owner_identity_id") or "").strip()
+        if owner_type and owner_id:
+            if owner_type != identity_type or owner_id != identity_id:
+                raise AnalysisAccessDeniedError
+            return
+
+        content["owner_identity_type"] = identity_type
+        content["owner_identity_id"] = identity_id
+        metadata_path.write_text(json.dumps(content, ensure_ascii=True, indent=2), encoding="utf-8")
+
+    def assert_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
+        analysis_dir = self.root_dir / analysis_id
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+
+        metadata_path = analysis_dir / "analysis.json"
+        if not metadata_path.exists():
+            raise AnalysisNotFoundError
+        try:
+            content = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raise AnalysisNotFoundError from None
+
+        owner_type = str(content.get("owner_identity_type") or "").strip()
+        owner_id = str(content.get("owner_identity_id") or "").strip()
+        if not owner_type and not owner_id:
+            return
+        if owner_type != identity_type or owner_id != identity_id:
+            raise AnalysisAccessDeniedError
+
+    def apply_convert_edits(
+        self,
+        analysis_id: str,
+        edits: list[dict[str, object]],
+        expected_updated_at: str | None = None,
+    ) -> dict[str, object]:
+        analysis_dir = self.root_dir / analysis_id
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+
+        metadata_path = analysis_dir / "analysis.json"
+        if not metadata_path.exists():
+            raise AnalysisNotFoundError
+
+        try:
+            content = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raise AnalysisNotFoundError from None
+
+        preview_rows = self._parse_transaction_rows(content.get("preview_transactions", []))
+        report_rows_raw = content.get("report_transactions") or content.get("preview_transactions", [])
+        report_rows = self._parse_transaction_rows(report_rows_raw)
+        current_updated_at = str(content.get("updated_at") or "").strip()
+
+        if len(preview_rows) == 0 or len(report_rows) == 0:
+            raise AnalysisNotFoundError
+        if expected_updated_at and current_updated_at and expected_updated_at != current_updated_at:
+            raise AnalysisEditConflictError
+
+        for edit in edits:
+            row_id_raw = edit.get("row_id")
+            row_index = self._resolve_row_index(row_id_raw, max_index=len(preview_rows))
+            amount = self._build_amount_from_credit_debit(edit.get("credit"), edit.get("debit"))
+            description = str(edit.get("description") or "").strip()
+            date = str(edit.get("date") or "").strip()
+            if not description or not date:
+                raise ValueError("Date and description are required.")
+
+            report_target = report_rows[row_index]
+            report_target.date = date
+            report_target.description = description
+            report_target.amount = amount
+
+            preview_target = preview_rows[row_index]
+            preview_target.date = date
+            preview_target.description = description
+            preview_target.amount = amount
+
+        total_inflows = round(sum(item.amount for item in report_rows if item.amount > 0), 2)
+        total_outflows = round(sum(item.amount for item in report_rows if item.amount < 0), 2)
+        net_total = round(total_inflows + total_outflows, 2)
+
+        content["transactions_total"] = len(report_rows)
+        content["total_inflows"] = total_inflows
+        content["total_outflows"] = total_outflows
+        content["net_total"] = net_total
+        content["preview_transactions"] = [asdict(item) for item in preview_rows]
+        content["report_transactions"] = [asdict(item) for item in report_rows]
+        new_updated_at = self.now_provider().isoformat()
+        content["updated_at"] = new_updated_at
+
+        metadata_path.write_text(json.dumps(content, ensure_ascii=True, indent=2), encoding="utf-8")
+        self._write_report_workbook(analysis_dir, content=content, report_rows=report_rows, preview_rows=preview_rows)
+        self._write_convert_artifacts(analysis_dir, report_rows)
+
+        return {
+            "processing_id": analysis_id,
+            "transactions_total": len(report_rows),
+            "total_inflows": total_inflows,
+            "total_outflows": total_outflows,
+            "net_total": net_total,
+            "preview_transactions": [asdict(item) for item in preview_rows],
+            "updated_at": new_updated_at,
+        }
 
     def save_reconcile_report(
         self,
@@ -273,6 +397,79 @@ class TempAnalysisStorage:
         for item in report_rows:
             writer.writerow([item.date, item.description, item.amount, item.category, item.reconciliation_status])
         (analysis_dir / "converted.csv").write_text(csv_buffer.getvalue(), encoding="utf-8")
+
+    def _write_report_workbook(
+        self,
+        analysis_dir: Path,
+        content: dict[str, object],
+        report_rows: list[TransactionRow],
+        preview_rows: list[TransactionRow],
+    ) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Transacoes"
+        sheet.append(["date", "description", "amount", "category", "reconciliation_status"])
+        for item in report_rows:
+            sheet.append([item.date, item.description, item.amount, item.category, item.reconciliation_status])
+        self._format_transacoes_sheet(sheet)
+
+        snapshot = AnalysisData(
+            analysis_id=str(content.get("analysis_id", "")),
+            file_type=str(content.get("file_type", "")),
+            upload_filename=content.get("upload_filename") if isinstance(content.get("upload_filename"), str) else None,
+            transactions_total=int(content.get("transactions_total", len(report_rows))),
+            total_inflows=float(content.get("total_inflows", 0.0)),
+            total_outflows=float(content.get("total_outflows", 0.0)),
+            net_total=float(content.get("net_total", 0.0)),
+            preview_transactions=preview_rows,
+            report_transactions=report_rows,
+            matched_groups=int(content.get("matched_groups", 0)),
+            reversed_entries=int(content.get("reversed_entries", 0)),
+            potential_duplicates=int(content.get("potential_duplicates", 0)),
+        )
+        self._add_conciliacao_sheet(workbook, snapshot)
+        workbook.save(analysis_dir / "report.xlsx")
+
+    def _parse_transaction_rows(self, rows_raw: object) -> list[TransactionRow]:
+        parsed: list[TransactionRow] = []
+        if not isinstance(rows_raw, list):
+            return parsed
+        for item in rows_raw:
+            if not isinstance(item, dict):
+                continue
+            parsed.append(
+                TransactionRow(
+                    date=str(item.get("date") or ""),
+                    description=str(item.get("description") or ""),
+                    amount=float(item.get("amount") or 0.0),
+                    category=str(item.get("category") or "Outros"),
+                    reconciliation_status=str(item.get("reconciliation_status") or "unmatched"),
+                )
+            )
+        return parsed
+
+    def _resolve_row_index(self, row_id_raw: object, max_index: int) -> int:
+        row_id = str(row_id_raw or "").strip()
+        if not row_id.startswith("row_"):
+            raise ValueError("Invalid row_id.")
+        suffix = row_id.split("_", 1)[1]
+        if not suffix.isdigit():
+            raise ValueError("Invalid row_id.")
+        idx = int(suffix) - 1
+        if idx < 0 or idx >= max_index:
+            raise ValueError("row_id out of bounds.")
+        return idx
+
+    def _build_amount_from_credit_debit(self, credit_raw: object, debit_raw: object) -> float:
+        credit = None if credit_raw is None else float(credit_raw)
+        debit = None if debit_raw is None else float(debit_raw)
+        has_credit = credit is not None and credit > 0
+        has_debit = debit is not None and debit > 0
+        if has_credit == has_debit:
+            raise ValueError("Provide only one of credit or debit.")
+        if has_credit:
+            return round(float(credit), 2)
+        return -round(abs(float(debit)), 2)
 
     def _is_expired(self, analysis_dir: Path) -> bool:
         metadata_path = analysis_dir / "analysis.json"

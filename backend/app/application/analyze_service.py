@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -102,6 +103,7 @@ class AnalyzeService:
             matched_groups=reconciliation_result.matched_groups,
             reversed_entries=reconciliation_result.reversed_entries,
             potential_duplicates=reconciliation_result.potential_duplicates,
+            updated_at=datetime.now(timezone.utc).isoformat(),
         )
         expires_at = self.storage.save_analysis(analysis_data)
 
@@ -165,6 +167,7 @@ class AnalyzeService:
                 for row in preview_before_after
             ],
             expires_at=expires_at,
+            updated_at=analysis_data.updated_at,
             layout_inference_name=layout_inference_name,
             layout_inference_confidence=layout_inference_confidence,
         )
