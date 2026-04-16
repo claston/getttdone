@@ -30,11 +30,15 @@
   function resolveApiBase() {
     const host = window.location.hostname;
     const port = window.location.port;
-    const isDevFrontend = (host === "localhost" || host === "127.0.0.1") && port === "3000";
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const isDevFrontend = isLocalHost && port !== "8000";
     if (isDevFrontend) {
       return "http://127.0.0.1:8000";
     }
-    return window.location.origin || "http://127.0.0.1:8000";
+    if (window.location.origin && window.location.origin !== "null") {
+      return window.location.origin;
+    }
+    return "http://127.0.0.1:8000";
   }
 
   const apiBase = resolveApiBase();

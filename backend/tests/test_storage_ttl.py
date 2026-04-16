@@ -12,6 +12,7 @@ def _build_analysis_data(analysis_id: str = "an_testttl") -> AnalysisData:
     return AnalysisData(
         analysis_id=analysis_id,
         file_type="csv",
+        upload_filename="sample.csv",
         transactions_total=1,
         total_inflows=100.0,
         total_outflows=-20.0,
@@ -95,6 +96,7 @@ def test_save_analysis_writes_full_transaction_set_to_report(tmp_path) -> None:
     data = AnalysisData(
         analysis_id="an_full_report",
         file_type="csv",
+        upload_filename="full.csv",
         transactions_total=len(full_rows),
         total_inflows=0.0,
         total_outflows=-325.0,

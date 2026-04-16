@@ -83,6 +83,26 @@ class TempAnalysisStorage:
             raise AnalysisNotFoundError
         return report_path
 
+    def get_upload_filename(self, analysis_id: str) -> str | None:
+        analysis_dir = self.root_dir / analysis_id
+        if self._is_expired(analysis_dir):
+            self._cleanup_analysis(analysis_dir)
+            raise AnalysisNotFoundError
+
+        metadata_path = analysis_dir / "analysis.json"
+        if not metadata_path.exists():
+            raise AnalysisNotFoundError
+        try:
+            content = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        raw_name = content.get("upload_filename")
+        if not isinstance(raw_name, str):
+            return None
+        name = raw_name.strip()
+        return name or None
+
     def save_reconcile_report(
         self,
         summary: dict[str, int],

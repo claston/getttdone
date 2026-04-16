@@ -12,6 +12,7 @@ def _build_analysis_data(analysis_id: str = "an_convert123") -> AnalysisData:
     return AnalysisData(
         analysis_id=analysis_id,
         file_type="pdf",
+        upload_filename="extrato_nubank.pdf",
         transactions_total=1,
         total_inflows=100.0,
         total_outflows=-20.0,
@@ -51,7 +52,7 @@ def test_convert_report_download_happy_path(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/x-ofx")
-    assert "gettdone_convert_an_convert123.ofx" in response.headers["content-disposition"]
+    assert "extrato_nubank_convertido.ofx" in response.headers["content-disposition"]
     assert "<STMTTRN>" in response.text
     app.dependency_overrides.clear()
 
@@ -63,7 +64,7 @@ def test_convert_report_download_csv_happy_path(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert "gettdone_convert_an_convert123.csv" in response.headers["content-disposition"]
+    assert "extrato_nubank_convertido.csv" in response.headers["content-disposition"]
     assert "date,description,amount" in response.text
     app.dependency_overrides.clear()
 
