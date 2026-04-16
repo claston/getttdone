@@ -49,16 +49,17 @@ def get_reconcile_report(
 @router.get("/convert-report/{processing_id}")
 def get_convert_report(
     processing_id: str,
-    file_format: Literal["ofx"] = Query(default="ofx", alias="format"),
+    file_format: Literal["ofx", "csv"] = Query(default="ofx", alias="format"),
     service: ReportService = Depends(get_report_service),
 ) -> FileResponse:
     try:
-        report_path = service.get_convert_report_path(processing_id)
+        report_path = service.get_convert_report_path(processing_id, file_format=file_format)
     except AnalysisNotFoundError:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
+    media_type = "application/x-ofx" if file_format == "ofx" else "text/csv; charset=utf-8"
     return FileResponse(
         path=report_path,
-        media_type="application/x-ofx",
+        media_type=media_type,
         filename=f"gettdone_convert_{processing_id}.{file_format}",
     )

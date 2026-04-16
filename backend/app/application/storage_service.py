@@ -1,6 +1,8 @@
+import csv
 import json
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
@@ -57,7 +59,7 @@ class TempAnalysisStorage:
         self._format_transacoes_sheet(sheet)
         self._add_conciliacao_sheet(workbook, data)
         workbook.save(analysis_dir / "report.xlsx")
-        self._write_convert_artifact(analysis_dir / "converted.ofx", report_rows)
+        self._write_convert_artifacts(analysis_dir, report_rows)
         return expires_at.isoformat()
 
     def get_report_path(self, analysis_id: str) -> Path:
@@ -70,9 +72,10 @@ class TempAnalysisStorage:
             raise AnalysisNotFoundError
         return report_path
 
-    def get_convert_report_path(self, analysis_id: str) -> Path:
+    def get_convert_report_path(self, analysis_id: str, file_format: str) -> Path:
         analysis_dir = self.root_dir / analysis_id
-        report_path = analysis_dir / "converted.ofx"
+        suffix = "ofx" if file_format == "ofx" else "csv"
+        report_path = analysis_dir / f"converted.{suffix}"
         if not report_path.exists():
             raise AnalysisNotFoundError
         if self._is_expired(analysis_dir):
@@ -228,21 +231,28 @@ class TempAnalysisStorage:
             raise AnalysisNotFoundError
         return report_path
 
-    def _write_convert_artifact(self, report_path: Path, report_rows: list[TransactionRow]) -> None:
-        report_path.write_text(
-            build_ofx_statement(
-                [
-                    NormalizedTransaction(
-                        date=item.date,
-                        description=item.description,
-                        amount=item.amount,
-                        type="inflow" if item.amount >= 0 else "outflow",
-                    )
-                    for item in report_rows
-                ]
-            ),
+    def _write_convert_artifacts(self, analysis_dir: Path, report_rows: list[TransactionRow]) -> None:
+        normalized_transactions = [
+            NormalizedTransaction(
+                date=item.date,
+                description=item.description,
+                amount=item.amount,
+                type="inflow" if item.amount >= 0 else "outflow",
+            )
+            for item in report_rows
+        ]
+
+        (analysis_dir / "converted.ofx").write_text(
+            build_ofx_statement(normalized_transactions),
             encoding="utf-8",
         )
+
+        csv_buffer = StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(["date", "description", "amount", "category", "reconciliation_status"])
+        for item in report_rows:
+            writer.writerow([item.date, item.description, item.amount, item.category, item.reconciliation_status])
+        (analysis_dir / "converted.csv").write_text(csv_buffer.getvalue(), encoding="utf-8")
 
     def _is_expired(self, analysis_dir: Path) -> bool:
         metadata_path = analysis_dir / "analysis.json"

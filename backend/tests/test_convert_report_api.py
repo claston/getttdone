@@ -56,6 +56,18 @@ def test_convert_report_download_happy_path(tmp_path: Path) -> None:
     app.dependency_overrides.clear()
 
 
+def test_convert_report_download_csv_happy_path(tmp_path: Path) -> None:
+    client = build_client(tmp_path)
+
+    response = client.get("/convert-report/an_convert123?format=csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "gettdone_convert_an_convert123.csv" in response.headers["content-disposition"]
+    assert "date,description,amount" in response.text
+    app.dependency_overrides.clear()
+
+
 def test_convert_report_returns_not_found_for_missing_analysis(tmp_path: Path) -> None:
     client = build_client(tmp_path)
 

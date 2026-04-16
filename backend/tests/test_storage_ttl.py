@@ -121,3 +121,12 @@ def test_save_analysis_writes_convert_ofx_artifact(tmp_path) -> None:
     parsed = parse_ofx_transactions(ofx_path.read_bytes())
     assert len(parsed) == 1
     assert parsed[0].description == "TEST"
+
+
+def test_save_analysis_writes_convert_csv_artifact(tmp_path) -> None:
+    storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
+    storage.save_analysis(_build_analysis_data())
+
+    csv_path = tmp_path / "an_testttl" / "converted.csv"
+    assert csv_path.exists()
+    assert "date,description,amount,category,reconciliation_status" in csv_path.read_text(encoding="utf-8")

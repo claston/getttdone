@@ -265,19 +265,19 @@
   }
 
   function runDownloadOfx() {
-    if (!state.analysisId) {
+    if (!state.processingId) {
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    setStatus("Download OFX ainda não está disponível neste fluxo.", null);
+    window.open(`${apiBase}/convert-report/${state.processingId}?format=ofx`, "_blank", "noopener");
   }
 
   function runDownloadCsv() {
-    if (!state.analysisId) {
+    if (!state.processingId) {
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    setStatus("Download CSV ainda não está disponível neste fluxo.", null);
+    window.open(`${apiBase}/convert-report/${state.processingId}?format=csv`, "_blank", "noopener");
   }
 
   function bindDropzone() {
