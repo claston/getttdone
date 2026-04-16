@@ -15,6 +15,7 @@ from app.application.errors import FileTooLargeError, InvalidUserTokenError, Quo
 ANONYMOUS_QUOTA_LIMIT = 3
 REGISTERED_QUOTA_LIMIT = 10
 MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024
+PASSWORD_HASH_ITERATIONS = 390_000
 
 
 @dataclass(frozen=True)
@@ -153,7 +154,13 @@ class AccessControlService:
         return f"{identity.identity_type}:{identity.identity_id}"
 
     def _hash_password(self, password: str, salt: str) -> str:
-        return hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
+        derived_key = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            PASSWORD_HASH_ITERATIONS,
+        )
+        return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${base64.b64encode(derived_key).decode('ascii')}"
 
     def _encode_token(self, user_id: str) -> str:
         payload = base64.urlsafe_b64encode(user_id.encode("utf-8")).decode("utf-8").rstrip("=")
