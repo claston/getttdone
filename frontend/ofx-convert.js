@@ -28,6 +28,10 @@
     processingId: null,
     isLoading: false,
     restoredFileMeta: null,
+    previewRows: [],
+    editingRowId: null,
+    editDraft: null,
+    analysisSnapshot: null,
   };
 
   function resolveApiBase() {
@@ -57,6 +61,24 @@
     return generated;
   }
 
+  function getUserToken() {
+    const key = "gettdone_user_token";
+    const raw = localStorage.getItem(key);
+    const token = String(raw || "").trim();
+    return token || null;
+  }
+
+  function buildIdentityQueryParams() {
+    const params = new URLSearchParams();
+    const userToken = getUserToken();
+    if (userToken) {
+      params.set("user_token", userToken);
+      return params;
+    }
+    params.set("anonymous_fingerprint", getAnonymousFingerprint());
+    return params;
+  }
+
   function formatCurrency(value) {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
   }
@@ -71,6 +93,20 @@
     return `${day}-${month}-${year}`;
   }
 
+  function normalizeDateInput(value) {
+    const raw = String(value || "").trim();
+    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      return raw;
+    }
+    const brMatch = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (brMatch) {
+      const [, day, month, year] = brMatch;
+      return `${year}-${month}-${day}`;
+    }
+    return null;
+  }
+
   function formatFileSize(bytes) {
     const value = Number(bytes || 0);
     if (value < 1024) {
@@ -80,6 +116,14 @@
       return `${(value / 1024).toFixed(1)} KB`;
     }
     return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function escapeAttr(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
   }
 
   function isPdfFile(file) {
@@ -111,6 +155,10 @@
           quota_text: payload.quota_text || "-",
           file_name: payload.file_name || null,
           file_size: payload.file_size || null,
+          preview_rows: payload.preview_rows || null,
+          editing_row_id: payload.editing_row_id || null,
+          edit_draft: payload.edit_draft || null,
+          updated_at: payload.updated_at || null,
         }),
       );
     } catch (_error) {
@@ -143,6 +191,49 @@
     } catch (_error) {
       // Ignore storage failures.
     }
+  }
+
+  function getCurrentFileMeta() {
+    const file = input.files && input.files[0];
+    if (file) {
+      return {
+        file_name: file.name || null,
+        file_size: Number(file.size || 0),
+      };
+    }
+    if (state.restoredFileMeta && state.restoredFileMeta.name) {
+      return {
+        file_name: state.restoredFileMeta.name,
+        file_size: Number(state.restoredFileMeta.size || 0),
+      };
+    }
+    return {
+      file_name: null,
+      file_size: null,
+    };
+  }
+
+  function persistCurrentViewState() {
+    if (!state.analysisId || !state.processingId || !state.analysisSnapshot) {
+      return;
+    }
+    const previewRowsNoRowId = state.previewRows.map(({ rowId, ...row }) => row);
+    const { file_name, file_size } = getCurrentFileMeta();
+    saveViewState({
+      processing_id: state.processingId,
+      analysis_id: state.analysisId,
+      analysis: {
+        ...state.analysisSnapshot,
+        preview_transactions: previewRowsNoRowId,
+      },
+      quota_text: quotaRemainingNode.textContent || "-",
+      file_name,
+      file_size,
+      preview_rows: previewRowsNoRowId,
+      editing_row_id: state.editingRowId,
+      edit_draft: state.editDraft ? { ...state.editDraft } : null,
+      updated_at: state.analysisSnapshot.updated_at || null,
+    });
   }
 
   function setLoading(isLoading) {
@@ -185,6 +276,10 @@
   function clearSelectedFile() {
     input.value = "";
     state.restoredFileMeta = null;
+    state.previewRows = [];
+    state.editingRowId = null;
+    state.editDraft = null;
+    state.analysisSnapshot = null;
     setSelectedFileLabel();
     clearViewState();
     setStatus("Arquivo removido. Selecione outro PDF para continuar.", null);
@@ -208,23 +303,173 @@
       .join("");
   }
 
-  function renderRows(rows) {
+  function toPositiveMoneyString(value) {
+    const numeric = Math.abs(Number(value || 0));
+    if (!Number.isFinite(numeric) || numeric === 0) {
+      return "";
+    }
+    return numeric.toFixed(2);
+  }
+
+  function parseMoneyInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return null;
+    }
+    let normalized = raw.replace(/\s+/g, "");
+    if (normalized.includes(",") && normalized.includes(".")) {
+      normalized = normalized.replace(/\./g, "").replace(",", ".");
+    } else if (normalized.includes(",")) {
+      normalized = normalized.replace(",", ".");
+    }
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  }
+
+  function getCreditAmount(row) {
+    const amount = Number(row.amount || 0);
+    return amount > 0 ? amount : null;
+  }
+
+  function getDebitAmount(row) {
+    const amount = Number(row.amount || 0);
+    return amount < 0 ? Math.abs(amount) : null;
+  }
+
+  function setPreviewRows(rows) {
+    state.previewRows = (rows || []).map((row, idx) => ({
+      ...row,
+      rowId: row.rowId || `row_${idx + 1}`,
+    }));
+  }
+
+  function startEditingRow(rowId) {
+    const row = state.previewRows.find((item) => item.rowId === rowId);
+    if (!row) {
+      return;
+    }
+    state.editingRowId = rowId;
+    state.editDraft = {
+      date: formatDate(row.date),
+      description: row.description || "",
+      credit: toPositiveMoneyString(getCreditAmount(row)),
+      debit: toPositiveMoneyString(getDebitAmount(row)),
+    };
+    renderRows();
+  }
+
+  function cancelEditingRow() {
+    state.editingRowId = null;
+    state.editDraft = null;
+    renderRows();
+  }
+
+  function updateEditDraft(field, value) {
+    if (!state.editDraft) {
+      return;
+    }
+    state.editDraft[field] = value;
+    persistCurrentViewState();
+  }
+
+  async function saveEditingRow(rowId) {
+    if (!state.editDraft) {
+      return;
+    }
+    const normalizedDate = normalizeDateInput(state.editDraft.date);
+    if (!normalizedDate) {
+      setStatus("Data inválida. Use dd-mm-yyyy.", "error");
+      return;
+    }
+
+    const description = String(state.editDraft.description || "").trim();
+    if (!description) {
+      setStatus("Histórico é obrigatório.", "error");
+      return;
+    }
+
+    const credit = parseMoneyInput(state.editDraft.credit);
+    const debit = parseMoneyInput(state.editDraft.debit);
+
+    if ((credit === null && debit === null) || (credit !== null && debit !== null)) {
+      setStatus("Preencha apenas crédito ou débito.", "error");
+      return;
+    }
+
+    if (!state.processingId) {
+      setStatus("Converta um arquivo antes de editar.", "error");
+      return;
+    }
+
+    try {
+      setStatus("Salvando edição...", null);
+      const payload = await postConvertEdit(state.processingId, {
+        row_id: rowId,
+        date: normalizedDate,
+        description,
+        credit,
+        debit,
+      });
+
+      state.editingRowId = null;
+      state.editDraft = null;
+      setPreviewRows(payload.preview_transactions || []);
+      if (state.analysisSnapshot) {
+        state.analysisSnapshot.preview_transactions = state.previewRows.map(({ rowId: _rowId, ...row }) => row);
+        state.analysisSnapshot.transactions_total = Number(payload.transactions_total || state.analysisSnapshot.transactions_total || 0);
+        state.analysisSnapshot.total_inflows = Number(payload.total_inflows || state.analysisSnapshot.total_inflows || 0);
+        state.analysisSnapshot.total_outflows = Number(payload.total_outflows || state.analysisSnapshot.total_outflows || 0);
+        state.analysisSnapshot.net_total = Number(payload.net_total || state.analysisSnapshot.net_total || 0);
+        state.analysisSnapshot.updated_at = payload.updated_at || state.analysisSnapshot.updated_at || null;
+        renderKpis(state.analysisSnapshot);
+      }
+      renderRows();
+      persistCurrentViewState();
+      setStatus("Linha atualizada na prévia.", "success");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Falha ao salvar edição.", "error");
+    }
+  }
+
+  function renderRows() {
+    const rows = state.previewRows;
     if (!rows || rows.length === 0) {
-      reviewRows.innerHTML = '<tr><td colspan="4">Nenhuma transação para exibir.</td></tr>';
+      reviewRows.innerHTML = '<tr><td colspan="5">Nenhuma transação para exibir.</td></tr>';
       return;
     }
 
     reviewRows.innerHTML = rows
-      .map(
-        (row) => `
+      .map((row) => {
+        const isEditing = row.rowId === state.editingRowId && state.editDraft;
+        if (isEditing) {
+          return `
+          <tr>
+            <td><input class="cell-input cell-input-date" data-edit-field="date" value="${escapeAttr(state.editDraft.date)}" /></td>
+            <td><input class="cell-input cell-input-description" data-edit-field="description" value="${escapeAttr(state.editDraft.description)}" /></td>
+            <td><input class="cell-input cell-input-money" data-edit-field="credit" inputmode="decimal" placeholder="0,00" value="${escapeAttr(state.editDraft.credit)}" /></td>
+            <td><input class="cell-input cell-input-money" data-edit-field="debit" inputmode="decimal" placeholder="0,00" value="${escapeAttr(state.editDraft.debit)}" /></td>
+            <td class="actions-cell">
+              <button class="btn btn-secondary btn-inline" type="button" data-action="save-row" data-row-id="${row.rowId}">Salvar</button>
+              <button class="btn btn-inline btn-ghost" type="button" data-action="cancel-row">Cancelar</button>
+            </td>
+          </tr>
+        `;
+        }
+        return `
           <tr>
             <td>${formatDate(row.date)}</td>
             <td>${row.description || "-"}</td>
-            <td>${Number(row.amount || 0) > 0 ? formatCurrency(row.amount) : "-"}</td>
-            <td>${Number(row.amount || 0) < 0 ? formatCurrency(Math.abs(Number(row.amount || 0))) : "-"}</td>
+            <td>${getCreditAmount(row) !== null ? formatCurrency(getCreditAmount(row)) : "-"}</td>
+            <td>${getDebitAmount(row) !== null ? formatCurrency(getDebitAmount(row)) : "-"}</td>
+            <td class="actions-cell">
+              <button class="btn btn-inline btn-secondary" type="button" data-action="edit-row" data-row-id="${row.rowId}">Editar</button>
+            </td>
           </tr>
-        `,
-      )
+        `;
+      })
       .join("");
   }
 
@@ -236,13 +481,25 @@
 
     state.analysisId = viewState.analysis_id || analysis.analysis_id;
     state.processingId = viewState.processing_id || analysis.analysis_id;
+    state.analysisSnapshot = { ...analysis };
     state.restoredFileMeta = {
       name: String(viewState.file_name || "").trim() || "arquivo_restaurado.pdf",
       size: Number(viewState.file_size || 0),
     };
 
+    const restoredRows = Array.isArray(viewState.preview_rows)
+      ? viewState.preview_rows
+      : analysis.preview_transactions || [];
     renderKpis(analysis);
-    renderRows(analysis.preview_transactions || []);
+    setPreviewRows(restoredRows);
+    if (viewState.editing_row_id && viewState.edit_draft && state.previewRows.some((row) => row.rowId === viewState.editing_row_id)) {
+      state.editingRowId = viewState.editing_row_id;
+      state.editDraft = { ...viewState.edit_draft };
+    } else {
+      state.editingRowId = null;
+      state.editDraft = null;
+    }
+    renderRows();
     setSelectedFileLabel();
 
     analysisIdNode.textContent = state.analysisId || "-";
@@ -305,6 +562,26 @@
     };
   }
 
+  async function postConvertEdit(processingId, editPatch) {
+    const query = buildIdentityQueryParams().toString();
+    const response = await fetch(`${apiBase}/convert-edits/${processingId}?${query}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        edits: [editPatch],
+        expected_updated_at: state.analysisSnapshot ? state.analysisSnapshot.updated_at || null : null,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload.detail || "Falha ao salvar edição.";
+      throw new Error(detail);
+    }
+    return payload;
+  }
+
   async function runConvert() {
     const file = input.files && input.files[0];
     if (!file) {
@@ -332,9 +609,11 @@
       const analysis = payload.analysis;
       state.analysisId = analysis.analysis_id;
       state.processingId = payload.processing_id || analysis.analysis_id;
+      state.analysisSnapshot = { ...analysis };
 
       renderKpis(analysis);
-      renderRows(analysis.preview_transactions || []);
+      setPreviewRows(analysis.preview_transactions || []);
+      renderRows();
 
       analysisIdNode.textContent = analysis.analysis_id || "-";
       processingIdNode.textContent = state.processingId || "-";
@@ -351,14 +630,7 @@
       if (downloadExcelBtn) downloadExcelBtn.disabled = !canDownload;
       if (downloadCsvBtn) downloadCsvBtn.disabled = !canDownload;
 
-      saveViewState({
-        processing_id: state.processingId,
-        analysis_id: state.analysisId,
-        analysis,
-        quota_text: quotaRemainingNode.textContent || "-",
-        file_name: file.name || null,
-        file_size: Number(file.size || 0),
-      });
+      persistCurrentViewState();
 
       if (payload.mode === "analyze") {
         setStatus("Conversão concluída via /analyze. Revise os dados e baixe o relatório.", "success");
@@ -386,7 +658,9 @@
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    window.open(`${apiBase}/convert-report/${state.processingId}?format=ofx`, "_blank", "noopener");
+    const query = buildIdentityQueryParams();
+    query.set("format", "ofx");
+    window.open(`${apiBase}/convert-report/${state.processingId}?${query.toString()}`, "_blank", "noopener");
   }
 
   function runDownloadCsv() {
@@ -394,7 +668,9 @@
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    window.open(`${apiBase}/convert-report/${state.processingId}?format=csv`, "_blank", "noopener");
+    const query = buildIdentityQueryParams();
+    query.set("format", "csv");
+    window.open(`${apiBase}/convert-report/${state.processingId}?${query.toString()}`, "_blank", "noopener");
   }
 
   function bindDropzone() {
@@ -441,6 +717,40 @@
     }
     setSelectedFileLabel();
     setStatus("", null);
+  });
+
+  reviewRows.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const action = target.dataset.action;
+    if (!action) {
+      return;
+    }
+    if (action === "edit-row") {
+      startEditingRow(target.dataset.rowId || "");
+      return;
+    }
+    if (action === "cancel-row") {
+      cancelEditingRow();
+      return;
+    }
+    if (action === "save-row") {
+      void saveEditingRow(target.dataset.rowId || "");
+    }
+  });
+
+  reviewRows.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    const field = target.dataset.editField;
+    if (!field || !state.editDraft) {
+      return;
+    }
+    updateEditDraft(field, target.value);
   });
   convertBtn.addEventListener("click", runConvert);
   if (downloadOfxBtn) downloadOfxBtn.addEventListener("click", runDownloadOfx);

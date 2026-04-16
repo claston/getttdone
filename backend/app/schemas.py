@@ -76,6 +76,7 @@ class AnalyzeResponse(BaseModel):
     preview_transactions: list[TransactionPreview]
     preview_before_after: list[BeforeAfterPreview]
     expires_at: str | None
+    updated_at: str | None = None
     layout_inference_name: str | None = None
     layout_inference_confidence: float | None = None
 
@@ -121,6 +122,29 @@ class ConvertResponse(BaseModel):
     quota_limit: int
     identity_type: str
     analysis: AnalyzeResponse
+
+
+class ConvertEditPatch(BaseModel):
+    row_id: str
+    date: str
+    description: str
+    credit: float | None = None
+    debit: float | None = None
+
+
+class ConvertEditsRequest(BaseModel):
+    edits: list[ConvertEditPatch]
+    expected_updated_at: str | None = None
+
+
+class ConvertEditsResponse(BaseModel):
+    processing_id: str
+    transactions_total: int
+    total_inflows: float
+    total_outflows: float
+    net_total: float
+    preview_transactions: list[TransactionPreview]
+    updated_at: str
 
 
 class RegisterRequest(BaseModel):

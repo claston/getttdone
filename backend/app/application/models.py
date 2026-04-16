@@ -42,3 +42,4 @@ class AnalysisData:
     matched_groups: int = 0
     reversed_entries: int = 0
     potential_duplicates: int = 0
+    updated_at: str | None = None

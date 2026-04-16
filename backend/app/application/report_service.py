@@ -16,6 +16,24 @@ class ReportService:
     def get_upload_filename(self, analysis_id: str) -> str | None:
         return self.storage.get_upload_filename(analysis_id)
 
+    def set_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
+        self.storage.set_convert_owner(analysis_id=analysis_id, identity_type=identity_type, identity_id=identity_id)
+
+    def assert_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
+        self.storage.assert_convert_owner(analysis_id=analysis_id, identity_type=identity_type, identity_id=identity_id)
+
+    def apply_convert_edits(
+        self,
+        analysis_id: str,
+        edits: list[dict[str, object]],
+        expected_updated_at: str | None = None,
+    ) -> dict[str, object]:
+        return self.storage.apply_convert_edits(
+            analysis_id=analysis_id,
+            edits=edits,
+            expected_updated_at=expected_updated_at,
+        )
+
     def save_reconcile_report(
         self,
         summary: dict[str, int],

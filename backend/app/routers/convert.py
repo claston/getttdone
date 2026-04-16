@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.application import (
     AccessControlService,
+    AnalysisAccessDeniedError,
+    AnalysisNotFoundError,
     AnalyzeService,
     FileTooLargeError,
     InvalidFileContentError,
     InvalidUserTokenError,
     QuotaExceededError,
+    ReportService,
     UnsupportedFileTypeError,
 )
-from app.dependencies import get_access_control_service, get_analyze_service
+from app.dependencies import get_access_control_service, get_analyze_service, get_report_service
 from app.schemas import ConvertResponse
 
 router = APIRouter()
@@ -21,6 +24,7 @@ async def convert(
     anonymous_fingerprint: str | None = Form(default=None),
     user_token: str | None = Form(default=None),
     analyze_service: AnalyzeService = Depends(get_analyze_service),
+    report_service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConvertResponse:
     try:
@@ -32,6 +36,11 @@ async def convert(
         )
         access_control_service.ensure_quota_available(identity)
         analysis = analyze_service.analyze(filename=file.filename or "", raw_bytes=data)
+        report_service.set_convert_owner(
+            analysis_id=analysis.analysis_id,
+            identity_type=identity.identity_type,
+            identity_id=identity.identity_id,
+        )
         quota_remaining = access_control_service.consume_quota(identity)
         return ConvertResponse(
             processing_id=analysis.analysis_id,
@@ -56,3 +65,7 @@ async def convert(
         raise HTTPException(status_code=400, detail="Unsupported file type. Use CSV, XLSX, OFX, or PDF.")
     except InvalidFileContentError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except AnalysisNotFoundError:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    except AnalysisAccessDeniedError:
+        raise HTTPException(status_code=403, detail="Access denied for this analysis.")

@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.application.access_control import AccessControlService
-from app.dependencies import get_access_control_service, get_analyze_service
+from app.dependencies import get_access_control_service, get_analyze_service, get_report_service
 from app.main import app
 from app.schemas import (
     AnalyzeResponse,
@@ -73,6 +73,11 @@ class FakeAnalyzeService:
         )
 
 
+class FakeReportService:
+    def set_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
+        _ = (analysis_id, identity_type, identity_id)
+
+
 def build_client(tmp_path) -> TestClient:
     access_control = AccessControlService(
         state_file=tmp_path / "access-control-state.json",
@@ -80,6 +85,7 @@ def build_client(tmp_path) -> TestClient:
     )
     app.dependency_overrides[get_access_control_service] = lambda: access_control
     app.dependency_overrides[get_analyze_service] = lambda: FakeAnalyzeService()
+    app.dependency_overrides[get_report_service] = lambda: FakeReportService()
     return TestClient(app)
 
 

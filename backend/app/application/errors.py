@@ -24,3 +24,11 @@ class InvalidUserTokenError(Exception):
 
 class UserAlreadyExistsError(Exception):
     """Raised when trying to register an already existing user."""
+
+
+class AnalysisAccessDeniedError(Exception):
+    """Raised when an identity attempts to access another identity's analysis."""
+
+
+class AnalysisEditConflictError(Exception):
+    """Raised when edit request is based on an outdated analysis version."""
