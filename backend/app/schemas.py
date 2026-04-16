@@ -80,6 +80,14 @@ class AnalyzeResponse(BaseModel):
     layout_inference_confidence: float | None = None
 
 
+class ConvertResponse(BaseModel):
+    processing_id: str
+    quota_remaining: int | None = None
+    quota_limit: int | None = None
+    analysis: AnalyzeResponse
+    mode: str
+
+
 class ReconcileIntakeResponse(BaseModel):
     analysis_id: str
     status: str
