@@ -22,6 +22,13 @@ class ReportService:
     def assert_convert_owner(self, analysis_id: str, identity_type: str, identity_id: str) -> None:
         self.storage.assert_convert_owner(analysis_id=analysis_id, identity_type=identity_type, identity_id=identity_id)
 
+    def list_convert_history(self, identity_type: str, identity_id: str, limit: int = 20) -> list[dict[str, str]]:
+        return self.storage.list_convert_history(
+            identity_type=identity_type,
+            identity_id=identity_id,
+            limit=limit,
+        )
+
     def apply_convert_edits(
         self,
         analysis_id: str,

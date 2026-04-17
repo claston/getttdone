@@ -104,6 +104,8 @@ class AnalyzeService:
             reversed_entries=reconciliation_result.reversed_entries,
             potential_duplicates=reconciliation_result.potential_duplicates,
             updated_at=datetime.now(timezone.utc).isoformat(),
+            layout_inference_name=layout_inference_name,
+            layout_inference_confidence=layout_inference_confidence,
         )
         expires_at = self.storage.save_analysis(analysis_data)
 

@@ -40,6 +40,8 @@ body {
 
 .hero .lead { margin: 0; opacity: 0.9; }
 .hero .eyebrow { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; font-size: 0.75rem; opacity: 0.9; }
+.hero-actions { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.btn-link { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 
 .panel {
   background: var(--panel);

@@ -10,7 +10,13 @@ from threading import RLock
 from typing import Callable
 from uuid import uuid4
 
-from app.application.errors import FileTooLargeError, InvalidUserTokenError, QuotaExceededError, UserAlreadyExistsError
+from app.application.errors import (
+    FileTooLargeError,
+    InvalidCredentialsError,
+    InvalidUserTokenError,
+    QuotaExceededError,
+    UserAlreadyExistsError,
+)
 
 ANONYMOUS_QUOTA_LIMIT = 3
 REGISTERED_QUOTA_LIMIT = 10
@@ -103,6 +109,41 @@ class AccessControlService:
             token=self._encode_token(user_id),
         )
 
+    def authenticate_user(self, email: str, password: str) -> RegisteredUser:
+        normalized_email = email.strip().lower()
+        with self._lock:
+            user_id = self._state["users_by_email"].get(normalized_email)
+            if not user_id:
+                raise InvalidCredentialsError
+            user = self._state["users"].get(user_id)
+            if not user:
+                raise InvalidCredentialsError
+            if not self._verify_password(
+                password=password,
+                stored_hash=str(user.get("password_hash") or ""),
+                stored_salt=str(user.get("password_salt") or ""),
+            ):
+                raise InvalidCredentialsError
+            return RegisteredUser(
+                user_id=str(user.get("id") or user_id),
+                email=str(user.get("email") or normalized_email),
+                name=str(user.get("name") or ""),
+                token=self._encode_token(user_id),
+            )
+
+    def get_user_by_token(self, user_token: str) -> RegisteredUser:
+        user_id = self._decode_token(user_token)
+        with self._lock:
+            user = self._state["users"].get(user_id)
+            if not user:
+                raise InvalidUserTokenError
+            return RegisteredUser(
+                user_id=str(user.get("id") or user_id),
+                email=str(user.get("email") or ""),
+                name=str(user.get("name") or ""),
+                token=user_token,
+            )
+
     def assert_upload_size(self, raw_bytes: bytes) -> None:
         if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
             raise FileTooLargeError
@@ -173,6 +214,12 @@ class AccessControlService:
             PASSWORD_HASH_ITERATIONS,
         )
         return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${base64.b64encode(derived_key).decode('ascii')}"
+
+    def _verify_password(self, password: str, stored_hash: str, stored_salt: str) -> bool:
+        if not stored_hash or not stored_salt:
+            return False
+        expected_hash = self._hash_password(password=password, salt=stored_salt)
+        return hmac.compare_digest(expected_hash, stored_hash)
 
     def _encode_token(self, user_id: str) -> str:
         payload = base64.urlsafe_b64encode(user_id.encode("utf-8")).decode("utf-8").rstrip("=")

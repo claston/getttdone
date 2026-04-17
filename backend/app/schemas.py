@@ -164,3 +164,37 @@ class RegisterResponse(BaseModel):
     quota_remaining: int
     quota_limit: int
 
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    user_token: str
+    quota_remaining: int
+    quota_limit: int
+
+
+class AuthMeResponse(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    quota_remaining: int
+    quota_limit: int
+
+
+class ClientConversionItem(BaseModel):
+    processing_id: str
+    created_at: str
+    filename: str
+    model: str
+    conversion_type: str
+    status: str
+
+
+class ClientConversionsResponse(BaseModel):
+    items: list[ClientConversionItem]

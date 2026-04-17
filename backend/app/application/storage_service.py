@@ -151,6 +151,59 @@ class TempAnalysisStorage:
         if owner_type != identity_type or owner_id != identity_id:
             raise AnalysisAccessDeniedError
 
+    def list_convert_history(self, identity_type: str, identity_id: str, limit: int = 20) -> list[dict[str, str]]:
+        items: list[dict[str, str]] = []
+        try:
+            analysis_dirs = list(self.root_dir.iterdir())
+        except OSError:
+            analysis_dirs = []
+
+        for analysis_dir in analysis_dirs:
+            if not analysis_dir.is_dir():
+                continue
+            if self._is_expired(analysis_dir):
+                try:
+                    self._cleanup_analysis(analysis_dir)
+                except OSError:
+                    pass
+                continue
+
+            metadata_path = analysis_dir / "analysis.json"
+            if not metadata_path.exists():
+                continue
+
+            try:
+                content = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            owner_type = str(content.get("owner_identity_type") or "").strip()
+            owner_id = str(content.get("owner_identity_id") or "").strip()
+            if owner_type != identity_type or owner_id != identity_id:
+                continue
+
+            processing_id = str(content.get("analysis_id") or analysis_dir.name).strip()
+            created_at = str(content.get("created_at") or content.get("updated_at") or "").strip()
+            filename = str(content.get("upload_filename") or "").strip() or f"{processing_id}.pdf"
+            model = str(content.get("layout_inference_name") or "").strip() or "Nao identificado"
+            file_type = str(content.get("file_type") or "").strip().lower()
+            conversion_type = f"{file_type}-ofx" if file_type else "pdf-ofx"
+            status = "Sucesso" if (analysis_dir / "converted.ofx").exists() else "Processando"
+
+            items.append(
+                {
+                    "processing_id": processing_id,
+                    "created_at": created_at,
+                    "filename": filename,
+                    "model": model,
+                    "conversion_type": conversion_type,
+                    "status": status,
+                }
+            )
+
+        items.sort(key=lambda item: item["created_at"], reverse=True)
+        return items[: max(1, min(limit, 100))]
+
     def apply_convert_edits(
         self,
         analysis_id: str,

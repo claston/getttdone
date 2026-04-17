@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OFX Simples | Entrar</title>
+  <link rel="stylesheet" href="./auth.css" />
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-shell">
+      <header class="brand">
+        <div class="brand-icon">$</div>
+        <h1>OFX Simples</h1>
+      </header>
+
+      <article class="card">
+        <div class="card-head">
+          <h2>Bem-vindo de volta</h2>
+          <p>Acesse sua conta</p>
+        </div>
+
+        <p id="status-msg" class="status"></p>
+
+        <form id="login-form" class="form">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" placeholder="name@company.com" required />
+
+          <div class="label-row">
+            <label for="password">Senha</label>
+          </div>
+          <input id="password" type="password" placeholder="••••••••" required />
+
+          <button type="submit" class="btn btn-primary">Entrar</button>
+        </form>
+
+        <p class="footnote">Não tem uma conta? <a id="signup-link" href="./signup.html">Cadastre-se</a></p>
+      </article>
+    </section>
+  </main>
+
+  <script src="./login.js"></script>
+</body>
+</html>

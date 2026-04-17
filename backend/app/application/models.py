@@ -44,3 +44,5 @@ class AnalysisData:
     reversed_entries: int = 0
     potential_duplicates: int = 0
     updated_at: str | None = None
+    layout_inference_name: str | None = None
+    layout_inference_confidence: float | None = None

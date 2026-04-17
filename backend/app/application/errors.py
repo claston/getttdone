@@ -26,6 +26,10 @@ class UserAlreadyExistsError(Exception):
     """Raised when trying to register an already existing user."""
 
 
+class InvalidCredentialsError(Exception):
+    """Raised when user login credentials are invalid."""
+
+
 class AnalysisAccessDeniedError(Exception):
     """Raised when an identity attempts to access another identity's analysis."""
 

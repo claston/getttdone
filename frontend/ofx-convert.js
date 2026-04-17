@@ -8,6 +8,9 @@
   const selectedFile = document.getElementById("selected-file");
   const convertBtn = document.getElementById("convert-btn");
   const statusMsg = document.getElementById("status-msg");
+  const authLoginLink = document.getElementById("auth-login-link");
+  const authSignupLink = document.getElementById("auth-signup-link");
+  const authClientLink = document.getElementById("auth-client-link");
 
   const reviewSection = document.getElementById("review-section");
   const downloadSection = document.getElementById("download-section");
@@ -150,6 +153,13 @@
     if (kind) {
       statusMsg.classList.add(kind);
     }
+  }
+
+  function syncHeroAuthLinks() {
+    const hasSession = Boolean(getUserToken());
+    if (authClientLink) authClientLink.classList.toggle("hidden", !hasSession);
+    if (authLoginLink) authLoginLink.classList.toggle("hidden", hasSession);
+    if (authSignupLink) authSignupLink.classList.toggle("hidden", hasSession);
   }
 
   function markChangedRow(rowId, kind) {
@@ -824,7 +834,12 @@
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("anonymous_fingerprint", getAnonymousFingerprint());
+      const token = getUserToken();
+      if (token) {
+        formData.append("user_token", token);
+      } else {
+        formData.append("anonymous_fingerprint", getAnonymousFingerprint());
+      }
 
       let payload = await postConvert(formData);
       if (!payload) {
@@ -867,7 +882,14 @@
       }
       reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Erro inesperado.", "error");
+      const message = error instanceof Error ? error.message : "Erro inesperado.";
+      setStatus(message, "error");
+      if (message.toLowerCase().includes("quota exceeded")) {
+        setStatus("Você atingiu o limite gratuito. Redirecionando para cadastro...", "error");
+        window.setTimeout(() => {
+          window.location.href = "./signup.html?next=%2Fofx-convert.html&reason=quota";
+        }, 350);
+      }
     } finally {
       setLoading(false);
     }
@@ -1012,6 +1034,7 @@
 
   bindDropzone();
   setSelectedFileLabel();
+  syncHeroAuthLinks();
 
   const persistedState = loadViewState();
   if (persistedState) {

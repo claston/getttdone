@@ -1,0 +1,59 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GettDone | Área do Cliente</title>
+  <link rel="stylesheet" href="./client-area.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="./index.html" class="brand">OFX Fácil</a>
+    <nav>
+      <a href="./index.html">Início</a>
+      <a href="./ofx-convert.html">Converter PDF para OFX</a>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="profile">
+        <div class="avatar" id="profile-avatar">U</div>
+        <div>
+          <p class="name" id="profile-name">Usuário</p>
+          <p class="email" id="profile-email">-</p>
+        </div>
+      </div>
+      <a class="menu-link" href="./client-area.html">Últimas conversões</a>
+      <a class="menu-link" href="./ofx-convert.html">Nova conversão</a>
+      <button id="logout-btn" class="logout-btn" type="button">Sair</button>
+    </aside>
+
+    <section class="content">
+      <h1>Últimas conversões realizadas</h1>
+      <div class="summary">
+        <p id="quota-text">Cota: -</p>
+      </div>
+
+      <p id="status-msg" class="status"></p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Nome do arquivo</th>
+              <th>Modelo</th>
+              <th>Tipo</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="./client-area.js"></script>
+</body>
+</html>
