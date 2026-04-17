@@ -96,6 +96,7 @@ function bindDropzone(config) {
     const DEFAULT_API_BASE = resolveDefaultApiBase();
     const showReportBtn = document.getElementById("show-report-btn");
     const topCtaStart = document.getElementById("top-cta-start");
+    const topCtaSignup = document.getElementById("top-cta-signup");
     const loadDemoFilesBtn = document.getElementById("load-demo-files-btn");
     const uploadValidation = document.getElementById("upload-validation");
     const bankSemanticHint = document.getElementById("bank-semantic-hint");
@@ -163,6 +164,30 @@ function bindDropzone(config) {
 
     function getApiBase() {
         return normalizeApiBase(localStorage.getItem("gettdone_api_base") || DEFAULT_API_BASE);
+    }
+
+    function getUserToken() {
+        const raw = localStorage.getItem("gettdone_user_token");
+        const token = String(raw || "").trim();
+        return token || null;
+    }
+
+    function syncTopCtaBySession() {
+        if (!topCtaStart) {
+            return;
+        }
+        if (getUserToken()) {
+            topCtaStart.textContent = "Minha area";
+            if (topCtaSignup) {
+                topCtaSignup.classList.add("hidden");
+            }
+        } else {
+            topCtaStart.textContent = "Entrar";
+            if (topCtaSignup) {
+                topCtaSignup.classList.remove("hidden");
+                topCtaSignup.setAttribute("href", "./signup.html?next=%2Fofx-convert.html");
+            }
+        }
     }
 
     function formatCurrency(value) {
@@ -1097,7 +1122,11 @@ ${meta.percent}
 
     if (topCtaStart) {
         topCtaStart.addEventListener("click", function () {
-            focusUploadSection();
+            if (getUserToken()) {
+                window.location.href = "./client-area.html";
+                return;
+            }
+            window.location.href = "./login.html?next=%2Fofx-convert.html";
         });
     }
 
@@ -1112,3 +1141,5 @@ ${meta.percent}
             loadDemoFiles();
         });
     }
+
+    syncTopCtaBySession();
