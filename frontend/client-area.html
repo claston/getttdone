@@ -1,55 +1,68 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GettDone | Área do Cliente</title>
+  <title>OFX Simples | Area do Cliente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./client-area.css" />
 </head>
-<body>
-  <header class="topbar">
-    <a href="./index.html" class="brand">OFX Fácil</a>
-    <nav>
-      <a href="./index.html">Início</a>
-      <a href="./ofx-convert.html">Converter PDF para OFX</a>
-    </nav>
+<body class="client-area-page">
+  <header class="topbar-shell">
+    <div class="topbar">
+      <a href="./index.html" class="brand">OFX Simples</a>
+      <div class="topbar-actions">
+        <p class="user-email" id="profile-email">-</p>
+        <button id="logout-btn" class="logout-btn" type="button" aria-label="Sair da conta">
+          <span aria-hidden="true">Sair</span>
+        </button>
+      </div>
+    </div>
   </header>
 
-  <main class="layout">
-    <aside class="sidebar">
-      <div class="profile">
-        <div class="avatar" id="profile-avatar">U</div>
-        <div>
-          <p class="name" id="profile-name">Usuário</p>
-          <p class="email" id="profile-email">-</p>
+  <main class="dashboard">
+    <section class="hero-action">
+      <a class="cta-new" href="./ofx-convert.html">
+        <span class="cta-icon" aria-hidden="true">+</span>
+        <span>Nova conversao</span>
+      </a>
+    </section>
+
+    <section class="history-section" aria-labelledby="history-title">
+      <div class="history-header">
+        <h1 id="history-title">Suas conversoes</h1>
+        <div class="history-divider" aria-hidden="true"></div>
+      </div>
+      <p id="quota-text" class="quota-text">Cota restante: -</p>
+      <p id="status-msg" class="status-msg" role="status" aria-live="polite"></p>
+
+      <div class="table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome do arquivo</th>
+                <th>Data</th>
+                <th>Transacoes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="history-rows">
+              <tr>
+                <td colspan="4">Carregando conversoes...</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <a class="menu-link" href="./client-area.html">Últimas conversões</a>
-      <a class="menu-link" href="./ofx-convert.html">Nova conversão</a>
-      <button id="logout-btn" class="logout-btn" type="button">Sair</button>
-    </aside>
 
-    <section class="content">
-      <h1>Últimas conversões realizadas</h1>
-      <div class="summary">
-        <p id="quota-text">Cota: -</p>
-      </div>
-
-      <p id="status-msg" class="status"></p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Nome do arquivo</th>
-              <th>Modelo</th>
-              <th>Tipo</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="history-rows"></tbody>
-        </table>
+      <div class="history-footer">
+        <a id="view-all-link" class="view-all-link" href="./client-area.html">
+          <span>Ver todas as conversoes</span>
+          <span aria-hidden="true">-&gt;</span>
+        </a>
       </div>
     </section>
   </main>
