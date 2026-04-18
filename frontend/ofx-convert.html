@@ -10,15 +10,26 @@
   <link rel="stylesheet" href="./ofx-convert.css?v=4" />
 </head>
 <body>
+  <nav class="top-nav-shell glass-header" aria-label="Navegação principal">
+    <div class="top-nav-inner">
+      <a class="top-brand" href="./ofx-convert.html">OFX Simples</a>
+      <div class="top-nav-links">
+        <a href="#upload-title">Como funciona</a>
+        <a href="#review-title">Revisão</a>
+        <a href="#download-title">Download</a>
+      </div>
+      <div class="top-auth-actions">
+        <a id="auth-signup-link" class="top-auth-link" href="./signup.html?next=%2Fofx-convert.html">Criar conta</a>
+        <a id="auth-login-link" class="top-auth-btn primary-gradient-cta" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
+        <a id="auth-client-link" class="top-auth-btn top-auth-client hidden" href="./client-area.html">Minha Conta</a>
+      </div>
+    </div>
+  </nav>
+
   <main class="page">
     <section class="hero">
       <h1>Converta seu extrato</h1>
       <p class="lead">Envie o arquivo, revise os lançamentos e baixe o arquivo OFX.</p>
-      <div class="hero-actions">
-        <a id="auth-login-link" class="btn btn-ghost btn-link" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
-        <a id="auth-signup-link" class="btn btn-secondary btn-link" href="./signup.html?next=%2Fofx-convert.html">Criar conta</a>
-        <a id="auth-client-link" class="btn btn-secondary btn-link hidden" href="./client-area.html">Minha área</a>
-      </div>
     </section>
 
     <section class="panel" aria-labelledby="upload-title">
