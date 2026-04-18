@@ -1,11 +1,10 @@
-﻿(function () {
-  const profileName = document.getElementById("profile-name");
+(function () {
   const profileEmail = document.getElementById("profile-email");
-  const profileAvatar = document.getElementById("profile-avatar");
   const quotaText = document.getElementById("quota-text");
   const historyRows = document.getElementById("history-rows");
   const statusMsg = document.getElementById("status-msg");
   const logoutBtn = document.getElementById("logout-btn");
+  const viewAllLink = document.getElementById("view-all-link");
 
   function resolveApiBase() {
     const host = window.location.hostname;
@@ -33,9 +32,18 @@
     localStorage.removeItem("gettdone_user_token");
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
   function setStatus(message, kind) {
     statusMsg.textContent = message || "";
-    statusMsg.className = "status";
+    statusMsg.className = "status-msg";
     if (kind) {
       statusMsg.classList.add(kind);
     }
@@ -46,38 +54,110 @@
     if (!raw) {
       return "-";
     }
+
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) {
-      return raw;
+      return escapeHtml(raw);
     }
-    return new Intl.DateTimeFormat("pt-BR", {
+
+    const parts = new Intl.DateTimeFormat("en-GB", {
       day: "2-digit",
-      month: "2-digit",
+      month: "short",
       year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).format(parsed);
+    }).formatToParts(parsed);
+
+    const day = parts.find((part) => part.type === "day")?.value;
+    const month = parts.find((part) => part.type === "month")?.value;
+    const year = parts.find((part) => part.type === "year")?.value;
+
+    if (!day || !month || !year) {
+      return escapeHtml(raw);
+    }
+
+    return `${day} ${month}, ${year}`;
+  }
+
+  function normalizeStatus(status) {
+    const raw = String(status || "").trim().toLowerCase();
+
+    if (!raw) {
+      return {
+        label: "DESCONHECIDO",
+        className: "status-processing",
+      };
+    }
+
+    if (raw.includes("error") || raw.includes("erro") || raw.includes("fail")) {
+      return {
+        label: "ERRO",
+        className: "status-error",
+      };
+    }
+
+    if (raw.includes("process") || raw.includes("pending") || raw.includes("queue")) {
+      return {
+        label: "PROCESSANDO",
+        className: "status-processing",
+      };
+    }
+
+    return {
+      label: "PRONTO",
+      className: "status-ready",
+    };
+  }
+
+  function resolveTransactions(item) {
+    const possible = [
+      item.transactions_count,
+      item.transaction_count,
+      item.total_transactions,
+      item.transactions,
+    ];
+
+    for (const value of possible) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+        return Number(value);
+      }
+    }
+
+    return null;
   }
 
   function renderRows(items) {
     if (!items || items.length === 0) {
-      historyRows.innerHTML = '<tr><td colspan="5">Nenhuma conversão encontrada.</td></tr>';
+      historyRows.innerHTML = '<tr><td colspan="4">Nenhuma conversao encontrada.</td></tr>';
       return;
     }
 
     historyRows.innerHTML = items
-      .map(
-        (item) => `
-        <tr>
-          <td>${formatDate(item.created_at)}</td>
-          <td>${item.filename || "-"}</td>
-          <td>${item.model || "-"}</td>
-          <td>${item.conversion_type || "-"}</td>
-          <td><span class="badge-success">${item.status || "-"}</span></td>
-        </tr>
-      `,
-      )
+      .map((item) => {
+        const normalizedStatus = normalizeStatus(item.status);
+        const filename = escapeHtml(item.filename || "arquivo_sem_nome.ofx");
+        const created = formatDate(item.created_at);
+        const transactions = resolveTransactions(item);
+        const txClass = typeof transactions === "number" && transactions > 0 ? "transactions-strong" : "transactions-dim";
+        const txText = typeof transactions === "number" ? String(transactions) : "--";
+
+        return `
+          <tr>
+            <td>
+              <div class="file-cell">
+                <span class="file-icon" aria-hidden="true">DOC</span>
+                <span>${filename}</span>
+              </div>
+            </td>
+            <td>${created}</td>
+            <td class="${txClass}">${txText}</td>
+            <td>
+              <span class="status-chip ${normalizedStatus.className}">${normalizedStatus.label}</span>
+            </td>
+          </tr>
+        `;
+      })
       .join("");
   }
 
@@ -101,20 +181,23 @@
       const me = await fetchJson(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
       const history = await fetchJson(`${apiBase}/client/conversions?user_token=${encodeURIComponent(token)}&limit=20`);
 
-      profileName.textContent = me.name || "Usuário";
       profileEmail.textContent = me.email || "-";
-      profileAvatar.textContent = (me.name || "U").trim().slice(0, 1).toUpperCase();
       quotaText.textContent = `Cota restante: ${me.quota_remaining} / ${me.quota_limit}`;
       renderRows(history.items || []);
-      setStatus("Histórico carregado com sucesso.", null);
+      setStatus("Historico carregado com sucesso.", null);
+
+      if (viewAllLink && (!history.items || history.items.length < 20)) {
+        viewAllLink.style.visibility = "hidden";
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao carregar área do cliente.";
+      const message = error instanceof Error ? error.message : "Falha ao carregar area do cliente.";
       if (message.toLowerCase().includes("invalid user token")) {
         clearUserToken();
         window.location.href = "./login.html?next=%2Fclient-area.html";
         return;
       }
       setStatus(message, "error");
+      historyRows.innerHTML = '<tr><td colspan="4">Nao foi possivel carregar as conversoes.</td></tr>';
     }
   }
 
