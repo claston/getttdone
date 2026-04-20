@@ -9,9 +9,15 @@
   --secondary: #006c49;
   --border: rgba(67, 70, 86, 0.16);
   --danger: #ba1a1a;
+  --anchor-offset: 84px;
 }
 
 * { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--anchor-offset);
+}
 
 body {
   margin: 0;
@@ -20,6 +26,12 @@ body {
   background:
     radial-gradient(circle at 0% 0%, rgba(0, 62, 199, 0.06) 0, transparent 30%),
     var(--bg);
+}
+
+#upload-section,
+#review-section,
+#download-section {
+  scroll-margin-top: var(--anchor-offset);
 }
 
 .page {
@@ -307,6 +319,22 @@ body {
   min-height: 1.2rem;
   color: var(--muted);
 }
+
+.support-hint {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.support-hint a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.support-hint a:hover {
+  text-decoration: underline;
+}
 .status.error {
   display: inline-flex;
   align-items: center;
@@ -546,16 +574,13 @@ tr.row-deleted td:not(.actions-cell) {
   background: linear-gradient(135deg, #0035ad 0%, #0047e2 100%);
 }
 
-#download-excel-btn,
-#download-csv-btn {
-  background: #f6f7f8;
-  color: #2a3140;
-  border: 1px solid rgba(67, 70, 86, 0.18);
-}
-
 .hidden { display: none; }
 
 @media (max-width: 640px) {
+  :root {
+    --anchor-offset: 76px;
+  }
+
   .top-nav-inner {
     width: calc(100% - 1rem);
     min-height: 70px;

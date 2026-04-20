@@ -22,8 +22,6 @@
   const processingIdNode = document.getElementById("processing-id");
   const quotaRemainingNode = document.getElementById("quota-remaining");
   const downloadOfxBtn = document.getElementById("download-ofx-btn");
-  const downloadExcelBtn = document.getElementById("download-excel-btn");
-  const downloadCsvBtn = document.getElementById("download-csv-btn");
   const VIEW_STATE_KEY = "gettdone_ofx_convert_view_state_v1";
 
   const state = {
@@ -330,8 +328,6 @@
     markChangedRow(null);
     if (addRowBtn) addRowBtn.disabled = true;
     if (downloadOfxBtn) downloadOfxBtn.disabled = true;
-    if (downloadExcelBtn) downloadExcelBtn.disabled = true;
-    if (downloadCsvBtn) downloadCsvBtn.disabled = true;
     reviewRows.innerHTML = "";
     kpis.innerHTML = "";
     reviewSection.classList.add("hidden");
@@ -779,8 +775,6 @@
 
     const canDownload = Boolean(state.analysisId || state.processingId);
     if (downloadOfxBtn) downloadOfxBtn.disabled = !canDownload;
-    if (downloadExcelBtn) downloadExcelBtn.disabled = !canDownload;
-    if (downloadCsvBtn) downloadCsvBtn.disabled = !canDownload;
 
     setStatus("Sessão restaurada. Você pode continuar o download.", "success");
   }
@@ -903,8 +897,6 @@
       downloadSection.classList.remove("hidden");
       const canDownload = Boolean(state.analysisId);
       if (downloadOfxBtn) downloadOfxBtn.disabled = !canDownload;
-      if (downloadExcelBtn) downloadExcelBtn.disabled = !canDownload;
-      if (downloadCsvBtn) downloadCsvBtn.disabled = !canDownload;
 
       persistCurrentViewState();
 
@@ -928,14 +920,6 @@
     }
   }
 
-  function runDownloadExcel() {
-    if (!state.analysisId) {
-      setStatus("Converta um arquivo antes de baixar.", "error");
-      return;
-    }
-    window.open(`${apiBase}/report/${state.analysisId}`, "_blank", "noopener");
-  }
-
   function runDownloadOfx() {
     if (!state.processingId) {
       setStatus("Converta um arquivo antes de baixar.", "error");
@@ -943,16 +927,6 @@
     }
     const query = buildIdentityQueryParams();
     query.set("format", "ofx");
-    window.open(`${apiBase}/convert-report/${state.processingId}?${query.toString()}`, "_blank", "noopener");
-  }
-
-  function runDownloadCsv() {
-    if (!state.processingId) {
-      setStatus("Converta um arquivo antes de baixar.", "error");
-      return;
-    }
-    const query = buildIdentityQueryParams();
-    query.set("format", "csv");
     window.open(`${apiBase}/convert-report/${state.processingId}?${query.toString()}`, "_blank", "noopener");
   }
 
@@ -1055,8 +1029,6 @@
   convertBtn.addEventListener("click", runConvert);
   if (addRowBtn) addRowBtn.addEventListener("click", startInsertRow);
   if (downloadOfxBtn) downloadOfxBtn.addEventListener("click", runDownloadOfx);
-  if (downloadExcelBtn) downloadExcelBtn.addEventListener("click", runDownloadExcel);
-  if (downloadCsvBtn) downloadCsvBtn.addEventListener("click", runDownloadCsv);
   if (clearFileBtn) {
     clearFileBtn.addEventListener("click", (event) => {
       event.preventDefault();

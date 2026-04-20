@@ -12,11 +12,12 @@
 <body>
   <nav class="top-nav-shell glass-header" aria-label="Navegação principal">
     <div class="top-nav-inner">
-      <a class="top-brand" href="./ofx-convert.html">OFX Simples</a>
+      <a class="top-brand" href="./index.html">OFX Simples</a>
       <div class="top-nav-links">
-        <a href="#upload-title">Como funciona</a>
-        <a href="#review-title">Revisão</a>
-        <a href="#download-title">Download</a>
+        <a href="#upload-section">Como funciona</a>
+        <a href="#review-section">Revisão</a>
+        <a href="#download-section">Download</a>
+        <a href="./contato.html">Contato</a>
       </div>
       <div class="top-auth-actions">
         <a id="auth-signup-link" class="top-auth-link" href="./signup.html?next=%2Fofx-convert.html">Criar conta</a>
@@ -32,7 +33,7 @@
       <p class="lead">Envie o arquivo, revise os lançamentos e baixe o arquivo OFX.</p>
     </section>
 
-    <section class="panel" aria-labelledby="upload-title">
+    <section id="upload-section" class="panel" aria-labelledby="upload-title">
       <div class="panel-head">
         <h2 id="upload-title">1. Upload</h2>
         <p>Somente PDF (até 2 MB)</p>
@@ -60,6 +61,7 @@
       </div>
 
       <p id="status-msg" class="status" aria-live="polite"></p>
+      <p class="support-hint">Nao conseguiu converter? <a href="./contato.html">Falar com suporte</a></p>
     </section>
 
     <section id="review-section" class="panel hidden" aria-labelledby="review-title">
@@ -107,8 +109,6 @@
         </div>
         <div class="download-actions">
           <button id="download-ofx-btn" class="btn btn-secondary" type="button" disabled>Baixar OFX</button>
-          <button id="download-excel-btn" class="btn btn-secondary" type="button" disabled>Baixar Excel</button>
-          <button id="download-csv-btn" class="btn btn-secondary" type="button" disabled>Baixar CSV</button>
         </div>
       </div>
     </section>
