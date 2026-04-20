@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OFX Simples | Contato</title>
+  <meta
+    name="description"
+    content="Fale com o suporte do OFX Simples quando tiver dúvidas ou dificuldade para converter seu arquivo."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./contato.css?v=1" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="./index.html">OFX Simples</a>
+      <nav class="top-links" aria-label="Navegação principal">
+        <a href="./index.html#como-funciona">Como funciona</a>
+        <a href="./index.html#faq">FAQ</a>
+        <a href="./contato.html" aria-current="page">Contato</a>
+      </nav>
+      <div class="top-actions">
+        <a class="link-plain" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
+        <a class="btn btn-primary" href="./ofx-convert.html">Converter agora</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">Ajuda rápida</p>
+      <h1>Teve dúvida ou erro na conversão? Fale com a gente</h1>
+      <p>
+        Se o seu extrato não converteu como esperado, envie os detalhes para análise.
+        Nossa equipe retorna com orientação e próximo passo.
+      </p>
+    </section>
+
+    <section class="contact-grid">
+      <article class="contact-card">
+        <h2>Enviar mensagem</h2>
+        <p class="muted">Preencha o formulário e entraremos em contato.</p>
+
+        <form id="contact-form" class="contact-form">
+          <label for="name">Nome</label>
+          <input id="name" name="name" type="text" autocomplete="name" required />
+
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" autocomplete="email" required />
+
+          <label for="subject">Assunto</label>
+          <select id="subject" name="subject" required>
+            <option value="">Selecione</option>
+            <option value="nao-consegui-converter">Não consegui converter</option>
+            <option value="arquivo-rejeitado">Arquivo rejeitado</option>
+            <option value="duvida-sobre-formato">Dúvida sobre formato</option>
+            <option value="outros">Outros</option>
+          </select>
+
+          <label for="message">Mensagem</label>
+          <textarea id="message" name="message" rows="6" required placeholder="Descreva o que aconteceu e, se possível, qual banco e formato do arquivo."></textarea>
+
+          <button class="btn btn-primary" type="submit">Enviar para suporte</button>
+          <p id="contact-feedback" class="feedback" aria-live="polite"></p>
+        </form>
+      </article>
+
+      <aside class="info-card">
+        <h2>Canais de suporte</h2>
+        <p class="muted">Escolha o canal mais rápido para você.</p>
+
+        <div class="channel-list">
+          <a class="channel" href="mailto:suporte@ofxsimples.com?subject=Suporte%20OFX%20Simples">
+            <strong>E-mail</strong>
+            <span>suporte@ofxsimples.com</span>
+          </a>
+          <a class="channel" href="https://wa.me/5500000000000" target="_blank" rel="noopener noreferrer">
+            <strong>WhatsApp</strong>
+            <span>Atendimento comercial e suporte</span>
+          </a>
+        </div>
+
+        <h3>Antes de enviar</h3>
+        <ul>
+          <li>Informe banco, formato e tamanho do arquivo.</li>
+          <li>Diga a mensagem de erro exibida, se houver.</li>
+          <li>Explique se o problema ocorre sempre ou em um caso específico.</li>
+        </ul>
+      </aside>
+    </section>
+  </main>
+
+  <script src="./contato.js?v=1"></script>
+</body>
+</html>
+
