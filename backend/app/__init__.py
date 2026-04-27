@@ -1,2 +1,1 @@
-"""gettdone backend package."""
-
+"""Backend package."""

@@ -94,6 +94,8 @@ function bindDropzone(config) {
     }
 
     const DEFAULT_API_BASE = resolveDefaultApiBase();
+    const API_BASE_KEY = "ofxsimples_api_base";
+    const USER_TOKEN_KEY = "ofxsimples_user_token";
     const showReportBtn = document.getElementById("show-report-btn");
     const topCtaStart = document.getElementById("top-cta-start");
     const topCtaSignup = document.getElementById("top-cta-signup");
@@ -163,11 +165,11 @@ function bindDropzone(config) {
     }
 
     function getApiBase() {
-        return normalizeApiBase(localStorage.getItem("gettdone_api_base") || DEFAULT_API_BASE);
+        return normalizeApiBase(localStorage.getItem(API_BASE_KEY) || DEFAULT_API_BASE);
     }
 
     function getUserToken() {
-        const raw = localStorage.getItem("gettdone_user_token");
+        const raw = localStorage.getItem(USER_TOKEN_KEY);
         const token = String(raw || "").trim();
         return token || null;
     }

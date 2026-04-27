@@ -31,7 +31,7 @@ def get_report(
     return FileResponse(
         path=report_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"gettdone_report_{analysis_id}.xlsx",
+        filename=f"ofxsimples_report_{analysis_id}.xlsx",
     )
 
 
@@ -51,7 +51,7 @@ def get_reconcile_report(
         if file_format == "xlsx"
         else "text/csv; charset=utf-8"
     )
-    filename = f"gettdone_reconcile_{analysis_id}.{file_format}"
+    filename = f"ofxsimples_reconcile_{analysis_id}.{file_format}"
     return FileResponse(path=report_path, media_type=media_type, filename=filename)
 
 
@@ -145,4 +145,4 @@ def _build_convert_download_filename(analysis_id: str, upload_filename: str | No
         stem = Path(safe_name).stem.strip()
         if stem:
             return f"{stem}_convertido.{file_format}"
-    return f"gettdone_convert_{analysis_id}.{file_format}"
+    return f"ofxsimples_convert_{analysis_id}.{file_format}"

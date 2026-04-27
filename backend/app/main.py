@@ -20,7 +20,19 @@ from app.routers import (
     report_router,
 )
 
-app = FastAPI(title="gettdone API", version="0.1.0")
+
+def is_api_docs_enabled() -> bool:
+    raw = os.getenv("ENABLE_API_DOCS", "true").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+app = FastAPI(
+    title="OFX Simples API",
+    version="0.1.0",
+    docs_url="/docs" if is_api_docs_enabled() else None,
+    redoc_url="/redoc" if is_api_docs_enabled() else None,
+    openapi_url="/openapi.json" if is_api_docs_enabled() else None,
+)
 
 
 def get_cors_allow_origins() -> list[str]:

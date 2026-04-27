@@ -2,6 +2,7 @@
   const yearNode = document.getElementById("footer-year");
   const topAuthLoginLink = document.getElementById("top-auth-login-link");
   const topAuthPrimaryLink = document.getElementById("top-auth-primary-link");
+  const USER_TOKEN_KEY = "ofxsimples_user_token";
   if (yearNode) {
     yearNode.textContent = "(c) " + new Date().getFullYear() + " OFX Simples. Todos os direitos reservados.";
   }
@@ -17,13 +18,12 @@
   }
 
   function getUserToken() {
-    const raw = localStorage.getItem("gettdone_user_token");
-    const token = String(raw || "").trim();
+    const token = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
     return token || null;
   }
 
   function clearUserToken() {
-    localStorage.removeItem("gettdone_user_token");
+    localStorage.removeItem(USER_TOKEN_KEY);
   }
 
   function applyLoggedInTopState() {
@@ -45,14 +45,20 @@
     }
   }
 
-  async function validateSessionToken(token) {
-    if (!token) return false;
+  async function getSessionValidationState(token) {
+    if (!token) return "missing";
     try {
       const apiBase = resolveApiBase();
       const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
-      return response.ok;
+      if (response.ok) {
+        return "valid";
+      }
+      if (response.status === 401) {
+        return "invalid";
+      }
+      return "unknown";
     } catch (_error) {
-      return false;
+      return "unknown";
     }
   }
 
@@ -62,8 +68,8 @@
       applyLoggedOutTopState();
       return;
     }
-    const valid = await validateSessionToken(token);
-    if (valid) {
+    const sessionState = await getSessionValidationState(token);
+    if (sessionState === "valid" || sessionState === "unknown") {
       applyLoggedInTopState();
       return;
     }

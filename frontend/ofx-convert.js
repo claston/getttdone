@@ -28,7 +28,7 @@
   const processingIdNode = document.getElementById("processing-id");
   const quotaRemainingNode = document.getElementById("quota-remaining");
   const downloadOfxBtn = document.getElementById("download-ofx-btn");
-  const VIEW_STATE_KEY = "gettdone_ofx_convert_view_state_v1";
+  const VIEW_STATE_KEY = "ofxsimples_ofx_convert_view_state_v1";
 
   const state = {
     analysisId: null,
@@ -65,17 +65,17 @@
 
   const apiBase = resolveApiBase();
   const QUOTA_SIGNUP_URL = "./signup.html?next=%2Fclient-area.html&reason=quota";
-  const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html";
-  const USER_TOKEN_KEY = "gettdone_user_token";
+  const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html&force_auth=1";
+  const USER_TOKEN_KEY = "ofxsimples_user_token";
+  const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
 
   function getAnonymousFingerprint() {
-    const key = "gettdone_anon_fingerprint";
-    const existing = localStorage.getItem(key);
+    const existing = String(localStorage.getItem(ANON_FINGERPRINT_KEY) || "").trim();
     if (existing) {
       return existing;
     }
     const generated = `anon-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-    localStorage.setItem(key, generated);
+    localStorage.setItem(ANON_FINGERPRINT_KEY, generated);
     return generated;
   }
 
@@ -112,21 +112,23 @@
     }
   }
 
-  async function validateCurrentSession() {
+  async function getSessionValidationState() {
     const token = getUserToken();
     if (!token) {
-      return false;
+      return "missing";
     }
     try {
       const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
       if (response.ok) {
-        return true;
+        return "valid";
       }
+      if (response.status === 401) {
+        return "invalid";
+      }
+      return "unknown";
     } catch (_error) {
-      // Ignore network errors and keep flow local.
+      return "unknown";
     }
-    localStorage.removeItem(USER_TOKEN_KEY);
-    return false;
   }
 
   function buildIdentityQueryParams() {
@@ -262,9 +264,15 @@
     if (!isQuotaLocked()) {
       return;
     }
-    const hasSession = await validateCurrentSession();
-    if (hasSession) {
+    const sessionState = await getSessionValidationState();
+    if (sessionState === "invalid") {
+      clearUserToken();
+      syncHeroAuthLinks();
+      return;
+    }
+    if (sessionState === "valid" || sessionState === "unknown") {
       hideQuotaLockOverlay();
+      syncHeroAuthLinks();
       setStatus("Conta detectada. Você já pode converter.", "success");
     }
   }

@@ -4,6 +4,19 @@
   const signupLink = document.getElementById("signup-link");
   const topSignupLink = document.getElementById("top-signup-link");
   const googleLoginBtn = document.getElementById("google-login-btn");
+  const USER_TOKEN_KEY = "ofxsimples_user_token";
+
+  function getStoredUserToken() {
+    return String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
+  }
+
+  function storeUserToken(token) {
+    localStorage.setItem(USER_TOKEN_KEY, token);
+  }
+
+  function clearUserToken() {
+    localStorage.removeItem(USER_TOKEN_KEY);
+  }
 
   function resolveApiBase() {
     const host = window.location.hostname;
@@ -30,25 +43,43 @@
     return next;
   }
 
-  async function hasValidSession(token) {
-    if (!token) return false;
+  function shouldForceAuth() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = String(params.get("force_auth") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  }
+
+  async function getSessionValidationState(token) {
+    if (!token) return "missing";
     try {
       const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
-      return response.ok;
+      if (response.ok) {
+        return "valid";
+      }
+      if (response.status === 401) {
+        return "invalid";
+      }
+      return "unknown";
     } catch (_error) {
-      return false;
+      return "unknown";
     }
   }
 
   async function bootstrapExistingSession() {
-    const existingToken = String(localStorage.getItem("gettdone_user_token") || "").trim();
+    if (shouldForceAuth()) {
+      clearUserToken();
+      return;
+    }
+    const existingToken = getStoredUserToken();
     if (!existingToken) return;
-    const isValid = await hasValidSession(existingToken);
-    if (isValid) {
+    const sessionState = await getSessionValidationState(existingToken);
+    if (sessionState === "valid") {
       window.location.href = getNextPath();
       return;
     }
-    localStorage.removeItem("gettdone_user_token");
+    if (sessionState === "invalid") {
+      clearUserToken();
+    }
   }
 
   async function postLogin(payload) {
@@ -79,7 +110,7 @@
       try {
         setStatus("Validando acesso...", null);
         const payload = await postLogin({ email: email.value, password: password.value });
-        localStorage.setItem("gettdone_user_token", String(payload.user_token || ""));
+        storeUserToken(String(payload.user_token || ""));
         setStatus("Login realizado com sucesso.", "success");
         window.location.href = getNextPath();
       } catch (error) {
