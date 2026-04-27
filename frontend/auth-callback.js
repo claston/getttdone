@@ -1,5 +1,6 @@
 (function () {
   const statusMsg = document.getElementById("status-msg");
+  const USER_TOKEN_KEY = "ofxsimples_user_token";
 
   function setStatus(message, kind) {
     if (!statusMsg) {
@@ -26,7 +27,7 @@
   const nextPath = getSafeNextPath(params);
 
   if (userToken) {
-    localStorage.setItem("gettdone_user_token", userToken);
+    storeUserToken(userToken);
     setStatus("Login com Google concluido. Redirecionando...", "success");
     window.setTimeout(() => {
       window.location.href = nextPath;
@@ -44,3 +45,6 @@
     window.location.href = `./login.html?next=${encodeURIComponent(nextPath)}`;
   }, 1200);
 })();
+  function storeUserToken(token) {
+    localStorage.setItem(USER_TOKEN_KEY, token);
+  }

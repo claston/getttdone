@@ -5,6 +5,7 @@
   const statusMsg = document.getElementById("status-msg");
   const logoutBtn = document.getElementById("logout-btn");
   const viewAllLink = document.getElementById("view-all-link");
+  const USER_TOKEN_KEY = "ofxsimples_user_token";
 
   function resolveApiBase() {
     const host = window.location.hostname;
@@ -23,13 +24,12 @@
   const apiBase = resolveApiBase();
 
   function getUserToken() {
-    const raw = localStorage.getItem("gettdone_user_token");
-    const token = String(raw || "").trim();
+    const token = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
     return token || null;
   }
 
   function clearUserToken() {
-    localStorage.removeItem("gettdone_user_token");
+    localStorage.removeItem(USER_TOKEN_KEY);
   }
 
   function escapeHtml(value) {

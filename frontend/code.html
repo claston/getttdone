@@ -3,7 +3,7 @@
 <html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>GettDone | Conciliação Bancária de Alta Precisão</title>
+<title>OFX Simples | Conciliação Bancária de Alta Precisão</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -138,7 +138,7 @@
 <!-- Top Navigation -->
 <nav id="top-nav" class="top-nav-shell fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-100">
 <div class="flex justify-between items-center max-w-7xl mx-auto px-8 h-20">
-<div class="text-2xl font-bold tracking-tighter text-slate-900">GettDone</div>
+<div class="text-2xl font-bold tracking-tighter text-slate-900">OFX Simples</div>
 <div class="hidden md:flex items-center gap-8">
 <a class="text-blue-700 font-semibold border-b-2 border-blue-700 pb-1 font-headline text-sm tracking-tight transition-colors duration-200" href="#">Product</a>
 <a class="text-slate-600 hover:text-slate-900 font-headline text-sm font-medium tracking-tight transition-colors duration-200" href="#">Features</a>
@@ -503,8 +503,8 @@
 <div class="w-full py-16 px-8">
 <div class="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto gap-8">
 <div class="flex flex-col gap-2">
-<div class="text-lg font-black text-slate-800">GettDone</div>
-<p class="font-inter text-xs tracking-wide text-slate-500">© 2024 GettDone. Precision Vault Architecture.</p>
+<div class="text-lg font-black text-slate-800">OFX Simples</div>
+<p class="font-inter text-xs tracking-wide text-slate-500">© 2024 OFX Simples. Precision Vault Architecture.</p>
 </div>
 <div class="flex gap-8">
 <a class="font-inter text-xs tracking-wide text-slate-500 hover:text-slate-800 transition-opacity" href="#">Privacy Policy</a>
@@ -654,7 +654,7 @@
     }
 
     function getApiBase() {
-        return normalizeApiBase(localStorage.getItem("gettdone_api_base") || DEFAULT_API_BASE);
+        return normalizeApiBase(localStorage.getItem("ofxsimples_api_base") || DEFAULT_API_BASE);
     }
 
     function formatCurrency(value) {
