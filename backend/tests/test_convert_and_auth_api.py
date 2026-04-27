@@ -102,7 +102,12 @@ def test_convert_anonymous_quota_and_block_4th_attempt(tmp_path) -> None:
         files={"file": ("sample.pdf", b"%PDF data", "application/pdf")},
     )
     assert blocked.status_code == 429
-    assert "Quota exceeded" in blocked.json()["detail"]
+    detail = blocked.json()["detail"]
+    assert detail["code"] == "weekly_quota_exceeded"
+    assert detail["identity_type"] == "anonymous"
+    assert detail["quota_limit"] == 3
+    assert detail["quota_remaining"] == 0
+    assert isinstance(detail["reset_at"], str)
     app.dependency_overrides.clear()
 
 
