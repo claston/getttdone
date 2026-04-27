@@ -13,6 +13,10 @@
   const authClientLink = document.getElementById("auth-client-link");
   const menuToggle = document.getElementById("menu-toggle");
   const topLinks = document.getElementById("top-links");
+  const quotaLockOverlay = document.getElementById("quota-lock-overlay");
+  const quotaLockMessage = document.getElementById("quota-lock-message");
+  const quotaLockSignupLink = document.getElementById("quota-lock-signup-link");
+  const quotaLockLoginLink = document.getElementById("quota-lock-login-link");
 
   const reviewSection = document.getElementById("review-section");
   const downloadSection = document.getElementById("download-section");
@@ -60,6 +64,9 @@
   }
 
   const apiBase = resolveApiBase();
+  const QUOTA_SIGNUP_URL = "./signup.html?next=%2Fclient-area.html&reason=quota";
+  const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html";
+  const USER_TOKEN_KEY = "gettdone_user_token";
 
   function getAnonymousFingerprint() {
     const key = "gettdone_anon_fingerprint";
@@ -73,10 +80,53 @@
   }
 
   function getUserToken() {
-    const key = "gettdone_user_token";
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(USER_TOKEN_KEY);
     const token = String(raw || "").trim();
     return token || null;
+  }
+
+  function clearUserToken() {
+    localStorage.removeItem(USER_TOKEN_KEY);
+  }
+
+  function consumeLogoutQueryFlag() {
+    const url = new URL(window.location.href);
+    const rawLogout = String(url.searchParams.get("logout") || "").trim().toLowerCase();
+    const shouldLogout = rawLogout === "1" || rawLogout === "true" || rawLogout === "yes" || rawLogout === "on";
+    if (!shouldLogout) {
+      return false;
+    }
+    clearUserToken();
+    url.searchParams.delete("logout");
+    const cleaned = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, "", cleaned);
+    return true;
+  }
+
+  function syncQuotaAuthLinks() {
+    if (quotaLockSignupLink) {
+      quotaLockSignupLink.setAttribute("href", QUOTA_SIGNUP_URL);
+    }
+    if (quotaLockLoginLink) {
+      quotaLockLoginLink.setAttribute("href", QUOTA_LOGIN_URL);
+    }
+  }
+
+  async function validateCurrentSession() {
+    const token = getUserToken();
+    if (!token) {
+      return false;
+    }
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      if (response.ok) {
+        return true;
+      }
+    } catch (_error) {
+      // Ignore network errors and keep flow local.
+    }
+    localStorage.removeItem(USER_TOKEN_KEY);
+    return false;
   }
 
   function buildIdentityQueryParams() {
@@ -144,6 +194,69 @@
     const name = String(file.name || "").toLowerCase();
     const type = String(file.type || "").toLowerCase();
     return name.endsWith(".pdf") || type === "application/pdf";
+  }
+
+  function isQuotaLocked() {
+    return document.body.classList.contains("quota-locked");
+  }
+
+  function buildApiError(status, detail) {
+    const isDetailObject = detail && typeof detail === "object" && !Array.isArray(detail);
+    const message = isDetailObject
+      ? String(detail.message || detail.detail || "Falha ao converter arquivo.")
+      : String(detail || "Falha ao converter arquivo.");
+    const error = new Error(message);
+    error.status = Number(status || 0);
+    error.detail = detail;
+    error.code = isDetailObject && typeof detail.code === "string" ? detail.code : null;
+    return error;
+  }
+
+  function formatResetAt(resetAtRaw) {
+    const parsed = new Date(String(resetAtRaw || ""));
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  }
+
+  function showQuotaLockOverlay(detail) {
+    if (!quotaLockOverlay) {
+      return;
+    }
+    const resetAt = detail && typeof detail === "object" ? formatResetAt(detail.reset_at) : null;
+    if (quotaLockMessage) {
+      quotaLockMessage.textContent = resetAt
+        ? `Você usou as 3 conversões gratuitas desta semana. O próximo ciclo libera novas conversões em ${resetAt}. Cadastre-se para liberar +10 conversões semanais agora.`
+        : "Você usou as 3 conversões gratuitas desta semana. Cadastre-se para liberar +10 conversões semanais agora.";
+    }
+    if (quotaLockSignupLink) {
+      quotaLockSignupLink.setAttribute("href", QUOTA_SIGNUP_URL);
+    }
+    syncQuotaAuthLinks();
+    document.body.classList.add("quota-locked");
+    quotaLockOverlay.classList.remove("hidden");
+    convertBtn.disabled = true;
+  }
+
+  function hideQuotaLockOverlay() {
+    if (!quotaLockOverlay) {
+      return;
+    }
+    quotaLockOverlay.classList.add("hidden");
+    document.body.classList.remove("quota-locked");
+    setSelectedFileLabel();
+  }
+
+  async function syncQuotaLockState() {
+    if (!isQuotaLocked()) {
+      return;
+    }
+    const hasSession = await validateCurrentSession();
+    if (hasSession) {
+      hideQuotaLockOverlay();
+      setStatus("Conta detectada. Você já pode converter.", "success");
+    }
   }
 
   function setStatus(message, kind) {
@@ -291,7 +404,7 @@
 
   function setLoading(isLoading) {
     state.isLoading = isLoading;
-    convertBtn.disabled = isLoading || !input.files || input.files.length === 0;
+    convertBtn.disabled = isQuotaLocked() || isLoading || !input.files || input.files.length === 0;
     convertBtn.textContent = isLoading ? "Convertendo..." : "Converter";
   }
 
@@ -304,7 +417,7 @@
       : hasRestoredMeta
         ? `${restoredMeta.name} (${formatFileSize(restoredMeta.size)})`
         : "Nenhum arquivo selecionado";
-    convertBtn.disabled = !file || state.isLoading;
+    convertBtn.disabled = isQuotaLocked() || !file || state.isLoading;
     if (dropzoneEmpty && dropzoneLoaded && dropzoneFileMeta) {
       if (file) {
         state.restoredFileMeta = null;
@@ -350,8 +463,8 @@
     kpis.innerHTML = "";
     reviewSection.classList.add("hidden");
     downloadSection.classList.add("hidden");
-    analysisIdNode.textContent = "-";
-    processingIdNode.textContent = "-";
+    if (analysisIdNode) analysisIdNode.textContent = "-";
+    if (processingIdNode) processingIdNode.textContent = "-";
     quotaRemainingNode.textContent = "-";
     setLoading(false);
     setSelectedFileLabel();
@@ -783,8 +896,8 @@
     renderRows();
     setSelectedFileLabel();
 
-    analysisIdNode.textContent = state.analysisId || "-";
-    processingIdNode.textContent = state.processingId || "-";
+    if (analysisIdNode) analysisIdNode.textContent = state.analysisId || "-";
+    if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
     quotaRemainingNode.textContent = viewState.quota_text || "-";
 
     reviewSection.classList.remove("hidden");
@@ -810,8 +923,7 @@
     }
 
     if (!response.ok) {
-      const detail = payload.detail || "Falha ao converter arquivo.";
-      throw new Error(detail);
+      throw buildApiError(response.status, payload.detail || "Falha ao converter arquivo.");
     }
 
     return payload;
@@ -828,9 +940,8 @@
 
       const payload = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-      const detail = payload.detail || "Falha ao processar arquivo via /analyze.";
-      throw new Error(detail);
+    if (!response.ok) {
+      throw buildApiError(response.status, payload.detail || "Falha ao processar arquivo via /analyze.");
     }
 
     return {
@@ -856,13 +967,16 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const detail = payload.detail || "Falha ao salvar edição.";
-      throw new Error(detail);
+      throw buildApiError(response.status, payload.detail || "Falha ao salvar edição.");
     }
     return payload;
   }
 
   async function runConvert() {
+    if (isQuotaLocked()) {
+      setStatus("Limite semanal atingido. Crie sua conta para continuar.", "error");
+      return;
+    }
     const file = input.files && input.files[0];
     if (!file) {
       setStatus("Selecione um arquivo antes de converter.", "error");
@@ -903,8 +1017,8 @@
       setOriginalRows(analysis.preview_transactions || []);
       renderRows();
 
-      analysisIdNode.textContent = analysis.analysis_id || "-";
-      processingIdNode.textContent = state.processingId || "-";
+      if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
+      if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
       if (payload.quota_remaining === null || payload.quota_limit === null) {
         quotaRemainingNode.textContent = "n/d (modo analyze)";
       } else {
@@ -926,6 +1040,9 @@
       reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado.";
+      const detail = error && typeof error === "object" ? error.detail : null;
+      const status = error && typeof error === "object" ? Number(error.status || 0) : 0;
+      const code = error && typeof error === "object" ? String(error.code || "") : "";
       if (isUnrecognizedPdfLayoutError(message)) {
         setStatusHtml(
           'Não conseguimos identificar as transações neste PDF. <a href="./contato.html">Falar com suporte</a> ou tente outro arquivo.',
@@ -933,13 +1050,14 @@
         );
         return;
       }
-      setStatus(message, "error");
-      if (message.toLowerCase().includes("quota exceeded")) {
-        setStatus("Você atingiu o limite gratuito. Redirecionando para cadastro...", "error");
-        window.setTimeout(() => {
-          window.location.href = "./signup.html?next=%2Fofx-convert.html&reason=quota";
-        }, 350);
+      if (status === 429 && code === "weekly_quota_exceeded") {
+        if (!getUserToken()) {
+          showQuotaLockOverlay(detail);
+          setStatus("Você atingiu o limite gratuito desta semana.", "error");
+          return;
+        }
       }
+      setStatus(message, "error");
     } finally {
       setLoading(false);
     }
@@ -1063,6 +1181,17 @@
   }
 
   bindDropzone();
+  window.addEventListener("focus", () => {
+    void syncQuotaLockState();
+  });
+  window.addEventListener("storage", () => {
+    void syncQuotaLockState();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void syncQuotaLockState();
+    }
+  });
   if (menuToggle && topLinks) {
     menuToggle.addEventListener("click", function () {
       const open = topLinks.classList.toggle("is-open");
@@ -1070,7 +1199,9 @@
     });
   }
   setSelectedFileLabel();
+  const didForceLogout = consumeLogoutQueryFlag();
   syncHeroAuthLinks();
+  syncQuotaAuthLinks();
   const navigationType = getNavigationType();
   const shouldRestoreState = navigationType === "reload";
   if (!shouldRestoreState) {
@@ -1079,5 +1210,9 @@
   const persistedState = loadViewState();
   if (persistedState) {
     restoreViewFromState(persistedState);
+  }
+  void syncQuotaLockState();
+  if (didForceLogout) {
+    setStatus("Sessão encerrada. Você está no modo gratuito (anônimo).", "success");
   }
 })();

@@ -29,9 +29,25 @@
     return next;
   }
 
-  const existingToken = String(localStorage.getItem("gettdone_user_token") || "").trim();
-  if (existingToken) {
-    window.location.href = getNextPath();
+  async function hasValidSession(token) {
+    if (!token) return false;
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      return response.ok;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  async function bootstrapExistingSession() {
+    const existingToken = String(localStorage.getItem("gettdone_user_token") || "").trim();
+    if (!existingToken) return;
+    const isValid = await hasValidSession(existingToken);
+    if (isValid) {
+      window.location.href = getNextPath();
+      return;
+    }
+    localStorage.removeItem("gettdone_user_token");
   }
 
   function getReason() {
@@ -90,4 +106,6 @@
       }
     });
   }
+
+  void bootstrapExistingSession();
 })();

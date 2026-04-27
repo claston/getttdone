@@ -204,7 +204,7 @@
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
       clearUserToken();
-      window.location.href = "./login.html?next=%2Fofx-convert.html";
+      window.location.href = "./ofx-convert.html?logout=1";
     });
   }
 

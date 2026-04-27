@@ -107,8 +107,6 @@
 
       <div class="download-row">
         <div>
-          <p><strong>analysis_id:</strong> <span id="analysis-id">-</span></p>
-          <p><strong>processamento:</strong> <span id="processing-id">-</span></p>
           <p><strong>quota restante:</strong> <span id="quota-remaining">-</span></p>
         </div>
         <div class="download-actions">
@@ -117,6 +115,20 @@
       </div>
     </section>
   </main>
+
+  <div id="quota-lock-overlay" class="quota-lock-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="quota-lock-title">
+    <div class="quota-lock-modal">
+      <p class="quota-lock-badge">Limite semanal atingido</p>
+      <h2 id="quota-lock-title">Crie sua conta para continuar convertendo</h2>
+      <p id="quota-lock-message" class="quota-lock-message">
+        Você usou as 3 conversões gratuitas desta semana. Cadastre-se para liberar +10 conversões semanais.
+      </p>
+      <div class="quota-lock-actions">
+        <a id="quota-lock-signup-link" class="btn btn-primary" href="./signup.html?next=%2Fclient-area.html&reason=quota">Criar conta</a>
+        <a id="quota-lock-login-link" class="btn btn-ghost" href="./login.html?next=%2Fclient-area.html">Já tenho conta</a>
+      </div>
+    </div>
+  </div>
 
   <script src="./ofx-convert.js"></script>
 </body>

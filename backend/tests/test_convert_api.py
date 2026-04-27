@@ -133,3 +133,25 @@ def test_convert_rejects_file_larger_than_2mb(tmp_path) -> None:
     assert response.status_code == 413
     assert "maximum size of 2 MB" in response.json()["detail"]
     app.dependency_overrides.clear()
+
+
+def test_convert_blocks_4th_attempt_with_structured_quota_detail(tmp_path) -> None:
+    client = build_client(tmp_path)
+    data = {"anonymous_fingerprint": "anon-fp-d"}
+    files = {"file": ("sample.pdf", b"%PDF data", "application/pdf")}
+
+    assert client.post("/convert", data=data, files=files).status_code == 200
+    assert client.post("/convert", data=data, files=files).status_code == 200
+    assert client.post("/convert", data=data, files=files).status_code == 200
+
+    blocked = client.post("/convert", data=data, files=files)
+    assert blocked.status_code == 429
+    detail = blocked.json()["detail"]
+    assert detail["code"] == "weekly_quota_exceeded"
+    assert detail["identity_type"] == "anonymous"
+    assert detail["quota_limit"] == 3
+    assert detail["quota_remaining"] == 0
+    assert detail["upgrade_url"] == "./signup.html?next=%2Fofx-convert.html&reason=quota"
+    assert isinstance(detail["reset_at"], str)
+    assert "T" in detail["reset_at"]
+    app.dependency_overrides.clear()

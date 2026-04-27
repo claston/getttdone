@@ -27,6 +27,7 @@ async def convert(
     report_service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConvertResponse:
+    identity = None
     try:
         data = await file.read()
         access_control_service.assert_upload_size(data)
@@ -70,9 +71,21 @@ async def convert(
             detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
         )
     except QuotaExceededError:
+        quota_limit = int(identity.quota_limit) if identity is not None else 0
+        reset_at = access_control_service.get_quota_reset_at(identity) if identity is not None else None
+        identity_type = str(identity.identity_type) if identity is not None else "anonymous"
+        upgrade_url = "./signup.html?next=%2Fofx-convert.html&reason=quota" if identity_type == "anonymous" else None
         raise HTTPException(
             status_code=429,
-            detail="Quota exceeded. Register to unlock +10 conversions.",
+            detail={
+                "code": "weekly_quota_exceeded",
+                "message": "Você atingiu o limite semanal de conversões.",
+                "identity_type": identity_type,
+                "quota_limit": quota_limit,
+                "quota_remaining": 0,
+                "reset_at": reset_at,
+                "upgrade_url": upgrade_url,
+            },
         )
     except UnsupportedFileTypeError:
         raise HTTPException(status_code=400, detail="Unsupported file type. Use CSV, XLSX, OFX, or PDF.")

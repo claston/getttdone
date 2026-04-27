@@ -4,7 +4,7 @@ import hmac
 import secrets
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Callable
@@ -22,6 +22,7 @@ ANONYMOUS_QUOTA_LIMIT = 3
 REGISTERED_QUOTA_LIMIT = 10
 MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024
 PASSWORD_HASH_ITERATIONS = 390_000
+QUOTA_WINDOW_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class AccessControlService:
         token_secret: str,
         anonymous_quota_limit: int = ANONYMOUS_QUOTA_LIMIT,
         registered_quota_limit: int = REGISTERED_QUOTA_LIMIT,
+        quota_window_days: int = QUOTA_WINDOW_DAYS,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.state_file = state_file
@@ -53,6 +55,7 @@ class AccessControlService:
         self.token_secret = token_secret.encode("utf-8")
         self.anonymous_quota_limit = anonymous_quota_limit
         self.registered_quota_limit = registered_quota_limit
+        self.quota_window_days = max(1, int(quota_window_days))
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
         self._lock = RLock()
         self.db_file.parent.mkdir(parents=True, exist_ok=True)
@@ -164,16 +167,25 @@ class AccessControlService:
             if usage["used_count"] >= identity.quota_limit:
                 raise QuotaExceededError
             used_count = usage["used_count"] + 1
+            window_started_at = usage["window_started_at"].isoformat()
             with self._connect() as conn:
                 conn.execute(
                     """
-                    INSERT INTO usage (identity_type, identity_id, used_count, quota_limit, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO usage (
+                        identity_type,
+                        identity_id,
+                        used_count,
+                        quota_limit,
+                        updated_at,
+                        window_started_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(identity_type, identity_id)
                     DO UPDATE SET
                       used_count=excluded.used_count,
                       quota_limit=excluded.quota_limit,
-                      updated_at=excluded.updated_at
+                      updated_at=excluded.updated_at,
+                      window_started_at=excluded.window_started_at
                     """,
                     (
                         identity.identity_type,
@@ -181,6 +193,7 @@ class AccessControlService:
                         used_count,
                         identity.quota_limit,
                         self.now_provider().isoformat(),
+                        window_started_at,
                     ),
                 )
                 conn.commit()
@@ -189,6 +202,11 @@ class AccessControlService:
     def get_remaining_quota(self, identity: IdentityContext) -> int:
         usage = self._read_usage(identity)
         return max(identity.quota_limit - usage["used_count"], 0)
+
+    def get_quota_reset_at(self, identity: IdentityContext) -> str:
+        usage = self._read_usage(identity)
+        reset_at = usage["window_started_at"] + timedelta(days=self.quota_window_days)
+        return reset_at.isoformat()
 
     def record_user_conversion(
         self,
@@ -306,30 +324,72 @@ class AccessControlService:
                 conn.commit()
                 return anon_id
 
-    def _read_usage(self, identity: IdentityContext) -> dict[str, int]:
+    def _read_usage(self, identity: IdentityContext) -> dict[str, int | datetime]:
         with self._lock:
             with self._connect() as conn:
+                now = self.now_provider()
                 row = conn.execute(
-                    "SELECT used_count FROM usage WHERE identity_type = ? AND identity_id = ?",
+                    """
+                    SELECT used_count, quota_limit, updated_at, window_started_at
+                    FROM usage
+                    WHERE identity_type = ? AND identity_id = ?
+                    """,
                     (identity.identity_type, identity.identity_id),
                 ).fetchone()
                 if row is None:
+                    started_at = now.isoformat()
                     conn.execute(
                         """
-                        INSERT INTO usage (identity_type, identity_id, used_count, quota_limit, updated_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO usage (
+                            identity_type,
+                            identity_id,
+                            used_count,
+                            quota_limit,
+                            updated_at,
+                            window_started_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
                             identity.identity_type,
                             identity.identity_id,
                             0,
                             identity.quota_limit,
-                            self.now_provider().isoformat(),
+                            started_at,
+                            started_at,
                         ),
                     )
                     conn.commit()
-                    return {"used_count": 0}
-                return {"used_count": int(row["used_count"] or 0)}
+                    return {"used_count": 0, "window_started_at": now}
+
+                used_count = int(row["used_count"] or 0)
+                window_started_at = self._parse_usage_datetime(
+                    str(row["window_started_at"] or row["updated_at"] or now.isoformat()),
+                    fallback=now,
+                )
+
+                if self._is_quota_window_expired(window_started_at, now):
+                    window_started_at = now
+                    used_count = 0
+                    started_at = window_started_at.isoformat()
+                    conn.execute(
+                        """
+                        UPDATE usage
+                        SET used_count = ?, quota_limit = ?, updated_at = ?, window_started_at = ?
+                        WHERE identity_type = ? AND identity_id = ?
+                        """,
+                        (
+                            used_count,
+                            identity.quota_limit,
+                            started_at,
+                            started_at,
+                            identity.identity_type,
+                            identity.identity_id,
+                        ),
+                    )
+                    conn.commit()
+
+                return {"used_count": used_count, "window_started_at": window_started_at}
 
     def _hash_password(self, password: str, salt: str) -> str:
         derived_key = hashlib.pbkdf2_hmac(
@@ -404,6 +464,7 @@ class AccessControlService:
                         used_count INTEGER NOT NULL,
                         quota_limit INTEGER NOT NULL,
                         updated_at TEXT NOT NULL,
+                        window_started_at TEXT,
                         PRIMARY KEY (identity_type, identity_id)
                     );
 
@@ -421,6 +482,20 @@ class AccessControlService:
                     );
                     """
                 )
+
+                usage_columns = {
+                    str(row["name"])
+                    for row in conn.execute("PRAGMA table_info(usage)").fetchall()
+                }
+                if "window_started_at" not in usage_columns:
+                    conn.execute("ALTER TABLE usage ADD COLUMN window_started_at TEXT")
+                conn.execute(
+                    """
+                    UPDATE usage
+                    SET window_started_at = updated_at
+                    WHERE window_started_at IS NULL OR window_started_at = ''
+                    """
+                )
                 conn.commit()
 
     def _is_expired(self, expires_at_raw: str, now: datetime) -> bool:
@@ -431,3 +506,15 @@ class AccessControlService:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         return expires_at < now
+
+    def _is_quota_window_expired(self, window_started_at: datetime, now: datetime) -> bool:
+        return now >= (window_started_at + timedelta(days=self.quota_window_days))
+
+    def _parse_usage_datetime(self, raw_value: str, fallback: datetime) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(raw_value)
+        except ValueError:
+            return fallback
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
