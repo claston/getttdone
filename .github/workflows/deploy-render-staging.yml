@@ -16,8 +16,45 @@ permissions:
   contents: read
 
 jobs:
+  db-migrate-staging:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+
+      - name: Run Alembic migrations (staging)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_SCHEMA: ${{ vars.DATABASE_SCHEMA }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::notice::Skipping DB migration because DATABASE_URL is not configured in staging environment secrets."
+            exit 0
+          fi
+          export DATABASE_SCHEMA="${DATABASE_SCHEMA:-public}"
+          python -m alembic upgrade head
+
   deploy-render-staging:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    needs:
+      - db-migrate-staging
     runs-on: ubuntu-latest
     environment: staging
 
