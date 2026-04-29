@@ -8,3 +8,5 @@ ruff==0.11.6
 httpx==0.28.1
 pypdf==5.4.0
 psycopg[binary]==3.2.9
+SQLAlchemy==2.0.44
+alembic==1.17.1

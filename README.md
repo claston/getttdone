@@ -155,6 +155,30 @@ Secrets/vars recomendados no GitHub (environment `staging`):
 - `RENDER_API_KEY` (secret)
 - `RENDER_STAGING_SERVICE_ID` (secret)
 - `RENDER_DEPLOY_ENABLED=true` (variable, opcional)
+- `DATABASE_URL` (secret, para job de migracao Alembic)
+- `DATABASE_SCHEMA` (variable, opcional; default `public`)
+
+## Migrations de banco (Alembic)
+
+Quando `DATABASE_URL` estiver definido, a esteira de deploy para staging executa:
+
+- `python -m alembic upgrade head` (diretorio `backend/`)
+
+Execucao local:
+
+```powershell
+cd backend
+$env:DATABASE_URL = "postgresql://user:pass@host:5432/dbname"
+$env:DATABASE_SCHEMA = "gettdone"
+venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Rollback local (ultimo passo):
+
+```powershell
+cd backend
+venv\Scripts\python.exe -m alembic downgrade -1
+```
 
 Comportamento de frontend em deploy:
 
