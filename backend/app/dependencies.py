@@ -10,6 +10,7 @@ from app.application import (
     ReportService,
     TempAnalysisStorage,
 )
+from app.security_baseline import is_production_env, read_bool_env
 
 _backend_root = Path(__file__).resolve().parents[1]
 _storage = TempAnalysisStorage(
@@ -34,14 +35,13 @@ def get_report_service() -> ReportService:
 def get_access_control_service() -> AccessControlService:
     global _access_control_service
     if _access_control_service is None:
-        token_secret = os.getenv("ACCESS_CONTROL_TOKEN_SECRET", "dev-access-control-secret")
+        token_secret = os.getenv("ACCESS_CONTROL_TOKEN_SECRET", "").strip() or "dev-access-control-secret"
         anonymous_quota_limit = int(os.getenv("ANONYMOUS_QUOTA_LIMIT", "3"))
-        unlimited_anon_quota = os.getenv("UNLIMITED_ANON_QUOTA", "false").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        unlimited_anon_quota = read_bool_env("UNLIMITED_ANON_QUOTA", default=False)
+        if is_production_env() and token_secret == "dev-access-control-secret":
+            raise RuntimeError("ACCESS_CONTROL_TOKEN_SECRET must be configured in production.")
+        if is_production_env() and unlimited_anon_quota:
+            raise RuntimeError("UNLIMITED_ANON_QUOTA must be false in production.")
         if unlimited_anon_quota:
             anonymous_quota_limit = 9999
         _access_control_service = AccessControlService(
