@@ -70,11 +70,11 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"options": f"-c search_path={schema_name},public"},
     )
 
     with connectable.connect() as connection:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
+        connection.execute(text(f'SET search_path TO "{schema_name}", public'))
         connection.commit()
         context.configure(
             connection=connection,

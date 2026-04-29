@@ -658,8 +658,10 @@ class AccessControlService:
     def _connect(self) -> sqlite3.Connection:
         if self._use_postgres:
             assert psycopg is not None and dict_row is not None
-            options = f"-c search_path={self.database_schema},public"
-            return psycopg.connect(self.database_url, row_factory=dict_row, options=options)
+            conn = psycopg.connect(self.database_url, row_factory=dict_row)
+            with conn.cursor() as cur:
+                cur.execute(f'SET search_path TO "{self.database_schema}", public')
+            return conn
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         return conn
