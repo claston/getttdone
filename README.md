@@ -141,6 +141,8 @@ Checklist rapido para Render:
 4. Definir `ENABLE_API_DOCS=false`.
 5. Definir `UNLIMITED_ANON_QUOTA=false`.
 6. Fazer deploy e validar `GET /health`.
+7. (Opcional para Neon/Postgres) Definir `DATABASE_URL` no formato `postgresql://...`.
+8. (Recomendado com banco compartilhado) Definir `DATABASE_SCHEMA` exclusivo para esta app (ex.: `gettdone`).
 
 Para desenvolvimento local, continue usando:
 

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import re
 import secrets
 import sqlite3
 from dataclasses import dataclass
@@ -9,6 +10,13 @@ from pathlib import Path
 from threading import RLock
 from typing import Callable
 from uuid import uuid4
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except Exception:  # pragma: no cover - optional dependency for postgres deployments
+    psycopg = None
+    dict_row = None
 
 from app.application.errors import (
     FileTooLargeError,
@@ -45,6 +53,8 @@ class AccessControlService:
         self,
         state_file: Path,
         token_secret: str,
+        database_url: str | None = None,
+        database_schema: str | None = None,
         anonymous_quota_limit: int = ANONYMOUS_QUOTA_LIMIT,
         registered_quota_limit: int = REGISTERED_QUOTA_LIMIT,
         quota_window_days: int = QUOTA_WINDOW_DAYS,
@@ -52,13 +62,21 @@ class AccessControlService:
     ) -> None:
         self.state_file = state_file
         self.db_file = state_file.with_suffix(".db")
+        self.database_url = (database_url or "").strip()
+        self.database_schema = self._normalize_database_schema(database_schema)
+        self._use_postgres = self.database_url.startswith("postgres://") or self.database_url.startswith(
+            "postgresql://"
+        )
         self.token_secret = token_secret.encode("utf-8")
         self.anonymous_quota_limit = anonymous_quota_limit
         self.registered_quota_limit = registered_quota_limit
         self.quota_window_days = max(1, int(quota_window_days))
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
         self._lock = RLock()
-        self.db_file.parent.mkdir(parents=True, exist_ok=True)
+        if not self._use_postgres:
+            self.db_file.parent.mkdir(parents=True, exist_ok=True)
+        elif psycopg is None:
+            raise RuntimeError("PostgreSQL support requires psycopg. Install backend requirements.")
         self._init_db()
 
     def resolve_identity(
@@ -94,10 +112,11 @@ class AccessControlService:
         password_hash = self._hash_password(password=password, salt=salt)
         with self._lock:
             with self._connect() as conn:
-                existing = conn.execute("SELECT id FROM users WHERE email = ?", (normalized_email,)).fetchone()
+                existing = self._fetchone(conn, "SELECT id FROM users WHERE email = ?", (normalized_email,))
                 if existing is not None:
                     raise UserAlreadyExistsError
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO users (
                         id,
@@ -136,10 +155,11 @@ class AccessControlService:
         normalized_email = email.strip().lower()
         with self._lock:
             with self._connect() as conn:
-                user = conn.execute(
+                user = self._fetchone(
+                    conn,
                     "SELECT id, name, email, password_hash, password_salt FROM users WHERE email = ?",
                     (normalized_email,),
-                ).fetchone()
+                )
                 if user is None:
                     raise InvalidCredentialsError
                 if not self._verify_password(
@@ -159,10 +179,11 @@ class AccessControlService:
         user_id = self._decode_token(user_token)
         with self._lock:
             with self._connect() as conn:
-                user = conn.execute(
+                user = self._fetchone(
+                    conn,
                     "SELECT id, name, email FROM users WHERE id = ?",
                     (user_id,),
-                ).fetchone()
+                )
                 if user is None:
                     raise InvalidUserTokenError
                 return RegisteredUser(
@@ -186,17 +207,19 @@ class AccessControlService:
 
         with self._lock:
             with self._connect() as conn:
-                row = conn.execute(
+                row = self._fetchone(
+                    conn,
                     """
                     SELECT id, name, email
                     FROM users
                     WHERE auth_provider = 'google' AND provider_user_id = ?
                     """,
                     (provider_user_id,),
-                ).fetchone()
+                )
                 if row is not None:
                     user_id = str(row["id"])
-                    conn.execute(
+                    self._execute(
+                        conn,
                         """
                         UPDATE users
                         SET name = ?, email = ?, updated_at = ?
@@ -212,13 +235,15 @@ class AccessControlService:
                         token=self._encode_token(user_id),
                     )
 
-                existing_by_email = conn.execute(
+                existing_by_email = self._fetchone(
+                    conn,
                     "SELECT id, name, email FROM users WHERE email = ?",
                     (normalized_email,),
-                ).fetchone()
+                )
                 if existing_by_email is not None:
                     user_id = str(existing_by_email["id"])
-                    conn.execute(
+                    self._execute(
+                        conn,
                         """
                         UPDATE users
                         SET name = ?, auth_provider = 'google', provider_user_id = ?, updated_at = ?
@@ -235,7 +260,8 @@ class AccessControlService:
                     )
 
                 user_id = f"usr_{uuid4().hex[:12]}"
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO users (
                         id,
@@ -277,7 +303,8 @@ class AccessControlService:
         expires_at = (now + timedelta(seconds=max(60, int(ttl_seconds)))).isoformat()
         with self._lock:
             with self._connect() as conn:
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO google_oauth_states (
                         state,
@@ -306,16 +333,17 @@ class AccessControlService:
         now = self.now_provider()
         with self._lock:
             with self._connect() as conn:
-                row = conn.execute(
+                row = self._fetchone(
+                    conn,
                     """
                     SELECT state, code_verifier, next_path, expires_at
                     FROM google_oauth_states
                     WHERE state = ?
                     """,
                     (normalized_state,),
-                ).fetchone()
-                conn.execute("DELETE FROM google_oauth_states WHERE state = ?", (normalized_state,))
-                conn.execute("DELETE FROM google_oauth_states WHERE expires_at < ?", (now.isoformat(),))
+                )
+                self._execute(conn, "DELETE FROM google_oauth_states WHERE state = ?", (normalized_state,))
+                self._execute(conn, "DELETE FROM google_oauth_states WHERE expires_at < ?", (now.isoformat(),))
                 conn.commit()
 
         if row is None:
@@ -356,7 +384,8 @@ class AccessControlService:
             used_count = usage["used_count"] + 1
             window_started_at = usage["window_started_at"].isoformat()
             with self._connect() as conn:
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO usage (
                         identity_type,
@@ -410,7 +439,8 @@ class AccessControlService:
     ) -> None:
         with self._lock:
             with self._connect() as conn:
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO user_conversions (
                       analysis_id,
@@ -452,7 +482,8 @@ class AccessControlService:
     def list_user_conversions(self, *, user_id: str, limit: int = 20) -> list[dict[str, str | int]]:
         with self._lock:
             with self._connect() as conn:
-                rows = conn.execute(
+                rows = self._fetchall(
+                    conn,
                     """
                     SELECT analysis_id, created_at, expires_at, filename, model, conversion_type, status, transactions_count
                     FROM user_conversions
@@ -461,7 +492,7 @@ class AccessControlService:
                     LIMIT ?
                     """,
                     (user_id, max(1, min(limit, 100))),
-                ).fetchall()
+                )
 
         now = self.now_provider()
         items: list[dict[str, str | int]] = []
@@ -488,20 +519,23 @@ class AccessControlService:
         now = self.now_provider().isoformat()
         with self._lock:
             with self._connect() as conn:
-                existing = conn.execute(
+                existing = self._fetchone(
+                    conn,
                     "SELECT id FROM anonymous_identities WHERE fingerprint = ?",
                     (fingerprint,),
-                ).fetchone()
+                )
                 if existing is not None:
                     anon_id = str(existing["id"])
-                    conn.execute(
+                    self._execute(
+                        conn,
                         "UPDATE anonymous_identities SET last_seen_at = ? WHERE id = ?",
                         (now, anon_id),
                     )
                     conn.commit()
                     return anon_id
                 anon_id = f"anon_{uuid4().hex[:12]}"
-                conn.execute(
+                self._execute(
+                    conn,
                     """
                     INSERT INTO anonymous_identities (id, fingerprint, created_at, last_seen_at)
                     VALUES (?, ?, ?, ?)
@@ -515,17 +549,19 @@ class AccessControlService:
         with self._lock:
             with self._connect() as conn:
                 now = self.now_provider()
-                row = conn.execute(
+                row = self._fetchone(
+                    conn,
                     """
                     SELECT used_count, quota_limit, updated_at, window_started_at
                     FROM usage
                     WHERE identity_type = ? AND identity_id = ?
                     """,
                     (identity.identity_type, identity.identity_id),
-                ).fetchone()
+                )
                 if row is None:
                     started_at = now.isoformat()
-                    conn.execute(
+                    self._execute(
+                        conn,
                         """
                         INSERT INTO usage (
                             identity_type,
@@ -559,7 +595,8 @@ class AccessControlService:
                     window_started_at = now
                     used_count = 0
                     started_at = window_started_at.isoformat()
-                    conn.execute(
+                    self._execute(
+                        conn,
                         """
                         UPDATE usage
                         SET used_count = ?, quota_limit = ?, updated_at = ?, window_started_at = ?
@@ -615,15 +652,23 @@ class AccessControlService:
     def _user_exists(self, user_id: str) -> bool:
         with self._lock:
             with self._connect() as conn:
-                row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+                row = self._fetchone(conn, "SELECT id FROM users WHERE id = ?", (user_id,))
                 return row is not None
 
     def _connect(self) -> sqlite3.Connection:
+        if self._use_postgres:
+            assert psycopg is not None and dict_row is not None
+            options = f"-c search_path={self.database_schema},public"
+            return psycopg.connect(self.database_url, row_factory=dict_row, options=options)
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init_db(self) -> None:
+        if self._use_postgres:
+            self._init_postgres_db()
+            return
+
         with self._lock:
             with self._connect() as conn:
                 conn.executescript(
@@ -718,6 +763,99 @@ class AccessControlService:
                 )
                 conn.commit()
 
+    def _init_postgres_db(self) -> None:
+        with self._lock:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.database_schema}"')
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS users (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            email TEXT NOT NULL UNIQUE,
+                            password_hash TEXT NOT NULL,
+                            password_salt TEXT NOT NULL,
+                            auth_provider TEXT NOT NULL DEFAULT 'local',
+                            provider_user_id TEXT,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS anonymous_identities (
+                            id TEXT PRIMARY KEY,
+                            fingerprint TEXT NOT NULL UNIQUE,
+                            created_at TEXT NOT NULL,
+                            last_seen_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS usage (
+                            identity_type TEXT NOT NULL,
+                            identity_id TEXT NOT NULL,
+                            used_count INTEGER NOT NULL,
+                            quota_limit INTEGER NOT NULL,
+                            updated_at TEXT NOT NULL,
+                            window_started_at TEXT,
+                            PRIMARY KEY (identity_type, identity_id)
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_conversions (
+                            analysis_id TEXT PRIMARY KEY,
+                            user_id TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            expires_at TEXT,
+                            filename TEXT NOT NULL,
+                            model TEXT NOT NULL,
+                            conversion_type TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            transactions_count INTEGER NOT NULL DEFAULT 0,
+                            FOREIGN KEY(user_id) REFERENCES users(id)
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS google_oauth_states (
+                            state TEXT PRIMARY KEY,
+                            code_verifier TEXT NOT NULL,
+                            next_path TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            expires_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_provider_user_id
+                        ON users(provider_user_id)
+                        WHERE auth_provider = 'google' AND provider_user_id IS NOT NULL
+                        """
+                    )
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET auth_provider = 'local'
+                        WHERE auth_provider IS NULL OR auth_provider = ''
+                        """
+                    )
+                    cur.execute(
+                        """
+                        UPDATE usage
+                        SET window_started_at = updated_at
+                        WHERE window_started_at IS NULL OR window_started_at = ''
+                        """
+                    )
+                conn.commit()
+
     def _is_expired(self, expires_at_raw: str, now: datetime) -> bool:
         try:
             expires_at = datetime.fromisoformat(expires_at_raw)
@@ -743,4 +881,43 @@ class AccessControlService:
         raw = str(next_path or "").strip()
         if not raw.startswith("/"):
             return "/client-area.html"
+        return raw
+
+    def _adapt_query(self, query: str) -> str:
+        if self._use_postgres:
+            return query.replace("?", "%s")
+        return query
+
+    def _execute(self, conn, query: str, params: tuple = ()):
+        adapted = self._adapt_query(query)
+        if self._use_postgres:
+            cur = conn.cursor()
+            cur.execute(adapted, params)
+            return cur
+        return conn.execute(adapted, params)
+
+    def _fetchone(self, conn, query: str, params: tuple = ()):
+        cur = self._execute(conn, query, params)
+        if self._use_postgres:
+            try:
+                return cur.fetchone()
+            finally:
+                cur.close()
+        return cur.fetchone()
+
+    def _fetchall(self, conn, query: str, params: tuple = ()):
+        cur = self._execute(conn, query, params)
+        if self._use_postgres:
+            try:
+                return cur.fetchall()
+            finally:
+                cur.close()
+        return cur.fetchall()
+
+    def _normalize_database_schema(self, schema: str | None) -> str:
+        raw = (schema or "public").strip()
+        if not raw:
+            return "public"
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", raw):
+            raise RuntimeError("DATABASE_SCHEMA must be a valid PostgreSQL schema name.")
         return raw
