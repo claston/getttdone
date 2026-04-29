@@ -121,6 +121,33 @@ Passo a passo no Render:
 3. Defina `PORT` (Render injeta automaticamente; o container ja respeita esse valor).
 4. (Opcional) Defina `CORS_ALLOW_ORIGINS` com dominios permitidos separados por virgula.
 
+## Baseline de seguranca (Fase 0 - MVP)
+
+Quando `APP_ENV=production`, a aplicacao agora faz validacao de seguranca na inicializacao e nao sobe se houver configuracao insegura.
+
+Variaveis obrigatorias em producao:
+
+- `APP_ENV=production`
+- `ACCESS_CONTROL_TOKEN_SECRET` com no minimo 32 caracteres e diferente do valor de desenvolvimento
+- `CORS_ALLOW_ORIGINS` com dominio(s) real(is) da aplicacao (sem localhost)
+- `ENABLE_API_DOCS=false`
+- `UNLIMITED_ANON_QUOTA=false`
+
+Checklist rapido para Render:
+
+1. Definir `APP_ENV=production`.
+2. Definir `ACCESS_CONTROL_TOKEN_SECRET` forte (32+ chars aleatorios).
+3. Definir `CORS_ALLOW_ORIGINS` com origem exata (ex.: `https://seu-dominio.com`).
+4. Definir `ENABLE_API_DOCS=false`.
+5. Definir `UNLIMITED_ANON_QUOTA=false`.
+6. Fazer deploy e validar `GET /health`.
+
+Para desenvolvimento local, continue usando:
+
+- `APP_ENV=development` (ou sem definir `APP_ENV`)
+- docs habilitadas por padrao
+- CORS com `localhost:3000` e `127.0.0.1:3000`
+
 Secrets/vars recomendados no GitHub (environment `staging`):
 
 - `RENDER_API_KEY` (secret)

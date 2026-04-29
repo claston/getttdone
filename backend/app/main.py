@@ -19,11 +19,20 @@ from app.routers import (
     reconcile_router,
     report_router,
 )
+from app.security_baseline import (
+    is_production_env,
+    parse_cors_allow_origins,
+    read_bool_env,
+    validate_production_security_baseline,
+)
 
 
 def is_api_docs_enabled() -> bool:
-    raw = os.getenv("ENABLE_API_DOCS", "true").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    default = not is_production_env()
+    return read_bool_env("ENABLE_API_DOCS", default=default)
+
+
+validate_production_security_baseline()
 
 
 app = FastAPI(
@@ -38,7 +47,10 @@ app = FastAPI(
 def get_cors_allow_origins() -> list[str]:
     configured_origins = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
     if configured_origins:
-        return [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+        return parse_cors_allow_origins(configured_origins)
+
+    if is_production_env():
+        raise RuntimeError("CORS_ALLOW_ORIGINS must be configured when APP_ENV=production.")
 
     return [
         "http://localhost:3000",
@@ -66,6 +78,17 @@ app.include_router(report_router)
 frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if is_production_env():
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.exception_handler(RequestValidationError)
