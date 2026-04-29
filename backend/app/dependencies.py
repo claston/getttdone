@@ -47,6 +47,8 @@ def get_access_control_service() -> AccessControlService:
         _access_control_service = AccessControlService(
             state_file=_backend_root / "tmp" / "access_control" / "state.json",
             token_secret=token_secret,
+            database_url=os.getenv("DATABASE_URL", "").strip() or None,
+            database_schema=os.getenv("DATABASE_SCHEMA", "public").strip(),
             anonymous_quota_limit=anonymous_quota_limit,
             quota_window_days=int(os.getenv("QUOTA_WINDOW_DAYS", "7")),
         )
