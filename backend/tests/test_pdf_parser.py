@@ -127,6 +127,44 @@ def test_parse_pdf_transactions_raises_when_no_transaction_rows(monkeypatch: pyt
         parse_pdf_transactions(b"%PDF-1.4 fake")
 
 
+def test_parse_pdf_transactions_with_columnar_table_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    columnar_text = """
+    Extrato Bancario Simulado
+    Data
+    Descricao
+    Tipo
+    Valor (R$)
+    Saldo (R$)
+    01/03/2026
+    Compra online
+    Debito
+    -115.37
+    4884.63
+    02/03/2026
+    Transferencia recebida
+    Credito
+    +249.61
+    5134.24
+    03/03/2026
+    Academia
+    Debito
+    91.35
+    5042.89
+    """
+    monkeypatch.setattr(pdf_parser, "_extract_pdf_page_texts", lambda raw_bytes: [columnar_text])
+
+    result = parse_pdf_transactions(b"%PDF synthetic columnar blocks")
+
+    assert result.parse_metrics["selected_parser"] == "columnar"
+    assert len(result.transactions) == 3
+    assert result.transactions[0].date == "2026-03-01"
+    assert result.transactions[0].amount == -115.37
+    assert result.transactions[1].amount == 249.61
+    assert result.transactions[2].amount == -91.35
+
+
 def test_extract_pdf_page_texts_without_ocr_keeps_original_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.application import pdf_parser
 

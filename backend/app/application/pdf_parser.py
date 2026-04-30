@@ -31,7 +31,9 @@ DATE_HEADER_PATTERN = re.compile(rf"^(?P<day>\d{{2}})\s+(?P<month>{MONTH_PATTERN
 AMOUNT_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d{3})*,\d{2}[+-]?$")
 INLINE_ROW_PATTERN = re.compile(r"^(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>.+)$")
 TABULAR_DATE_PREFIX_PATTERN = re.compile(r"^(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>.+)$")
+DATE_ONLY_PATTERN = re.compile(r"^\d{2}/\d{2}(?:/\d{2,4})?$")
 AMOUNT_TOKEN_PATTERN = re.compile(r"(?P<amount>(?:R\$\s*)?[+-]?\d+(?:\.\d{3})*,\d{2}[+-]?)")
+LOOSE_AMOUNT_PATTERN = re.compile(r"^[+-]?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:[.,]\d{2})[+-]?$")
 
 INFLOW_HINTS = (
     "TRANSFERENCIA RECEBIDA",
@@ -71,6 +73,17 @@ IGNORED_TRANSACTION_HINTS = (
     "FATURA ANTERIOR",
     "PAGAMENTO RECEBIDO",
 )
+DEBIT_TYPE_HINTS = ("DEBITO", "DEBIT", "DEB")
+CREDIT_TYPE_HINTS = ("CREDITO", "CREDIT", "CRED")
+COLUMNAR_HEADER_TOKENS = {
+    "DATA",
+    "DESCRICAO",
+    "TIPO",
+    "VALOR",
+    "VALOR (R$)",
+    "SALDO",
+    "SALDO (R$)",
+}
 
 
 @dataclass(frozen=True)
@@ -98,6 +111,7 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
     inline_candidates = 0
     inline_transactions_count = 0
     tabular_candidates = 0
+    columnar_candidates = 0
     selected_parser = "grouped"
     if not transactions:
         inline_transactions, inline_candidates = _parse_inline_statement_rows(lines)
@@ -109,8 +123,12 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
             if transactions:
                 selected_parser = "tabular"
         if not transactions:
+            transactions, columnar_candidates = _parse_columnar_statement_blocks(lines)
+            if transactions:
+                selected_parser = "columnar"
+        if not transactions:
             selected_parser = "none"
-            if inline_candidates > 0 or tabular_candidates > 0:
+            if inline_candidates > 0 or tabular_candidates > 0 or columnar_candidates > 0:
                 raise InvalidFileContentError(
                     "PDF text was extracted, but transactions are in an unsupported table layout."
                 )
@@ -369,6 +387,84 @@ def _parse_pdf_amount(raw: str) -> float:
     elif cleaned.endswith("+"):
         cleaned = cleaned[:-1].strip()
     return _parse_amount(cleaned)
+
+
+def _parse_columnar_statement_blocks(lines: list[str]) -> tuple[list[NormalizedTransaction], int]:
+    transactions: list[NormalizedTransaction] = []
+    candidates = 0
+    inferred_year = _infer_default_statement_year(lines)
+    index = 0
+
+    while index < len(lines):
+        raw_date = lines[index].strip()
+        if not DATE_ONLY_PATTERN.fullmatch(raw_date):
+            index += 1
+            continue
+
+        if index + 3 >= len(lines):
+            index += 1
+            continue
+
+        description = lines[index + 1].strip()
+        type_raw = lines[index + 2].strip()
+        amount_raw = lines[index + 3].strip()
+        if not description or _is_columnar_header_line(description):
+            index += 1
+            continue
+        if not _is_transaction_type_hint(type_raw):
+            index += 1
+            continue
+        if not _is_amount_like(amount_raw):
+            index += 1
+            continue
+
+        candidates += 1
+        amount = _apply_type_sign_hint(_parse_pdf_amount(amount_raw), type_raw)
+        signed_amount = _apply_sign_hints(amount=amount, description=description, section_hint=None)
+        transactions.append(
+            NormalizedTransaction(
+                date=_parse_statement_date(raw_date, fallback_year=inferred_year),
+                description=description,
+                amount=signed_amount,
+                type="inflow" if signed_amount >= 0 else "outflow",
+            )
+        )
+
+        next_index = index + 4
+        if next_index < len(lines) and _is_amount_like(lines[next_index].strip()):
+            next_index += 1
+        index = next_index
+
+    return transactions, candidates
+
+
+def _is_amount_like(raw: str) -> bool:
+    value = re.sub(r"(?i)R\$", "", raw).strip()
+    return bool(LOOSE_AMOUNT_PATTERN.fullmatch(value))
+
+
+def _is_transaction_type_hint(raw: str) -> bool:
+    normalized = _normalize_text(raw)
+    if not normalized:
+        return False
+    if any(token == normalized or normalized.startswith(token + " ") for token in DEBIT_TYPE_HINTS):
+        return True
+    if any(token == normalized or normalized.startswith(token + " ") for token in CREDIT_TYPE_HINTS):
+        return True
+    return False
+
+
+def _apply_type_sign_hint(amount: float, type_raw: str) -> float:
+    normalized = _normalize_text(type_raw)
+    if any(token == normalized or normalized.startswith(token + " ") for token in DEBIT_TYPE_HINTS):
+        return -abs(amount)
+    if any(token == normalized or normalized.startswith(token + " ") for token in CREDIT_TYPE_HINTS):
+        return abs(amount)
+    return amount
+
+
+def _is_columnar_header_line(raw: str) -> bool:
+    return _normalize_text(raw) in COLUMNAR_HEADER_TOKENS
 
 
 def _infer_default_statement_year(lines: list[str]) -> int | None:
