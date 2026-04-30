@@ -31,6 +31,8 @@ AMOUNT_PATTERN = re.compile(r"^-?\d+(?:\.\d{3})*,\d{2}$")
 INLINE_ROW_PATTERN = re.compile(
     r"^(?P<date>\d{2}/\d{2}/\d{4})\s+(?P<description>.+?)\s+(?P<amount>-?\d+(?:\.\d{3})*,\d{2})$"
 )
+TABULAR_DATE_PREFIX_PATTERN = re.compile(r"^(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>.+)$")
+AMOUNT_TOKEN_PATTERN = re.compile(r"(?P<amount>(?:R\$\s*)?[+-]?\d+(?:\.\d{3})*,\d{2})")
 
 INFLOW_HINTS = (
     "TRANSFERENCIA RECEBIDA",
@@ -59,6 +61,17 @@ IGNORED_LINE_TOKENS = (
     "VALORES EM R",
     "CNPJ AGENCIA CONTA",
 )
+IGNORED_TRANSACTION_HINTS = (
+    "SALDO DO DIA",
+    "SALDO FINAL",
+    "SALDO INICIAL",
+    "LIMITE DA CONTA",
+    "TOTAL DE ENTRADAS",
+    "TOTAL DE SAIDAS",
+    "RESUMO DA FATURA",
+    "FATURA ANTERIOR",
+    "PAGAMENTO RECEBIDO",
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +80,13 @@ class PdfParseResult:
     layout: PdfLayoutInference
     extracted_text: str
     parse_metrics: dict[str, int | str]
+
+
+@dataclass(frozen=True)
+class _AmountToken:
+    value: str
+    start: int
+    end: int
 
 
 def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
@@ -78,14 +98,20 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
     transactions = grouped_transactions
     inline_candidates = 0
     inline_transactions_count = 0
+    tabular_candidates = 0
     selected_parser = "grouped"
     if not transactions:
-        transactions, inline_candidates = _parse_inline_statement_rows(lines)
-        inline_transactions_count = len(transactions)
+        inline_transactions, inline_candidates = _parse_inline_statement_rows(lines)
+        inline_transactions_count = len(inline_transactions)
+        transactions = inline_transactions
         selected_parser = "inline"
         if not transactions:
+            transactions, tabular_candidates = _parse_tabular_statement_rows(lines)
+            if transactions:
+                selected_parser = "tabular"
+        if not transactions:
             selected_parser = "none"
-            if inline_candidates > 0:
+            if inline_candidates > 0 or tabular_candidates > 0:
                 raise InvalidFileContentError(
                     "PDF text was extracted, but transactions are in an unsupported table layout."
                 )
@@ -197,10 +223,14 @@ def _parse_inline_statement_rows(lines: list[str]) -> tuple[list[NormalizedTrans
         match = INLINE_ROW_PATTERN.match(line)
         if not match:
             continue
-        candidates += 1
         raw_description = match.group("description").strip()
-        if not raw_description:
+        if not raw_description or _should_skip_transaction_description(raw_description):
             continue
+
+        amount_tokens = _find_amount_tokens(line)
+        if len(amount_tokens) != 1:
+            continue
+        candidates += 1
 
         amount = _parse_amount(match.group("amount"))
         signed_amount = _apply_sign_hints(
@@ -218,6 +248,97 @@ def _parse_inline_statement_rows(lines: list[str]) -> tuple[list[NormalizedTrans
         )
 
     return transactions, candidates
+
+
+def _parse_tabular_statement_rows(lines: list[str]) -> tuple[list[NormalizedTransaction], int]:
+    transactions: list[NormalizedTransaction] = []
+    candidates = 0
+    inferred_year = _infer_default_statement_year(lines)
+
+    for line in lines:
+        match = TABULAR_DATE_PREFIX_PATTERN.match(line)
+        if not match:
+            continue
+
+        rest = match.group("rest").strip()
+        if not rest:
+            continue
+
+        amount_tokens = _find_amount_tokens(rest)
+        if not amount_tokens:
+            continue
+        candidates += 1
+
+        amount_token = _select_tabular_amount_token(amount_tokens)
+        if amount_token is None:
+            continue
+
+        raw_description = rest[: amount_token.start].strip()
+        if not raw_description or _should_skip_transaction_description(raw_description):
+            continue
+
+        amount = _parse_amount(amount_token.value)
+        signed_amount = _apply_sign_hints(
+            amount=amount,
+            description=raw_description,
+            section_hint=None,
+        )
+        transactions.append(
+            NormalizedTransaction(
+                date=_parse_statement_date(match.group("date"), fallback_year=inferred_year),
+                description=raw_description,
+                amount=signed_amount,
+                type="inflow" if signed_amount >= 0 else "outflow",
+            )
+        )
+
+    return transactions, candidates
+
+
+def _select_tabular_amount_token(tokens: list[_AmountToken]) -> _AmountToken | None:
+    if not tokens:
+        return None
+    if len(tokens) == 1:
+        return tokens[0]
+    # In statement-like tables with balance column, the rightmost amount is usually balance.
+    return tokens[-2]
+
+
+def _find_amount_tokens(text: str) -> list[_AmountToken]:
+    return [
+        _AmountToken(value=match.group("amount"), start=match.start("amount"), end=match.end("amount"))
+        for match in AMOUNT_TOKEN_PATTERN.finditer(text)
+    ]
+
+
+def _infer_default_statement_year(lines: list[str]) -> int | None:
+    year_counts: dict[int, int] = {}
+
+    for line in lines:
+        for raw in re.findall(r"\b\d{2}/\d{2}/(\d{4})\b", line):
+            year = int(raw)
+            year_counts[year] = year_counts.get(year, 0) + 1
+
+    if not year_counts:
+        return None
+    return max(year_counts.items(), key=lambda item: item[1])[0]
+
+
+def _parse_statement_date(raw: str, fallback_year: int | None) -> str:
+    value = raw.strip()
+    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", value):
+        return _parse_slash_date(value)
+
+    if re.fullmatch(r"\d{2}/\d{2}/\d{2}", value):
+        day, month, year = value.split("/")
+        return _parse_slash_date(f"{day}/{month}/20{year}")
+
+    if re.fullmatch(r"\d{2}/\d{2}", value):
+        if fallback_year is None:
+            fallback_year = datetime.utcnow().year
+        return _parse_slash_date(f"{value}/{fallback_year}")
+
+    raise InvalidFileContentError(f"Invalid date value in PDF statement: {raw!r}.")
 
 
 def _section_hint(text: str) -> str | None:
@@ -239,6 +360,17 @@ def _should_ignore_line(normalized_line: str) -> bool:
     if any(normalized_line.startswith(prefix) for prefix in IGNORED_LINE_PREFIXES):
         return True
     if any(token in normalized_line for token in IGNORED_LINE_TOKENS):
+        return True
+    return False
+
+
+def _should_skip_transaction_description(description: str) -> bool:
+    normalized_description = _normalize_text(description)
+    if not normalized_description:
+        return True
+    if any(hint in normalized_description for hint in IGNORED_TRANSACTION_HINTS):
+        return True
+    if normalized_description.startswith("SALDO "):
         return True
     return False
 

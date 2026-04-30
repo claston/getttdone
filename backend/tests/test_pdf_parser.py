@@ -43,13 +43,35 @@ def test_parse_pdf_transactions_with_itau_inline_layout(monkeypatch: pytest.Monk
     result = parse_pdf_transactions(b"%PDF synthetic inline")
 
     assert result.layout.layout_name in {"itau_statement_ptbr", "generic_statement_ptbr"}
-    assert len(result.transactions) == 3
-    assert any("SALDO DO DIA" in item.description.upper() for item in result.transactions)
+    assert len(result.transactions) == 2
+    assert all("SALDO DO DIA" not in item.description.upper() for item in result.transactions)
     assert any(item.amount > 0 for item in result.transactions)
     assert any(item.amount < 0 for item in result.transactions)
     assert result.parse_metrics["selected_parser"] == "inline"
     assert result.parse_metrics["inline_candidates_count"] >= 1
-    assert result.parse_metrics["inline_transactions_count"] == 3
+    assert result.parse_metrics["inline_transactions_count"] == 2
+
+
+def test_parse_pdf_transactions_with_tabular_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    tabular_text = """
+    extrato conta / lancamentos
+    data lancamentos valor (R$) saldo (R$)
+    13/04/2026 PIX TRANSF ERICA S13/04 -2.835,00 -4.142,48
+    09/04/2026 TED 102.0001.ERICA S Y 6.000,00 1.857,52
+    09/04/2026 SALDO DO DIA -1.307,48
+    """
+    monkeypatch.setattr(pdf_parser, "_extract_pdf_page_texts", lambda raw_bytes: [tabular_text])
+
+    result = parse_pdf_transactions(b"%PDF synthetic tabular fallback")
+
+    assert result.layout.layout_name in {"itau_statement_ptbr", "generic_statement_ptbr"}
+    assert result.parse_metrics["selected_parser"] == "tabular"
+    assert len(result.transactions) == 2
+    assert all("SALDO DO DIA" not in item.description.upper() for item in result.transactions)
+    assert result.transactions[0].amount == -2835.0
+    assert result.transactions[1].amount == 6000.0
 
 
 def test_parse_pdf_transactions_raises_when_no_transaction_rows(monkeypatch: pytest.MonkeyPatch) -> None:
