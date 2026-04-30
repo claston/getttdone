@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 from app.application.csv_parser import parse_csv_transactions
@@ -31,20 +32,25 @@ class AnalyzeService:
         self.storage = storage
 
     def analyze(self, filename: str, raw_bytes: bytes) -> AnalyzeResponse:
+        total_start = perf_counter()
         extension = Path(filename).suffix.replace(".", "").lower()
         if extension not in SUPPORTED_EXTENSIONS:
             raise UnsupportedFileTypeError
 
         analysis_id = f"an_{uuid4().hex[:12]}"
+        parse_start = perf_counter()
         (
             parsed_transactions,
             layout_inference_name,
             layout_inference_confidence,
             extracted_text,
+            parse_metrics,
         ) = self._build_transactions_for_extension(
             extension,
             raw_bytes,
         )
+        parse_ms = round((perf_counter() - parse_start) * 1000, 3)
+        classify_start = perf_counter()
         classification_result = classify_document(
             filename=filename,
             raw_bytes=raw_bytes,
@@ -52,8 +58,13 @@ class AnalyzeService:
             layout_inference_name=layout_inference_name,
             layout_inference_confidence=layout_inference_confidence,
         )
+        classify_ms = round((perf_counter() - classify_start) * 1000, 3)
+        normalize_start = perf_counter()
         transactions = normalize_transactions(parsed_transactions)
+        normalize_ms = round((perf_counter() - normalize_start) * 1000, 3)
+        reconcile_start = perf_counter()
         reconciliation_result = reconcile_transactions(transactions)
+        reconcile_ms = round((perf_counter() - reconcile_start) * 1000, 3)
         preview_before_after = [
             BeforeAfterRow(
                 date=after_item.date,
@@ -94,6 +105,15 @@ class AnalyzeService:
         reconciled_entries = sum(1 for status in reconciliation_result.statuses if status != "unmatched")
         unmatched_entries = len(transactions) - reconciled_entries
         top_expenses_rows = sorted((item for item in transactions if item.amount < 0), key=lambda x: x.amount)[:10]
+        pdf_processing_metrics = self._build_pdf_processing_metrics(
+            extension=extension,
+            parse_metrics=parse_metrics,
+            parse_ms=parse_ms,
+            classify_ms=classify_ms,
+            normalize_ms=normalize_ms,
+            reconcile_ms=reconcile_ms,
+            total_ms=round((perf_counter() - total_start) * 1000, 3),
+        )
 
         analysis_data = AnalysisData(
             analysis_id=analysis_id,
@@ -112,6 +132,7 @@ class AnalyzeService:
             updated_at=datetime.now(timezone.utc).isoformat(),
             layout_inference_name=layout_inference_name,
             layout_inference_confidence=layout_inference_confidence,
+            pdf_processing_metrics=pdf_processing_metrics,
         )
         expires_at = self.storage.save_analysis(analysis_data)
 
@@ -178,18 +199,60 @@ class AnalyzeService:
             updated_at=analysis_data.updated_at,
             layout_inference_name=layout_inference_name,
             layout_inference_confidence=layout_inference_confidence,
+            pdf_processing_metrics=pdf_processing_metrics,
         )
 
     def _build_transactions_for_extension(
         self,
         extension: str,
         raw_bytes: bytes,
-    ) -> tuple[list[NormalizedTransaction], str | None, float | None, str | None]:
+    ) -> tuple[
+        list[NormalizedTransaction],
+        str | None,
+        float | None,
+        str | None,
+        dict[str, int | str] | None,
+    ]:
         if extension == "csv":
-            return parse_csv_transactions(raw_bytes), None, None, None
+            return parse_csv_transactions(raw_bytes), None, None, None, None
         if extension == "xlsx":
-            return parse_xlsx_transactions(raw_bytes), None, None, None
+            return parse_xlsx_transactions(raw_bytes), None, None, None, None
         if extension == "ofx":
-            return parse_ofx_transactions(raw_bytes), None, None, None
+            return parse_ofx_transactions(raw_bytes), None, None, None, None
         result = parse_pdf_transactions(raw_bytes)
-        return result.transactions, result.layout.layout_name, result.layout.confidence, result.extracted_text
+        return (
+            result.transactions,
+            result.layout.layout_name,
+            result.layout.confidence,
+            result.extracted_text,
+            result.parse_metrics,
+        )
+
+    def _build_pdf_processing_metrics(
+        self,
+        *,
+        extension: str,
+        parse_metrics: dict[str, int | str] | None,
+        parse_ms: float,
+        classify_ms: float,
+        normalize_ms: float,
+        reconcile_ms: float,
+        total_ms: float,
+    ) -> dict[str, int | float | str] | None:
+        if extension != "pdf" or parse_metrics is None:
+            return None
+
+        return {
+            "total_ms": total_ms,
+            "parse_ms": parse_ms,
+            "classify_ms": classify_ms,
+            "normalize_ms": normalize_ms,
+            "reconcile_ms": reconcile_ms,
+            "page_count": int(parse_metrics.get("page_count", 0)),
+            "extracted_char_count": int(parse_metrics.get("extracted_char_count", 0)),
+            "flattened_line_count": int(parse_metrics.get("flattened_line_count", 0)),
+            "grouped_transactions_count": int(parse_metrics.get("grouped_transactions_count", 0)),
+            "inline_candidates_count": int(parse_metrics.get("inline_candidates_count", 0)),
+            "inline_transactions_count": int(parse_metrics.get("inline_transactions_count", 0)),
+            "selected_parser": str(parse_metrics.get("selected_parser", "unknown")),
+        }

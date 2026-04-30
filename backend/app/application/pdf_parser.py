@@ -66,6 +66,7 @@ class PdfParseResult:
     transactions: list[NormalizedTransaction]
     layout: PdfLayoutInference
     extracted_text: str
+    parse_metrics: dict[str, int | str]
 
 
 def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
@@ -73,10 +74,17 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
     joined_text = "\n".join(page_texts)
     layout = infer_pdf_layout(joined_text)
     lines = _flatten_statement_lines(page_texts)
-    transactions = _parse_grouped_statement_lines(lines)
+    grouped_transactions = _parse_grouped_statement_lines(lines)
+    transactions = grouped_transactions
+    inline_candidates = 0
+    inline_transactions_count = 0
+    selected_parser = "grouped"
     if not transactions:
         transactions, inline_candidates = _parse_inline_statement_rows(lines)
+        inline_transactions_count = len(transactions)
+        selected_parser = "inline"
         if not transactions:
+            selected_parser = "none"
             if inline_candidates > 0:
                 raise InvalidFileContentError(
                     "PDF text was extracted, but transactions are in an unsupported table layout."
@@ -89,6 +97,15 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
         transactions=transactions,
         layout=layout,
         extracted_text=joined_text,
+        parse_metrics={
+            "page_count": len(page_texts),
+            "extracted_char_count": len(joined_text),
+            "flattened_line_count": len(lines),
+            "grouped_transactions_count": len(grouped_transactions),
+            "inline_candidates_count": inline_candidates,
+            "inline_transactions_count": inline_transactions_count,
+            "selected_parser": selected_parser,
+        },
     )
 
 

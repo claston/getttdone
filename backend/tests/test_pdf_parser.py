@@ -23,6 +23,9 @@ def test_parse_pdf_transactions_with_grouped_layout(monkeypatch: pytest.MonkeyPa
     assert len(result.transactions) == 2
     assert any(item.amount > 0 for item in result.transactions)
     assert any(item.amount < 0 for item in result.transactions)
+    assert result.parse_metrics["selected_parser"] == "grouped"
+    assert result.parse_metrics["grouped_transactions_count"] == 2
+    assert result.parse_metrics["inline_transactions_count"] == 0
 
 
 def test_parse_pdf_transactions_with_itau_inline_layout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,6 +47,9 @@ def test_parse_pdf_transactions_with_itau_inline_layout(monkeypatch: pytest.Monk
     assert any("SALDO DO DIA" in item.description.upper() for item in result.transactions)
     assert any(item.amount > 0 for item in result.transactions)
     assert any(item.amount < 0 for item in result.transactions)
+    assert result.parse_metrics["selected_parser"] == "inline"
+    assert result.parse_metrics["inline_candidates_count"] >= 1
+    assert result.parse_metrics["inline_transactions_count"] == 3
 
 
 def test_parse_pdf_transactions_raises_when_no_transaction_rows(monkeypatch: pytest.MonkeyPatch) -> None:
