@@ -8,11 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
 
 from app.application.column_mapping import normalize_header
 
 _PREVIEW_LIMIT = 20
 _MAX_EVIDENCE = 6
+_PDF_PREVIEW_PAGE_LIMIT = 3
+_PDF_PREVIEW_CHAR_LIMIT = 16000
 
 _SEMANTIC_EXTRATO_BANCARIO = "extrato_bancario"
 _SEMANTIC_CONTROLE_FINANCEIRO = "controle_financeiro"
@@ -190,11 +193,17 @@ def classify_document(
     filename: str,
     raw_bytes: bytes,
     *,
+    extracted_text: str | None = None,
     layout_inference_name: str | None = None,
     layout_inference_confidence: float | None = None,
 ) -> DocumentClassification:
     extension = Path(filename).suffix.lower().lstrip(".")
-    profile = _build_profile(filename=filename, raw_bytes=raw_bytes, extension=extension)
+    profile = _build_profile(
+        filename=filename,
+        raw_bytes=raw_bytes,
+        extension=extension,
+        extracted_text=extracted_text,
+    )
     scores: dict[str, float] = {
         _SEMANTIC_EXTRATO_BANCARIO: 0.0,
         _SEMANTIC_CONTROLE_FINANCEIRO: 0.0,
@@ -283,13 +292,21 @@ class _DocumentProfile:
     sample_rows: list[list[str]]
 
 
-def _build_profile(filename: str, raw_bytes: bytes, extension: str) -> _DocumentProfile:
+def _build_profile(
+    filename: str,
+    raw_bytes: bytes,
+    extension: str,
+    extracted_text: str | None = None,
+) -> _DocumentProfile:
     filename_normalized = normalize_header(Path(filename).stem)
     if extension == "csv":
         return _build_csv_profile(filename_normalized, raw_bytes, extension)
     if extension == "xlsx":
         return _build_xlsx_profile(filename_normalized, raw_bytes, extension)
-    text = _decode_text_preview(raw_bytes)
+    if extension == "pdf":
+        text = (extracted_text or "").strip() or _extract_pdf_text_preview(raw_bytes)
+    else:
+        text = _decode_text_preview(raw_bytes)
     return _DocumentProfile(
         filename_normalized=filename_normalized,
         header_text="",
@@ -495,7 +512,11 @@ def _score_terms(
     weight: float,
     source: str,
 ) -> None:
-    hits = [term for term in terms if _contains_any(text, {term})]
+    normalized_text = _normalize_joined([text])
+    if not normalized_text:
+        return
+
+    hits = [term for term in terms if _contains_text(normalized_text, term)]
     if not hits:
         return
 
@@ -576,7 +597,8 @@ def _apply_confidence_floor(
 
 
 def _matched_terms(text: str, terms: Iterable[str]) -> list[str]:
-    return [term for term in terms if _contains_any(text, {term})]
+    normalized_text = _normalize_joined([text])
+    return [term for term in terms if _contains_text(normalized_text, term)]
 
 
 def _contains_any(text: str, terms: Iterable[str]) -> bool:
@@ -614,6 +636,24 @@ def _decode_text_preview(raw_bytes: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return ""
+
+
+def _extract_pdf_text_preview(raw_bytes: bytes) -> str:
+    try:
+        reader = PdfReader(BytesIO(raw_bytes))
+    except Exception:
+        return ""
+
+    parts: list[str] = []
+    for page in reader.pages[:_PDF_PREVIEW_PAGE_LIMIT]:
+        text = (page.extract_text() or "").strip()
+        if text:
+            parts.append(text)
+        joined = "\n".join(parts)
+        if len(joined) >= _PDF_PREVIEW_CHAR_LIMIT:
+            return joined[:_PDF_PREVIEW_CHAR_LIMIT]
+
+    return "\n".join(parts)[:_PDF_PREVIEW_CHAR_LIMIT]
 
 
 def _detect_delimiter(text: str) -> str:
