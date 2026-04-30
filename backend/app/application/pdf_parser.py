@@ -65,6 +65,7 @@ IGNORED_LINE_TOKENS = (
 class PdfParseResult:
     transactions: list[NormalizedTransaction]
     layout: PdfLayoutInference
+    extracted_text: str
 
 
 def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
@@ -84,7 +85,11 @@ def parse_pdf_transactions(raw_bytes: bytes) -> PdfParseResult:
                 "PDF text was extracted, but no recognizable transaction row pattern was found."
             )
 
-    return PdfParseResult(transactions=transactions, layout=layout)
+    return PdfParseResult(
+        transactions=transactions,
+        layout=layout,
+        extracted_text=joined_text,
+    )
 
 
 def _extract_pdf_page_texts(raw_bytes: bytes) -> list[str]:

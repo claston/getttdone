@@ -87,6 +87,16 @@ def test_classify_ofx_payload_with_high_confidence() -> None:
     assert result.evidence
 
 
+def test_classify_pdf_uses_extracted_text_preview_for_body_signals() -> None:
+    raw = (b"%PDF-1.4\n" + (b"\x00\xff\x10\x80" * 25000))
+    extracted_text = "Transferencia recebida pelo Pix\nPagamento de cartao\nEstorno tarifa"
+
+    result = classify_document("Nubank_2023-11-15.pdf", raw, extracted_text=extracted_text)
+
+    assert result.semantic_type == "extrato_bancario"
+    assert any(item.startswith("rows signals:") for item in result.evidence)
+
+
 def test_operational_sheet_is_not_misclassified_as_bank_statement() -> None:
     raw = (
         "data,descricao,fornecedor,categoria,centro de custo,valor\n"

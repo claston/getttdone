@@ -110,6 +110,7 @@ def test_analyze_service_uses_pdf_content_with_layout_inference(tmp_path, monkey
                 confidence=0.94,
                 used_fallback=False,
             ),
+            extracted_text="TOTAL DE ENTRADAS\nTOTAL DE SAIDAS\nTRANSFERENCIA RECEBIDA PELO PIX",
         ),
     )
 
@@ -150,6 +151,7 @@ def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path, monkeypatch) -> Non
                 confidence=1.0,
                 used_fallback=False,
             ),
+            extracted_text="EXTRATO CONTA / LANCAMENTOS\nDATA LANCAMENTOS VALOR",
         ),
     )
 

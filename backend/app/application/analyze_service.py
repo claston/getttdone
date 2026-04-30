@@ -36,13 +36,19 @@ class AnalyzeService:
             raise UnsupportedFileTypeError
 
         analysis_id = f"an_{uuid4().hex[:12]}"
-        parsed_transactions, layout_inference_name, layout_inference_confidence = self._build_transactions_for_extension(
+        (
+            parsed_transactions,
+            layout_inference_name,
+            layout_inference_confidence,
+            extracted_text,
+        ) = self._build_transactions_for_extension(
             extension,
             raw_bytes,
         )
         classification_result = classify_document(
             filename=filename,
             raw_bytes=raw_bytes,
+            extracted_text=extracted_text,
             layout_inference_name=layout_inference_name,
             layout_inference_confidence=layout_inference_confidence,
         )
@@ -178,12 +184,12 @@ class AnalyzeService:
         self,
         extension: str,
         raw_bytes: bytes,
-    ) -> tuple[list[NormalizedTransaction], str | None, float | None]:
+    ) -> tuple[list[NormalizedTransaction], str | None, float | None, str | None]:
         if extension == "csv":
-            return parse_csv_transactions(raw_bytes), None, None
+            return parse_csv_transactions(raw_bytes), None, None, None
         if extension == "xlsx":
-            return parse_xlsx_transactions(raw_bytes), None, None
+            return parse_xlsx_transactions(raw_bytes), None, None, None
         if extension == "ofx":
-            return parse_ofx_transactions(raw_bytes), None, None
+            return parse_ofx_transactions(raw_bytes), None, None, None
         result = parse_pdf_transactions(raw_bytes)
-        return result.transactions, result.layout.layout_name, result.layout.confidence
+        return result.transactions, result.layout.layout_name, result.layout.confidence, result.extracted_text
