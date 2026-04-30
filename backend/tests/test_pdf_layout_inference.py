@@ -75,3 +75,36 @@ def test_infer_pdf_layout_prefers_bradesco_profile_when_tokens_match() -> None:
 
     assert result.layout_name == "bradesco_statement_ptbr"
     assert result.confidence >= 0.5
+
+
+def test_infer_pdf_layout_prefers_bb_profile_when_tokens_match() -> None:
+    text = """
+    BANCO DO BRASIL
+    EXTRATO CONTA CORRENTE
+    agencia 1234-5 conta 98765-4
+    data lancamentos documento valor saldo
+    14/04/2026 PIX RECEBIDO CLIENTE 980,00 8.420,10
+    """
+
+    result = infer_pdf_layout(text)
+
+    assert result.layout_name == "bb_statement_ptbr"
+    assert result.confidence >= 0.5
+
+
+def test_infer_pdf_layout_prefers_generic_when_specific_signal_is_weak() -> None:
+    text = """
+    BANCO SANTANDER
+    RESUMO FINANCEIRO
+    01 JAN 2026
+    PAGAMENTO FORNECEDOR ALFA
+    980,00
+    02 JAN 2026
+    RECEBIMENTO CLIENTE BRAVO
+    1500,00
+    """
+
+    result = infer_pdf_layout(text)
+
+    assert result.layout_name == "generic_statement_ptbr"
+    assert result.used_fallback is True

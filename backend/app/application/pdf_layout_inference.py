@@ -7,6 +7,9 @@ DATE_HEADER_PATTERN = re.compile(rf"\b\d{{2}}\s+{MONTH_PATTERN}\s+\d{{4}}\b")
 SLASH_DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}(?:/\d{2,4})?\b")
 AMOUNT_PATTERN = re.compile(r"\b[+-]?\d+(?:\.\d{3})*,\d{2}[+-]?\b")
 TABLE_HEADER_PATTERN = re.compile(r"\bDATA\b.*\bVALOR\b.*\bSALDO\b")
+SPECIFIC_PROFILE_MIN_SCORE = 0.5
+SPECIFIC_PROFILE_MIN_MARGIN = 0.05
+SPECIFIC_PROFILE_HIGH_CONFIDENCE = 0.7
 BR_PROFILE_TERMS: dict[str, tuple[tuple[str, float], ...]] = {
     "nubank_statement_ptbr": (
         ("TOTAL DE ENTRADAS", 0.22),
@@ -65,7 +68,7 @@ def infer_pdf_layout(text: str) -> PdfLayoutInference:
     generic_score = _score_generic_statement(normalized)
     specific_best_name, specific_best_score = max(specific_scores.items(), key=lambda item: item[1])
 
-    if specific_best_score >= generic_score:
+    if _should_use_specific_profile(specific_best_score=specific_best_score, generic_score=generic_score):
         return PdfLayoutInference(
             layout_name=specific_best_name,
             confidence=round(specific_best_score, 3),
@@ -116,6 +119,14 @@ def _score_statement_structure(normalized_text: str) -> float:
     if "SALDO" in normalized_text and ("VALOR" in normalized_text or "LANCAMENT" in normalized_text):
         bonus += 0.05
     return min(0.2, bonus)
+
+
+def _should_use_specific_profile(*, specific_best_score: float, generic_score: float) -> bool:
+    if specific_best_score >= SPECIFIC_PROFILE_HIGH_CONFIDENCE:
+        return True
+    if specific_best_score < SPECIFIC_PROFILE_MIN_SCORE:
+        return False
+    return (specific_best_score - generic_score) >= SPECIFIC_PROFILE_MIN_MARGIN
 
 
 def _normalize_text(value: str) -> str:
