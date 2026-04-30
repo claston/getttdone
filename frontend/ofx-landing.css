@@ -403,6 +403,15 @@ h2 {
   font-size: 0.92rem;
 }
 
+.footer a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.footer a:hover {
+  color: var(--primary);
+}
+
 @media (max-width: 980px) {
   .steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));

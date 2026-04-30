@@ -1,0 +1,136 @@
+:root {
+  --surface: #f7f8f8;
+  --surface-soft: #eef0ef;
+  --surface-card: #ffffff;
+  --ink: #121617;
+  --ink-soft: #4c5458;
+  --primary: #0f4fdb;
+  --radius-lg: 26px;
+  --radius-md: 16px;
+  --shadow-soft: 0 22px 45px -24px rgba(10, 24, 36, 0.32);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Source Sans 3", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(760px 340px at 8% -4%, rgba(15, 79, 219, 0.16), transparent 62%),
+    radial-gradient(680px 300px at 96% 0%, rgba(26, 125, 76, 0.13), transparent 60%),
+    var(--surface);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(18px);
+  background: rgba(247, 248, 248, 0.8);
+  box-shadow: 0 10px 30px -26px rgba(0, 0, 0, 0.55);
+}
+
+.topbar-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  min-height: 76px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.brand {
+  font-family: "Manrope", "Source Sans 3", sans-serif;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 1.3rem;
+}
+
+.top-link {
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.top-link:hover {
+  color: var(--primary);
+}
+
+main {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 20px 54px;
+}
+
+.policy-card {
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  padding: 34px;
+  box-shadow: var(--shadow-soft);
+}
+
+h1 {
+  margin: 0;
+  font-family: "Manrope", "Source Sans 3", sans-serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+}
+
+.updated-at {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+section {
+  margin-top: 26px;
+}
+
+h2 {
+  margin: 0;
+  font-family: "Manrope", "Source Sans 3", sans-serif;
+  font-size: clamp(1.28rem, 2.2vw, 1.72rem);
+  letter-spacing: -0.01em;
+}
+
+p,
+li {
+  color: var(--ink-soft);
+  line-height: 1.62;
+  font-size: 1.02rem;
+}
+
+ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.footer {
+  max-width: 980px;
+  margin: 0 auto 26px;
+  padding: 0 20px;
+  color: var(--ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 700px) {
+  .policy-card {
+    padding: 24px;
+  }
+
+  .topbar-inner {
+    min-height: 68px;
+  }
+}
