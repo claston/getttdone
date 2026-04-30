@@ -27,12 +27,10 @@ MONTH_TO_NUMBER = {
 }
 MONTH_PATTERN = "|".join(MONTH_TO_NUMBER)
 DATE_HEADER_PATTERN = re.compile(rf"^(?P<day>\d{{2}})\s+(?P<month>{MONTH_PATTERN})\s+(?P<year>\d{{4}})(?P<rest>.*)$")
-AMOUNT_PATTERN = re.compile(r"^-?\d+(?:\.\d{3})*,\d{2}$")
-INLINE_ROW_PATTERN = re.compile(
-    r"^(?P<date>\d{2}/\d{2}/\d{4})\s+(?P<description>.+?)\s+(?P<amount>-?\d+(?:\.\d{3})*,\d{2})$"
-)
+AMOUNT_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d{3})*,\d{2}[+-]?$")
+INLINE_ROW_PATTERN = re.compile(r"^(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>.+)$")
 TABULAR_DATE_PREFIX_PATTERN = re.compile(r"^(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>.+)$")
-AMOUNT_TOKEN_PATTERN = re.compile(r"(?P<amount>(?:R\$\s*)?[+-]?\d+(?:\.\d{3})*,\d{2})")
+AMOUNT_TOKEN_PATTERN = re.compile(r"(?P<amount>(?:R\$\s*)?[+-]?\d+(?:\.\d{3})*,\d{2}[+-]?)")
 
 INFLOW_HINTS = (
     "TRANSFERENCIA RECEBIDA",
@@ -196,7 +194,7 @@ def _parse_grouped_statement_lines(lines: list[str]) -> list[NormalizedTransacti
         if AMOUNT_PATTERN.fullmatch(line):
             if not description_parts:
                 continue
-            amount = _parse_amount(line)
+            amount = _parse_pdf_amount(line)
             description = " ".join(description_parts).strip()
             signed_amount = _apply_sign_hints(amount=amount, description=description, section_hint=current_section_hint)
             transactions.append(
@@ -218,21 +216,28 @@ def _parse_grouped_statement_lines(lines: list[str]) -> list[NormalizedTransacti
 def _parse_inline_statement_rows(lines: list[str]) -> tuple[list[NormalizedTransaction], int]:
     transactions: list[NormalizedTransaction] = []
     candidates = 0
+    inferred_year = _infer_default_statement_year(lines)
 
     for line in lines:
         match = INLINE_ROW_PATTERN.match(line)
         if not match:
             continue
-        raw_description = match.group("description").strip()
+
+        rest = match.group("rest").strip()
+        amount_tokens = _find_amount_tokens(rest)
+        if len(amount_tokens) != 1:
+            continue
+        amount_token = amount_tokens[0]
+        if rest[amount_token.end :].strip():
+            continue
+
+        raw_description = rest[: amount_token.start].strip()
         if not raw_description or _should_skip_transaction_description(raw_description):
             continue
 
-        amount_tokens = _find_amount_tokens(line)
-        if len(amount_tokens) != 1:
-            continue
         candidates += 1
 
-        amount = _parse_amount(match.group("amount"))
+        amount = _parse_pdf_amount(amount_token.value)
         signed_amount = _apply_sign_hints(
             amount=amount,
             description=raw_description,
@@ -240,7 +245,7 @@ def _parse_inline_statement_rows(lines: list[str]) -> tuple[list[NormalizedTrans
         )
         transactions.append(
             NormalizedTransaction(
-                date=_parse_slash_date(match.group("date")),
+                date=_parse_statement_date(match.group("date"), fallback_year=inferred_year),
                 description=raw_description,
                 amount=signed_amount,
                 type="inflow" if signed_amount >= 0 else "outflow",
@@ -277,7 +282,7 @@ def _parse_tabular_statement_rows(lines: list[str]) -> tuple[list[NormalizedTran
         if not raw_description or _should_skip_transaction_description(raw_description):
             continue
 
-        amount = _parse_amount(amount_token.value)
+        amount = _parse_pdf_amount(amount_token.value)
         signed_amount = _apply_sign_hints(
             amount=amount,
             description=raw_description,
@@ -309,6 +314,15 @@ def _find_amount_tokens(text: str) -> list[_AmountToken]:
         _AmountToken(value=match.group("amount"), start=match.start("amount"), end=match.end("amount"))
         for match in AMOUNT_TOKEN_PATTERN.finditer(text)
     ]
+
+
+def _parse_pdf_amount(raw: str) -> float:
+    cleaned = re.sub(r"(?i)R\$", "", raw).strip()
+    if cleaned.endswith("-"):
+        cleaned = "-" + cleaned[:-1].strip()
+    elif cleaned.endswith("+"):
+        cleaned = cleaned[:-1].strip()
+    return _parse_amount(cleaned)
 
 
 def _infer_default_statement_year(lines: list[str]) -> int | None:

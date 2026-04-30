@@ -74,6 +74,47 @@ def test_parse_pdf_transactions_with_tabular_fallback(monkeypatch: pytest.Monkey
     assert result.transactions[1].amount == 6000.0
 
 
+def test_parse_pdf_transactions_inline_short_date_and_trailing_minus(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    inline_text = """
+    extrato conta / lancamentos
+    periodo de visualizacao: 14/03/2026 ate 13/04/2026
+    13/04 PIX TRANSF LOJA X 1.250,00-
+    10/04 TED RECEBIDA CLIENTE Y 800,00
+    """
+    monkeypatch.setattr(pdf_parser, "_extract_pdf_page_texts", lambda raw_bytes: [inline_text])
+
+    result = parse_pdf_transactions(b"%PDF synthetic inline short date")
+
+    assert result.parse_metrics["selected_parser"] == "inline"
+    assert len(result.transactions) == 2
+    assert result.transactions[0].date == "2026-04-13"
+    assert result.transactions[0].amount == -1250.0
+    assert result.transactions[1].date == "2026-04-10"
+    assert result.transactions[1].amount == 800.0
+
+
+def test_parse_pdf_transactions_tabular_short_date_with_currency_symbol(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    tabular_text = """
+    periodo: 01/04/2026 a 30/04/2026
+    13/04 PIX TRANSF ERICA S13/04 R$ 2.835,00- R$ -4.142,48
+    09/04 TED 102.0001.ERICA S Y R$ 6.000,00 R$ 1.857,52
+    """
+    monkeypatch.setattr(pdf_parser, "_extract_pdf_page_texts", lambda raw_bytes: [tabular_text])
+
+    result = parse_pdf_transactions(b"%PDF synthetic tabular short date")
+
+    assert result.parse_metrics["selected_parser"] == "tabular"
+    assert len(result.transactions) == 2
+    assert result.transactions[0].date == "2026-04-13"
+    assert result.transactions[0].amount == -2835.0
+    assert result.transactions[1].date == "2026-04-09"
+    assert result.transactions[1].amount == 6000.0
+
+
 def test_parse_pdf_transactions_raises_when_no_transaction_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.application import pdf_parser
 
