@@ -1,7 +1,7 @@
 ﻿import pytest
 
 from app.application.errors import InvalidFileContentError
-from app.application.pdf_parser import parse_pdf_transactions
+from app.application.pdf_parser import _extract_pdf_page_texts, parse_pdf_transactions
 
 
 def test_parse_pdf_transactions_with_grouped_layout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,3 +125,42 @@ def test_parse_pdf_transactions_raises_when_no_transaction_rows(monkeypatch: pyt
         match="unsupported table layout|no recognizable transaction row pattern",
     ):
         parse_pdf_transactions(b"%PDF-1.4 fake")
+
+
+def test_extract_pdf_page_texts_without_ocr_keeps_original_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    monkeypatch.setattr(pdf_parser, "_read_native_pdf_page_texts", lambda raw_bytes: [])
+    monkeypatch.delenv("PDF_OCR_ENABLED", raising=False)
+
+    with pytest.raises(InvalidFileContentError, match="does not contain extractable text"):
+        _extract_pdf_page_texts(b"%PDF synthetic no text")
+
+
+def test_extract_pdf_page_texts_uses_ocr_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.application import pdf_parser
+
+    monkeypatch.setattr(pdf_parser, "_read_native_pdf_page_texts", lambda raw_bytes: [])
+    monkeypatch.setattr(pdf_parser, "_extract_pdf_page_texts_with_ocr", lambda raw_bytes: ["OCR LINE 1", "OCR LINE 2"])
+    monkeypatch.setenv("PDF_OCR_ENABLED", "true")
+
+    pages = _extract_pdf_page_texts(b"%PDF synthetic no text")
+
+    assert pages == ["OCR LINE 1", "OCR LINE 2"]
+
+
+def test_extract_pdf_page_texts_with_ocr_enabled_and_missing_dependencies_raises_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.application import pdf_parser
+
+    monkeypatch.setattr(pdf_parser, "_read_native_pdf_page_texts", lambda raw_bytes: [])
+    monkeypatch.setattr(
+        pdf_parser,
+        "_extract_pdf_page_texts_with_ocr",
+        lambda raw_bytes: (_ for _ in ()).throw(InvalidFileContentError("OCR dependencies are not installed.")),
+    )
+    monkeypatch.setenv("PDF_OCR_ENABLED", "1")
+
+    with pytest.raises(InvalidFileContentError, match="OCR dependencies are not installed"):
+        _extract_pdf_page_texts(b"%PDF synthetic no text")
