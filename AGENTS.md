@@ -25,6 +25,16 @@ This document defines the default execution rules for the `gettdone` repository.
    - no login/dashboard in MVP
    - upload -> processing -> preview -> report download
 
+## Production Compatibility Rules
+
+1. Assume the application is already deployed in production.
+2. Every change must consider backward compatibility with the currently running production version.
+3. Database changes must be backward-compatible by default:
+   - prefer additive migrations (new tables/columns/indexes) over destructive changes
+   - avoid removing or renaming columns/tables used by existing code paths without a phased rollout
+   - when a breaking schema change is unavoidable, document and implement a safe migration/rollback plan
+4. For migrations affecting existing data or behavior, include explicit validation steps for upgrade and rollback safety.
+
 ## Validation Rules
 
 1. Always run test suite before finalizing work.
@@ -61,3 +71,16 @@ When reconciliation logic changes, include at least one validation case for:
    - `gh pr edit <number> --body-file <filled_body_file>`
 6. Include command outputs in `How to test` whenever possible.
 7. Do not merge directly into `main`.
+
+## Migration PR Checklist
+
+For any PR that changes database schema, include this checklist in the PR body and fill with concrete evidence:
+
+- [ ] Migration is additive or proven safe for backward compatibility with production.
+- [ ] Existing API/worker code remains compatible during rollout window (before and after deploy).
+- [ ] Destructive operations (DROP/RENAME/type narrowing) are avoided; if unavoidable, phased plan is documented.
+- [ ] Forward path validated: migration runs successfully in a production-like environment.
+- [ ] Rollback path documented and tested (or explicitly marked as not reversible with mitigation).
+- [ ] Data backfill/migration strategy documented (if applicable), including idempotency and retry safety.
+- [ ] Runtime impact assessed (locks, long transactions, index build strategy, expected downtime = none/minimal).
+- [ ] Monitoring/alerts and post-deploy verification steps are defined.
