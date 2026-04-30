@@ -108,3 +108,48 @@ def test_infer_pdf_layout_prefers_generic_when_specific_signal_is_weak() -> None
 
     assert result.layout_name == "generic_statement_ptbr"
     assert result.used_fallback is True
+
+
+def test_infer_pdf_layout_prefers_caixa_profile_when_tokens_match() -> None:
+    text = """
+    CAIXA ECONOMICA FEDERAL
+    EXTRATO DA CONTA CORRENTE
+    agencia: 1234 operacao: 001 conta: 12345-6
+    data historico documento valor saldo
+    15/04/2026 PIX RECEBIDO CLIENTE 1.150,00 6.421,34
+    """
+
+    result = infer_pdf_layout(text)
+
+    assert result.layout_name == "caixa_statement_ptbr"
+    assert result.confidence >= 0.5
+
+
+def test_infer_pdf_layout_prefers_inter_profile_when_tokens_match() -> None:
+    text = """
+    BANCO INTER S.A.
+    EXTRATO DE CONTA DIGITAL
+    agencia: 0001 conta: 26075935-0
+    data descricao valor saldo
+    16/04/2026 TRANSFERENCIA PIX 950,00 7.371,34
+    """
+
+    result = infer_pdf_layout(text)
+
+    assert result.layout_name == "inter_statement_ptbr"
+    assert result.confidence >= 0.5
+
+
+def test_infer_pdf_layout_prefers_sicredi_profile_when_tokens_match() -> None:
+    text = """
+    SICREDI
+    EXTRATO CONTA CORRENTE
+    cooperativa 1234 conta 98765-1
+    data historico valor saldo
+    17/04/2026 TED RECEBIDA 2.000,00 9.371,34
+    """
+
+    result = infer_pdf_layout(text)
+
+    assert result.layout_name == "sicredi_statement_ptbr"
+    assert result.confidence >= 0.5

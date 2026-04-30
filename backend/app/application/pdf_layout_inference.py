@@ -10,6 +10,7 @@ TABLE_HEADER_PATTERN = re.compile(r"\bDATA\b.*\bVALOR\b.*\bSALDO\b")
 SPECIFIC_PROFILE_MIN_SCORE = 0.5
 SPECIFIC_PROFILE_MIN_MARGIN = 0.05
 SPECIFIC_PROFILE_HIGH_CONFIDENCE = 0.7
+ANCHOR_MISS_MULTIPLIER = 0.45
 BR_PROFILE_TERMS: dict[str, tuple[tuple[str, float], ...]] = {
     "nubank_statement_ptbr": (
         ("TOTAL DE ENTRADAS", 0.22),
@@ -49,6 +50,39 @@ BR_PROFILE_TERMS: dict[str, tuple[tuple[str, float], ...]] = {
         ("DOCUMENTO", 0.1),
         ("AGENCIA", 0.08),
     ),
+    "caixa_statement_ptbr": (
+        ("CAIXA ECONOMICA FEDERAL", 0.32),
+        ("EXTRATO DA CONTA CORRENTE", 0.22),
+        ("OPERACAO: 001", 0.18),
+        ("DATA HISTORICO DOCUMENTO VALOR SALDO", 0.14),
+        ("CONTA CORRENTE", 0.1),
+        ("AGENCIA", 0.08),
+    ),
+    "inter_statement_ptbr": (
+        ("BANCO INTER", 0.32),
+        ("EXTRATO DE CONTA DIGITAL", 0.24),
+        ("CONTA DIGITAL", 0.16),
+        ("DATA DESCRICAO VALOR SALDO", 0.14),
+        ("AGENCIA", 0.08),
+    ),
+    "sicredi_statement_ptbr": (
+        ("SICREDI", 0.34),
+        ("EXTRATO CONTA CORRENTE", 0.22),
+        ("COOPERATIVA", 0.16),
+        ("DATA HISTORICO VALOR SALDO", 0.14),
+        ("CONTA CORRENTE", 0.1),
+        ("AGENCIA", 0.06),
+    ),
+}
+PROFILE_ANCHORS: dict[str, tuple[str, ...]] = {
+    "nubank_statement_ptbr": ("TOTAL DE ENTRADAS", "TRANSFERENCIA RECEBIDA PELO PIX", "MOVIMENTACOES"),
+    "itau_statement_ptbr": ("EXTRATO CONTA / LANCAMENTOS", "LIMITE DA CONTA", "SALDO EM CONTA"),
+    "santander_statement_ptbr": ("BANCO SANTANDER", "EXTRATO DE CONTA CORRENTE"),
+    "bradesco_statement_ptbr": ("BANCO BRADESCO", "EXTRATO MENSAL"),
+    "bb_statement_ptbr": ("BANCO DO BRASIL", "EXTRATO CONTA CORRENTE"),
+    "caixa_statement_ptbr": ("CAIXA ECONOMICA FEDERAL", "EXTRATO DA CONTA CORRENTE", "OPERACAO: 001"),
+    "inter_statement_ptbr": ("BANCO INTER", "CONTA DIGITAL"),
+    "sicredi_statement_ptbr": ("SICREDI", "COOPERATIVA"),
 }
 
 
@@ -62,7 +96,7 @@ class PdfLayoutInference:
 def infer_pdf_layout(text: str) -> PdfLayoutInference:
     normalized = _normalize_text(text)
     specific_scores = {
-        layout_name: _score_layout_profile(normalized, terms)
+        layout_name: _score_layout_profile(layout_name, normalized, terms)
         for layout_name, terms in BR_PROFILE_TERMS.items()
     }
     generic_score = _score_generic_statement(normalized)
@@ -82,12 +116,17 @@ def infer_pdf_layout(text: str) -> PdfLayoutInference:
     )
 
 
-def _score_layout_profile(normalized_text: str, terms: tuple[tuple[str, float], ...]) -> float:
+def _score_layout_profile(layout_name: str, normalized_text: str, terms: tuple[tuple[str, float], ...]) -> float:
     score = 0.0
     for token, weight in terms:
         if token in normalized_text:
             score += weight
     score += _score_statement_structure(normalized_text)
+
+    anchors = PROFILE_ANCHORS.get(layout_name, ())
+    if anchors and not any(anchor in normalized_text for anchor in anchors):
+        score *= ANCHOR_MISS_MULTIPLIER
+
     return min(score, 1.0)
 
 
