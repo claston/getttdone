@@ -40,6 +40,7 @@ def test_analyze_service_uses_real_xlsx_content(tmp_path) -> None:
     assert result.net_total == 2441.10
     assert result.preview_transactions[0].description == "IFOOD"
     assert result.preview_transactions[1].description == "SALARIO"
+    assert result.pdf_processing_metrics is None
 
 
 def test_analyze_service_uses_real_ofx_content(tmp_path) -> None:
@@ -82,6 +83,7 @@ VERSION:102
     assert result.net_total == 2441.10
     assert result.preview_transactions[0].description == "IFOOD"
     assert result.preview_transactions[1].description == "SALARIO"
+    assert result.pdf_processing_metrics is None
 
 
 def test_analyze_service_uses_pdf_content_with_layout_inference(tmp_path, monkeypatch) -> None:
@@ -111,6 +113,15 @@ def test_analyze_service_uses_pdf_content_with_layout_inference(tmp_path, monkey
                 used_fallback=False,
             ),
             extracted_text="TOTAL DE ENTRADAS\nTOTAL DE SAIDAS\nTRANSFERENCIA RECEBIDA PELO PIX",
+            parse_metrics={
+                "page_count": 1,
+                "extracted_char_count": 72,
+                "flattened_line_count": 3,
+                "grouped_transactions_count": 2,
+                "inline_candidates_count": 0,
+                "inline_transactions_count": 0,
+                "selected_parser": "grouped",
+            },
         ),
     )
 
@@ -123,6 +134,10 @@ def test_analyze_service_uses_pdf_content_with_layout_inference(tmp_path, monkey
     assert result.layout_inference_confidence >= 0.2
     assert result.semantic_type == "extrato_bancario"
     assert result.semantic_confidence is not None
+    assert result.pdf_processing_metrics is not None
+    assert result.pdf_processing_metrics.selected_parser == "grouped"
+    assert result.pdf_processing_metrics.grouped_transactions_count == 2
+    assert result.pdf_processing_metrics.total_ms >= 0.0
 
 
 def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path, monkeypatch) -> None:
@@ -152,6 +167,15 @@ def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path, monkeypatch) -> Non
                 used_fallback=False,
             ),
             extracted_text="EXTRATO CONTA / LANCAMENTOS\nDATA LANCAMENTOS VALOR",
+            parse_metrics={
+                "page_count": 1,
+                "extracted_char_count": 47,
+                "flattened_line_count": 2,
+                "grouped_transactions_count": 0,
+                "inline_candidates_count": 2,
+                "inline_transactions_count": 2,
+                "selected_parser": "inline",
+            },
         ),
     )
 
@@ -161,4 +185,6 @@ def test_analyze_service_uses_itau_pdf_inline_rows(tmp_path, monkeypatch) -> Non
     assert result.transactions_total == 2
     assert result.layout_inference_name in {"itau_statement_ptbr", "generic_statement_ptbr"}
     assert result.layout_inference_confidence is not None
+    assert result.pdf_processing_metrics is not None
+    assert result.pdf_processing_metrics.selected_parser == "inline"
 

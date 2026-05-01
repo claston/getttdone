@@ -10,6 +10,7 @@ node_modules/
 
 tmp/
 backend/tmp/
+backend/.tmp_sqlite_test/
 backend/samples/
 
 .env

@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel
+from pydantic import BaseModel
 
 
 class ReconciliationSummary(BaseModel):
@@ -59,6 +59,21 @@ class BeforeAfterPreview(BaseModel):
     amount_after: float
 
 
+class PdfProcessingMetrics(BaseModel):
+    total_ms: float
+    parse_ms: float
+    classify_ms: float
+    normalize_ms: float
+    reconcile_ms: float
+    page_count: int
+    extracted_char_count: int
+    flattened_line_count: int
+    grouped_transactions_count: int
+    inline_candidates_count: int
+    inline_transactions_count: int
+    selected_parser: str
+
+
 class AnalyzeResponse(BaseModel):
     analysis_id: str
     file_type: str
@@ -80,6 +95,7 @@ class AnalyzeResponse(BaseModel):
     updated_at: str | None = None
     layout_inference_name: str | None = None
     layout_inference_confidence: float | None = None
+    pdf_processing_metrics: PdfProcessingMetrics | None = None
 
 
 class ReconcileIntakeResponse(BaseModel):
