@@ -1,4 +1,4 @@
-ï»¿(function () {
+(function () {
   const input = document.getElementById("file-input");
   const dropzone = document.getElementById("dropzone");
   const dropzoneEmpty = document.getElementById("dropzone-empty");
@@ -8,15 +8,15 @@
   const selectedFile = document.getElementById("selected-file");
   const convertBtn = document.getElementById("convert-btn");
   const statusMsg = document.getElementById("status-msg");
-  const authLoginLink = document.getElementById("auth-login-link");
-  const authSignupLink = document.getElementById("auth-signup-link");
-  const authClientLink = document.getElementById("auth-client-link");
+  const topAuthLoginLink = document.getElementById("top-auth-login-link");
+  const topAuthPrimaryLink = document.getElementById("top-auth-primary-link");
   const menuToggle = document.getElementById("menu-toggle");
   const topLinks = document.getElementById("top-links");
   const quotaLockOverlay = document.getElementById("quota-lock-overlay");
   const quotaLockMessage = document.getElementById("quota-lock-message");
   const quotaLockSignupLink = document.getElementById("quota-lock-signup-link");
   const quotaLockLoginLink = document.getElementById("quota-lock-login-link");
+  const uploadLimitsText = document.getElementById("upload-limits-text");
 
   const reviewSection = document.getElementById("review-section");
   const downloadSection = document.getElementById("download-section");
@@ -43,6 +43,7 @@
     lastChangedRowId: null,
     lastChangedRowKind: null,
     rowHighlightTimer: null,
+    quotaMode: "conversion",
   };
 
   function isDraftRowId(rowId) {
@@ -67,6 +68,7 @@
   const QUOTA_SIGNUP_URL = "./signup.html?next=%2Fclient-area.html&reason=quota";
   const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html&force_auth=1";
   const USER_TOKEN_KEY = "ofxsimples_user_token";
+  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
   const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
 
   function getAnonymousFingerprint() {
@@ -87,6 +89,15 @@
 
   function clearUserToken() {
     localStorage.removeItem(USER_TOKEN_KEY);
+  }
+
+  function getProfileHint() {
+    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
+  }
+
+  function setProfileHint(email) {
+    const value = String(email || "").trim();
+    if (value) localStorage.setItem(PROFILE_HINT_KEY, value);
   }
 
   function consumeLogoutQueryFlag() {
@@ -229,8 +240,8 @@
     const resetAt = detail && typeof detail === "object" ? formatResetAt(detail.reset_at) : null;
     if (quotaLockMessage) {
       quotaLockMessage.textContent = resetAt
-        ? `VocÃª usou as 3 conversÃµes gratuitas desta semana. O prÃ³ximo ciclo libera novas conversÃµes em ${resetAt}. Cadastre-se para liberar +10 conversÃµes semanais agora.`
-        : "VocÃª usou as 3 conversÃµes gratuitas desta semana. Cadastre-se para liberar +10 conversÃµes semanais agora.";
+        ? `Voce usou as 3 conversoes gratuitas desta semana. O proximo ciclo libera novas conversoes em ${resetAt}. Cadastre-se para liberar +10 conversoes semanais agora.`
+        : "Voce usou as 3 conversoes gratuitas desta semana. Cadastre-se para liberar +10 conversoes semanais agora.";
     }
     if (quotaLockSignupLink) {
       quotaLockSignupLink.setAttribute("href", QUOTA_SIGNUP_URL);
@@ -273,7 +284,7 @@
     if (sessionState === "valid" || sessionState === "unknown") {
       hideQuotaLockOverlay();
       syncHeroAuthLinks();
-      setStatus("Conta detectada. VocÃª jÃ¡ pode converter.", "success");
+      setStatus("Conta detectada. Você já pode converter.", "success");
     }
   }
 
@@ -303,9 +314,38 @@
 
   function syncHeroAuthLinks() {
     const hasSession = Boolean(getUserToken());
-    if (authClientLink) authClientLink.classList.toggle("hidden", !hasSession);
-    if (authLoginLink) authLoginLink.classList.toggle("hidden", hasSession);
-    if (authSignupLink) authSignupLink.classList.toggle("hidden", hasSession);
+    if (topAuthLoginLink) topAuthLoginLink.classList.toggle("hidden", hasSession);
+    if (topAuthPrimaryLink) {
+      if (hasSession) {
+        const email = getProfileHint();
+        const initial = email.charAt(0).toUpperCase();
+        topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${email}</span><span class="top-account-caret">?</span>`;
+        topAuthPrimaryLink.classList.add("top-account-trigger");
+      } else {
+        topAuthPrimaryLink.textContent = "Converter agora";
+        topAuthPrimaryLink.classList.remove("top-account-trigger");
+      }
+      topAuthPrimaryLink.setAttribute("href", hasSession ? "./client-area.html" : "./ofx-convert.html");
+    }
+  }
+
+  async function hydrateTopAccountEmail() {
+    const token = getUserToken();
+    if (!token || !topAuthPrimaryLink) return;
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      if (!response.ok) {
+        if (response.status === 401) clearUserToken();
+        return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      const email = String(payload.email || "conta").trim() || "conta";
+      setProfileHint(email);
+      const initial = email.charAt(0).toUpperCase();
+      topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${email}</span><span class="top-account-caret">?</span>`;
+    } catch (_error) {
+      // Keep fallback.
+    }
   }
 
   function markChangedRow(rowId, kind) {
@@ -442,17 +482,17 @@
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
         dropzoneLoaded.classList.remove("hidden");
-        dropzoneFileMeta.textContent = `${file.name} â€¢ ${formatFileSize(file.size)}`;
+        dropzoneFileMeta.textContent = `${file.name} • ${formatFileSize(file.size)}`;
       } else if (hasRestoredMeta) {
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
         dropzoneLoaded.classList.remove("hidden");
-        dropzoneFileMeta.textContent = `${restoredMeta.name} â€¢ ${formatFileSize(restoredMeta.size)}`;
+        dropzoneFileMeta.textContent = `${restoredMeta.name} • ${formatFileSize(restoredMeta.size)}`;
       } else {
         dropzone.classList.remove("is-filled");
         dropzoneEmpty.classList.remove("hidden");
         dropzoneLoaded.classList.add("hidden");
-        dropzoneFileMeta.textContent = "Pronto para conversÃ£o";
+        dropzoneFileMeta.textContent = "Pronto para conversão";
       }
     }
   }
@@ -500,9 +540,9 @@
 
   function renderKpis(analysis) {
     const entries = [
-      ["TransaÃ§Ãµes", analysis.transactions_total],
+      ["Transações", analysis.transactions_total],
       ["Entradas", formatCurrency(analysis.total_inflows)],
-      ["SaÃ­das", formatCurrency(analysis.total_outflows)],
+      ["Saídas", formatCurrency(analysis.total_outflows)],
       ["Saldo", formatCurrency(analysis.net_total)],
     ];
 
@@ -598,15 +638,15 @@
   async function revertRowToOriginal(rowId) {
     const original = getOriginalRow(rowId);
     if (!original) {
-      setStatus("NÃ£o hÃ¡ versÃ£o original para esta linha.", "error");
+      setStatus("Não há versão original para esta linha.", "error");
       return;
     }
     if (!state.processingId || !state.analysisSnapshot) {
-      setStatus("Converta um arquivo antes de voltar alteraÃ§Ãµes.", "error");
+      setStatus("Converta um arquivo antes de voltar alterações.", "error");
       return;
     }
     try {
-      setStatus("Voltando para versÃ£o original...", null);
+      setStatus("Voltando para versão original...", null);
       const payload = await postConvertEdit(state.processingId, buildPatchFromHistoryRow(rowId, original, "restore"));
       setPreviewRows(payload.preview_transactions || []);
       state.analysisSnapshot.preview_transactions = state.previewRows.map(({ rowId: _rowId, ...row }) => row);
@@ -632,7 +672,7 @@
     }
     const row = state.previewRows.find((item) => item.rowId === rowId);
     if (!row) {
-      setStatus("Linha nÃ£o encontrada para exclusÃ£o.", "error");
+      setStatus("Linha não encontrada para exclusão.", "error");
       return;
     }
     try {
@@ -662,7 +702,7 @@
       return;
     }
     if (state.editingRowId) {
-      setStatus("Salve ou cancele a ediÃ§Ã£o atual antes de criar nova linha.", "error");
+      setStatus("Salve ou cancele a edição atual antes de criar nova linha.", "error");
       return;
     }
     const draftId = `row_draft_${Date.now()}`;
@@ -726,13 +766,13 @@
     }
     const normalizedDate = normalizeDateInput(state.editDraft.date);
     if (!normalizedDate) {
-      setStatus("Data invÃ¡lida. Use dd-mm-yyyy.", "error");
+      setStatus("Data inválida. Use dd-mm-yyyy.", "error");
       return;
     }
 
     const description = String(state.editDraft.description || "").trim();
     if (!description) {
-      setStatus("HistÃ³rico Ã© obrigatÃ³rio.", "error");
+      setStatus("Histórico é obrigatório.", "error");
       return;
     }
 
@@ -740,7 +780,7 @@
     const debit = parseMoneyInput(state.editDraft.debit);
 
     if ((credit === null && debit === null) || (credit !== null && debit !== null)) {
-      setStatus("Preencha apenas crÃ©dito ou dÃ©bito.", "error");
+      setStatus("Preencha apenas crédito ou débito.", "error");
       return;
     }
 
@@ -751,12 +791,12 @@
 
     const rowBeforeSave = state.previewRows.find((item) => item.rowId === rowId);
     if (!rowBeforeSave) {
-      setStatus("Linha nÃ£o encontrada para ediÃ§Ã£o.", "error");
+      setStatus("Linha não encontrada para edição.", "error");
       return;
     }
 
     try {
-      setStatus("Salvando ediÃ§Ã£o...", null);
+      setStatus("Salvando edição...", null);
       const isDraft = isDraftRowId(rowId);
       const payload = await postConvertEdit(
         state.processingId,
@@ -796,16 +836,16 @@
       markChangedRow(isDraft ? "row_1" : rowId, isDraft ? "new" : "changed");
       renderRows();
       persistCurrentViewState();
-      setStatus("Linha atualizada na prÃ©via.", "success");
+      setStatus("Linha atualizada na prévia.", "success");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao salvar ediÃ§Ã£o.", "error");
+      setStatus(error instanceof Error ? error.message : "Falha ao salvar edição.", "error");
     }
   }
 
   function renderRows() {
     const rows = state.previewRows;
     if (!rows || rows.length === 0) {
-      reviewRows.innerHTML = '<tr><td colspan="5">Nenhuma transaÃ§Ã£o para exibir.</td></tr>';
+      reviewRows.innerHTML = '<tr><td colspan="5">Nenhuma transação para exibir.</td></tr>';
       return;
     }
 
@@ -827,11 +867,11 @@
             <td><input class="cell-input cell-input-money" data-edit-field="credit" inputmode="decimal" placeholder="0,00" value="${escapeAttr(state.editDraft.credit)}" /></td>
             <td><input class="cell-input cell-input-money" data-edit-field="debit" inputmode="decimal" placeholder="0,00" value="${escapeAttr(state.editDraft.debit)}" /></td>
             <td class="actions-cell">
-              <button class="btn btn-secondary btn-inline" type="button" data-action="save-row" data-row-id="${row.rowId}" aria-label="Salvar ediÃ§Ã£o">
-                <span class="btn-icon" aria-hidden="true">âœ“</span><span>Salvar</span>
+              <button class="btn btn-secondary btn-inline" type="button" data-action="save-row" data-row-id="${row.rowId}" aria-label="Salvar edição">
+                <span class="btn-icon" aria-hidden="true">?</span><span>Salvar</span>
               </button>
-              <button class="btn btn-inline btn-ghost" type="button" data-action="cancel-row" aria-label="Cancelar ediÃ§Ã£o">
-                <span class="btn-icon" aria-hidden="true">âœ•</span><span>Cancelar</span>
+              <button class="btn btn-inline btn-ghost" type="button" data-action="cancel-row" aria-label="Cancelar edição">
+                <span class="btn-icon" aria-hidden="true">?</span><span>Cancelar</span>
               </button>
             </td>
           </tr>
@@ -842,10 +882,10 @@
         const debitAmount = getDebitAmount(row);
         const creditMarkup = creditAmount !== null
           ? `<span class="amount-credit">${formatCurrency(creditAmount)}</span>`
-          : '<span class="amount-empty">â€”</span>';
+          : '<span class="amount-empty">—</span>';
         const debitMarkup = debitAmount !== null
           ? `<span class="amount-debit">${formatCurrency(debitAmount)}</span>`
-          : '<span class="amount-empty">â€”</span>';
+          : '<span class="amount-empty">—</span>';
         return `
           <tr class="${rowClass} ${rowDeleted ? "row-deleted" : ""}">
             <td>${formatDate(row.date)}</td>
@@ -856,17 +896,17 @@
               ${
                 !rowDeleted && !isDraftRowId(row.rowId)
                   ? `<button class="btn btn-inline btn-secondary" type="button" data-action="edit-row" data-row-id="${row.rowId}" aria-label="Editar linha">
-                <span class="btn-icon" aria-hidden="true">âœŽ</span><span>Editar</span>
+                <span class="btn-icon" aria-hidden="true">?</span><span>Editar</span>
               </button>
               <button class="btn btn-inline btn-ghost" type="button" data-action="delete-row" data-row-id="${row.rowId}" aria-label="Apagar linha">
-                <span class="btn-icon" aria-hidden="true">ðŸ—‘</span><span>Apagar</span>
+                <span class="btn-icon" aria-hidden="true">??</span><span>Apagar</span>
               </button>`
                   : ""
               }
               ${
                 rowChanged
                   ? `<button class="btn btn-inline btn-ghost" type="button" data-action="revert-row" data-row-id="${row.rowId}" aria-label="Voltar para valor original">
-                <span class="btn-icon" aria-hidden="true">â†©</span><span>Voltar</span>
+                <span class="btn-icon" aria-hidden="true">?</span><span>Voltar</span>
               </button>`
                   : ""
               }
@@ -925,7 +965,7 @@
     const canDownload = Boolean(state.analysisId || state.processingId);
     if (downloadOfxBtn) downloadOfxBtn.disabled = !canDownload;
 
-    setStatus("SessÃ£o restaurada. VocÃª pode continuar o download.", "success");
+    setStatus("Sessão restaurada. Você pode continuar o download.", "success");
   }
 
   async function postConvert(formData) {
@@ -936,10 +976,6 @@
 
     const payload = await response.json().catch(() => ({}));
 
-    if (response.status === 404 || response.status === 405) {
-      return null;
-    }
-
     if (!response.ok) {
       throw buildApiError(response.status, payload.detail || "Falha ao converter arquivo.");
     }
@@ -947,28 +983,32 @@
     return payload;
   }
 
-  async function postAnalyze(file) {
-    const formData = new FormData();
-    formData.append("file", file);
+  function setUploadLimitsText(maxUploadBytes, maxPagesPerFile) {
+    if (!uploadLimitsText) return;
+    const mb = Number(maxUploadBytes || 0) / (1024 * 1024);
+    const pages = Number(maxPagesPerFile || 0);
+    const safeMb = Number.isFinite(mb) && mb > 0 ? mb.toFixed(0) : "2";
+    const safePages = Number.isFinite(pages) && pages > 0 ? String(pages) : "5";
+    uploadLimitsText.textContent = `Somente PDF (ate ${safeMb} MB e ${safePages} paginas por arquivo)`;
+  }
 
-    const response = await fetch(`${apiBase}/analyze`, {
-      method: "POST",
-      body: formData,
-    });
-
-      const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw buildApiError(response.status, payload.detail || "Falha ao processar arquivo via /analyze.");
+  async function syncUploadLimitsBySession() {
+    const token = getUserToken();
+    if (!token) {
+      setUploadLimitsText(2 * 1024 * 1024, 5);
+      return;
     }
-
-    return {
-      processing_id: payload.analysis_id,
-      quota_remaining: null,
-      quota_limit: null,
-      analysis: payload,
-      mode: "analyze",
-    };
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      if (!response.ok) {
+        setUploadLimitsText(2 * 1024 * 1024, 5);
+        return;
+      }
+      const me = await response.json().catch(() => ({}));
+      setUploadLimitsText(Number(me.max_upload_size_bytes || 2 * 1024 * 1024), Number(me.max_pages_per_file || 5));
+    } catch (_error) {
+      setUploadLimitsText(2 * 1024 * 1024, 5);
+    }
   }
 
   async function postConvertEdit(processingId, editPatch) {
@@ -985,7 +1025,7 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw buildApiError(response.status, payload.detail || "Falha ao salvar ediÃ§Ã£o.");
+      throw buildApiError(response.status, payload.detail || "Falha ao salvar edição.");
     }
     return payload;
   }
@@ -1018,10 +1058,8 @@
         formData.append("anonymous_fingerprint", getAnonymousFingerprint());
       }
 
-      let payload = await postConvert(formData);
-      if (!payload) {
-        payload = await postAnalyze(file);
-      }
+      const payload = await postConvert(formData);
+      state.quotaMode = String(payload.quota_mode || "conversion").toLowerCase();
 
       const analysis = payload.analysis;
       state.analysisId = analysis.analysis_id;
@@ -1037,11 +1075,8 @@
 
       if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
       if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
-      if (payload.quota_remaining === null || payload.quota_limit === null) {
-        quotaRemainingNode.textContent = "n/d (modo analyze)";
-      } else {
-        quotaRemainingNode.textContent = `${payload.quota_remaining} / ${payload.quota_limit}`;
-      }
+      const quotaLabel = state.quotaMode === "pages" ? "paginas" : "conversoes";
+      quotaRemainingNode.textContent = `${payload.quota_remaining} / ${payload.quota_limit} (${quotaLabel})`;
 
       reviewSection.classList.remove("hidden");
       downloadSection.classList.remove("hidden");
@@ -1050,11 +1085,7 @@
 
       persistCurrentViewState();
 
-      if (payload.mode === "analyze") {
-        setStatus("ConversÃ£o concluÃ­da via /analyze. Revise os dados e baixe o relatÃ³rio.", "success");
-      } else {
-        setStatus("ConversÃ£o concluÃ­da. Revise os dados e baixe o relatÃ³rio.", "success");
-      }
+      setStatus("Conversão concluída. Revise os dados e baixe o relatório.", "success");
       reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado.";
@@ -1063,7 +1094,7 @@
       const code = error && typeof error === "object" ? String(error.code || "") : "";
       if (isUnrecognizedPdfLayoutError(message)) {
         setStatusHtml(
-          'NÃ£o conseguimos identificar as transaÃ§Ãµes neste PDF. <a href="./contato.html">Falar com suporte</a> ou tente outro arquivo.',
+          'Não conseguimos identificar as transações neste PDF. <a href="./contato.html">Falar com suporte</a> ou tente outro arquivo.',
           "error",
         );
         return;
@@ -1071,9 +1102,13 @@
       if (status === 429 && code === "weekly_quota_exceeded") {
         if (!getUserToken()) {
           showQuotaLockOverlay(detail);
-          setStatus("VocÃª atingiu o limite gratuito desta semana.", "error");
+          setStatus("Você atingiu o limite gratuito desta semana.", "error");
           return;
         }
+      }
+      if (status === 429 && code === "monthly_pages_quota_exceeded") {
+        setStatus("Voce atingiu o limite mensal de paginas do seu plano.", "error");
+        return;
       }
       setStatus(message, "error");
     } finally {
@@ -1220,6 +1255,8 @@
   setSelectedFileLabel();
   const didForceLogout = consumeLogoutQueryFlag();
   syncHeroAuthLinks();
+  void hydrateTopAccountEmail();
+  void syncUploadLimitsBySession();
   syncQuotaAuthLinks();
   const navigationType = getNavigationType();
   const shouldRestoreState = navigationType === "reload";
@@ -1232,6 +1269,6 @@
   }
   void syncQuotaLockState();
   if (didForceLogout) {
-    setStatus("SessÃ£o encerrada. VocÃª estÃ¡ no modo gratuito (anÃ´nimo).", "success");
+    setStatus("Sessão encerrada. Você está no modo gratuito (anônimo).", "success");
   }
 })();

@@ -17,6 +17,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./client-area.css" />
+  <link rel="stylesheet" href="./topbar-unified.css?v=1" />
 </head>
 <body class="client-area-page">
 <!-- Google Tag Manager (noscript) -->
@@ -28,15 +29,30 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <div class="top-nav-inner">
       <a href="./index.html" class="top-brand">OFX Simples</a>
       <div class="top-nav-links">
-        <a href="./ofx-convert.html">Nova conversão</a>
+        <a href="./index.html#como-funciona">Como funciona</a>
+        <a href="./planos.html">Planos</a>
+        <a href="./index.html#faq">FAQ</a>
         <a href="./contato.html">Contato</a>
-        <a href="./client-area.html" aria-current="page">Histórico</a>
       </div>
       <div class="top-auth-actions">
-        <p class="user-email" id="profile-email">-</p>
-        <button id="logout-btn" class="top-auth-btn logout-btn" type="button" aria-label="Sair da conta">
-          <span aria-hidden="true">Sair</span>
-        </button>
+        <div id="account-menu" class="account-menu">
+          <button
+            id="account-menu-trigger"
+            class="account-trigger"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="account-menu-panel"
+          >
+            <span id="account-avatar" class="account-avatar" aria-hidden="true">U</span>
+            <span id="account-email" class="account-email">conta</span>
+            <span class="account-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="account-menu-panel" class="account-panel hidden" role="menu" aria-label="Menu da conta">
+            <a href="#profile-plan" role="menuitem">Perfil e plano</a>
+            <button id="logout-btn" class="account-logout" type="button" role="menuitem">Sair</button>
+          </div>
+        </div>
       </div>
     </div>    
   </nav>
@@ -54,8 +70,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <h1 id="history-title">Suas conversões</h1>
         <div class="history-divider" aria-hidden="true"></div>
       </div>
-      <p id="quota-text" class="quota-text">Cota restante: -</p>
+      <p id="quota-text" class="quota-text anchor-target">Cota restante: -</p>
+      <p id="plan-text" class="quota-text anchor-target">Plano: -</p>
       <p id="status-msg" class="status-msg" role="status" aria-live="polite"></p>
+
+      <div id="profile-plan" class="account-info-card">
+        <h2>Perfil e plano</h2>
+        <p><strong>E-mail:</strong> <span id="profile-email">-</span></p>
+        <p><strong>Plano:</strong> <span id="plan-summary">-</span></p>
+      </div>
 
       <div class="table-card">
         <div class="table-wrap">

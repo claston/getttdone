@@ -1,0 +1,196 @@
+:root {
+  --topbar-bg: rgba(248, 249, 250, 0.86);
+  --topbar-border: rgba(67, 70, 86, 0.12);
+  --topbar-ink: #191c1d;
+  --topbar-ink-soft: #4c5458;
+  --topbar-primary: #0f4fdb;
+  --topbar-primary-strong: #0839a8;
+}
+
+.topbar,
+.top-nav-shell {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--topbar-border);
+  background: var(--topbar-bg);
+}
+
+.topbar-inner,
+.top-nav-inner {
+  width: min(1200px, calc(100% - 2rem));
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 78px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.brand,
+.top-brand {
+  color: var(--topbar-ink);
+  text-decoration: none;
+  font-family: "Manrope", "Source Sans 3", "Inter", "Segoe UI", sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 1.34rem !important;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.top-links,
+.top-nav-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.top-links a,
+.top-nav-links a {
+  text-decoration: none;
+  color: var(--topbar-ink-soft);
+  font-family: "Manrope", "Source Sans 3", "Inter", "Segoe UI", sans-serif !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  border: 0;
+  box-shadow: none;
+  transition: color 160ms ease;
+}
+
+.top-links a:hover,
+.top-nav-links a:hover {
+  color: var(--topbar-primary);
+  border: 0;
+  box-shadow: none;
+}
+
+.top-links a[aria-current="page"],
+.top-nav-links a[aria-current="page"],
+.top-links a.is-current,
+.top-nav-links a.is-current {
+  color: var(--topbar-primary);
+  border: 0;
+  box-shadow: none;
+}
+
+.top-actions,
+.top-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-plain,
+.top-auth-link {
+  color: var(--topbar-ink);
+  text-decoration: none;
+  font-family: "Manrope", "Source Sans 3", "Inter", "Segoe UI", sans-serif !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+}
+
+.top-auth-btn,
+.top-actions .btn,
+.top-actions .btn-primary {
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+}
+
+.top-auth-btn,
+.top-actions .btn-primary {
+  background: linear-gradient(130deg, var(--topbar-primary) 0%, #2a69f6 100%);
+  color: #fff;
+}
+
+.top-auth-btn:hover,
+.top-actions .btn-primary:hover {
+  background: linear-gradient(130deg, var(--topbar-primary-strong) 0%, #1f58d9 100%);
+}
+
+.top-account-trigger {
+  border: 1px solid rgba(67, 70, 86, 0.18);
+  background: #fff !important;
+  color: var(--topbar-ink) !important;
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem 0.35rem 0.38rem !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.top-account-avatar {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--topbar-primary), #2a69f6);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.top-account-email {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--topbar-ink);
+  font-weight: 500;
+}
+
+.top-account-caret {
+  font-size: 0.72rem;
+  color: var(--topbar-ink-soft);
+}
+
+@media (max-width: 980px) {
+  .topbar-inner,
+  .top-nav-inner {
+    width: min(1200px, calc(100% - 1.4rem));
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "brand menu"
+      "links links"
+      "actions actions";
+    padding: 14px 0;
+    row-gap: 12px;
+  }
+
+  .brand,
+  .top-brand {
+    grid-area: brand;
+  }
+
+  .menu-toggle {
+    grid-area: menu;
+    justify-self: end;
+  }
+
+  .top-links,
+  .top-nav-links {
+    grid-area: links;
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .top-links.is-open {
+    display: flex;
+  }
+
+  .top-auth-actions,
+  .top-actions {
+    grid-area: actions;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

@@ -93,6 +93,10 @@ body {
   font-weight: 700;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .top-auth-btn {
   text-decoration: none;
   display: inline-flex;

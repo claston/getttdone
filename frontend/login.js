@@ -2,7 +2,6 @@
   const form = document.getElementById("login-form");
   const statusMsg = document.getElementById("status-msg");
   const signupLink = document.getElementById("signup-link");
-  const topSignupLink = document.getElementById("top-signup-link");
   const googleLoginBtn = document.getElementById("google-login-btn");
   const USER_TOKEN_KEY = "ofxsimples_user_token";
 
@@ -95,10 +94,6 @@
 
   if (signupLink) {
     signupLink.href = `./signup.html?next=${encodeURIComponent(getNextPath())}`;
-  }
-
-  if (topSignupLink) {
-    topSignupLink.href = `./signup.html?next=${encodeURIComponent(getNextPath())}`;
   }
 
   if (form) {

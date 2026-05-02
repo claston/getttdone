@@ -17,6 +17,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./ofx-convert.css?v=6" />
+  <link rel="stylesheet" href="./topbar-unified.css?v=1" />
 </head>
 <body>
 <!-- Google Tag Manager (noscript) -->
@@ -31,15 +32,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         Menu
       </button>
       <nav id="top-links" class="top-links" aria-label="Navegação principal">
-        <a href="#upload-section">Como funciona</a>
-        <a href="#review-section">Revisão</a>
-        <a href="#download-section">Download</a>
+        <a href="./index.html#como-funciona">Como funciona</a>
+        <a href="./planos.html">Planos</a>
+        <a href="./index.html#faq">FAQ</a>
         <a href="./contato.html">Contato</a>
       </nav>
       <div class="top-actions">
-        <a id="auth-signup-link" class="link-plain" href="./signup.html?next=%2Fofx-convert.html">Criar conta</a>
-        <a id="auth-login-link" class="btn btn-primary topbar-btn" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
-        <a id="auth-client-link" class="btn btn-primary topbar-btn hidden" href="./client-area.html">Minha Conta</a>
+        <a id="top-auth-login-link" class="link-plain" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
       </div>
     </div>
   </header>
@@ -53,7 +52,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <section id="upload-section" class="panel" aria-labelledby="upload-title">
       <div class="panel-head">
         <h2 id="upload-title">1. Upload</h2>
-        <p>Somente PDF (até 2 MB)</p>
+        <p id="upload-limits-text">Somente PDF (ate 2 MB e 5 paginas por arquivo)</p>
       </div>
 
       <label id="dropzone" class="dropzone" for="file-input" tabindex="0">

@@ -90,6 +90,86 @@ body {
   gap: 0.8rem;
 }
 
+.account-menu {
+  position: relative;
+}
+
+.account-trigger {
+  border: 1px solid rgba(67, 70, 86, 0.18);
+  background: #fff;
+  color: var(--on-surface);
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 0.35rem 0.7rem 0.35rem 0.38rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-family: "Manrope", "Inter", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.account-avatar {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.account-email {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.account-caret {
+  font-size: 0.72rem;
+  color: var(--on-surface-variant);
+}
+
+.account-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: 220px;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 18px 28px -20px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(67, 70, 86, 0.14);
+  padding: 0.4rem;
+  z-index: 10;
+}
+
+.account-panel a,
+.account-logout {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  color: var(--on-surface);
+  border-radius: 0.55rem;
+  padding: 0.56rem 0.62rem;
+  display: block;
+  font-family: "Manrope", "Inter", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-panel a:hover,
+.account-logout:hover {
+  background: var(--surface-container-low);
+}
+
 .top-auth-btn {
   text-decoration: none;
   display: inline-flex;
@@ -101,6 +181,8 @@ body {
   font-family: "Manrope", "Inter", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: #fff;
 }
 
 .user-email {
@@ -116,6 +198,10 @@ body {
   color: var(--on-surface);
   cursor: pointer;
   transition: background-color 220ms cubic-bezier(0.16, 1, 0.3, 1), color 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hidden {
+  display: none !important;
 }
 
 .logout-btn:hover {
@@ -194,6 +280,31 @@ body {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
   color: var(--on-surface-variant);
+}
+
+.anchor-target {
+  scroll-margin-top: 100px;
+}
+
+.account-info-card {
+  margin-top: 0.9rem;
+  border-radius: 0.85rem;
+  background: var(--surface-container-lowest);
+  box-shadow: 0 0 0 1px rgba(25, 28, 29, 0.08);
+  padding: 0.9rem 1rem;
+}
+
+.account-info-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.account-info-card p {
+  margin: 0.2rem 0;
+  font-size: 0.95rem;
 }
 
 .status-msg {
@@ -361,10 +472,14 @@ tbody tr:hover {
     gap: 0.45rem;
   }
 
-  .top-auth-btn {
-    min-height: 36px;
-    padding: 0.42rem 0.72rem;
+  .account-email {
+    max-width: 120px;
     font-size: 0.74rem;
+  }
+
+  .account-trigger {
+    min-height: 36px;
+    padding: 0.3rem 0.56rem 0.3rem 0.34rem;
   }
 
   .cta-new {

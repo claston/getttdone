@@ -1,11 +1,19 @@
 (function () {
   const profileEmail = document.getElementById("profile-email");
+  const accountEmail = document.getElementById("account-email");
+  const accountAvatar = document.getElementById("account-avatar");
+  const accountMenu = document.getElementById("account-menu");
+  const accountMenuTrigger = document.getElementById("account-menu-trigger");
+  const accountMenuPanel = document.getElementById("account-menu-panel");
+  const planSummary = document.getElementById("plan-summary");
   const quotaText = document.getElementById("quota-text");
+  const planText = document.getElementById("plan-text");
   const historyRows = document.getElementById("history-rows");
   const statusMsg = document.getElementById("status-msg");
   const logoutBtn = document.getElementById("logout-btn");
   const viewAllLink = document.getElementById("view-all-link");
   const USER_TOKEN_KEY = "ofxsimples_user_token";
+  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
 
   function resolveApiBase() {
     const host = window.location.hostname;
@@ -30,6 +38,52 @@
 
   function clearUserToken() {
     localStorage.removeItem(USER_TOKEN_KEY);
+    localStorage.removeItem(PROFILE_HINT_KEY);
+  }
+
+  function getProfileHint() {
+    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
+  }
+
+  function setProfileHint(email) {
+    const value = String(email || "").trim();
+    if (value) {
+      localStorage.setItem(PROFILE_HINT_KEY, value);
+    }
+  }
+
+  function getInitialLabel(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "U";
+    const first = raw[0] || "U";
+    return first.toUpperCase();
+  }
+
+  function bootstrapAccountPreview() {
+    const email = getProfileHint();
+    if (accountEmail) {
+      accountEmail.textContent = email;
+    }
+    if (accountAvatar) {
+      accountAvatar.textContent = getInitialLabel(email);
+    }
+  }
+
+  function closeAccountMenu() {
+    if (!accountMenuTrigger || !accountMenuPanel) return;
+    accountMenuPanel.classList.add("hidden");
+    accountMenuTrigger.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleAccountMenu() {
+    if (!accountMenuTrigger || !accountMenuPanel) return;
+    const isOpen = !accountMenuPanel.classList.contains("hidden");
+    if (isOpen) {
+      closeAccountMenu();
+      return;
+    }
+    accountMenuPanel.classList.remove("hidden");
+    accountMenuTrigger.setAttribute("aria-expanded", "true");
   }
 
   function escapeHtml(value) {
@@ -181,8 +235,33 @@
       const me = await fetchJson(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
       const history = await fetchJson(`${apiBase}/client/conversions?user_token=${encodeURIComponent(token)}&limit=20`);
 
-      profileEmail.textContent = me.email || "-";
-      quotaText.textContent = `Cota restante: ${me.quota_remaining} / ${me.quota_limit}`;
+      if (profileEmail) {
+        profileEmail.textContent = me.email || "-";
+      }
+      if (accountEmail) {
+        accountEmail.textContent = me.email || "-";
+      }
+      if (accountAvatar) {
+        accountAvatar.textContent = getInitialLabel(me.name || me.email || "U");
+      }
+      setProfileHint(me.email || "");
+      const quotaMode = String(me.quota_mode || "conversion").toLowerCase();
+      if (quotaMode === "pages") {
+        quotaText.textContent = `Paginas restantes no mes: ${me.quota_remaining} / ${me.quota_limit}`;
+      } else {
+        quotaText.textContent = `Conversoes restantes na semana: ${me.quota_remaining} / ${me.quota_limit}`;
+      }
+      const maxMb = Number(me.max_upload_size_bytes || 0) / (1024 * 1024);
+      const maxPages = Number(me.max_pages_per_file || 0);
+      if (planText) {
+        planText.textContent =
+          quotaMode === "pages"
+            ? `Plano pago: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} paginas`
+            : `Plano gratuito: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} paginas`;
+      }
+      if (planSummary) {
+        planSummary.textContent = quotaMode === "pages" ? "Plano pago por paginas" : "Plano gratuito por conversoes";
+      }
       renderRows(history.items || []);
       setStatus("Historico carregado com sucesso.", null);
 
@@ -203,10 +282,33 @@
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      closeAccountMenu();
       clearUserToken();
       window.location.href = "./ofx-convert.html?logout=1";
     });
   }
 
+  if (accountMenuTrigger) {
+    accountMenuTrigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleAccountMenu();
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!accountMenu || !accountMenuPanel) return;
+    const target = event.target;
+    if (target instanceof Node && !accountMenu.contains(target)) {
+      closeAccountMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAccountMenu();
+    }
+  });
+
+  bootstrapAccountPreview();
   void loadClientArea();
 })();
