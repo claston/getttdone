@@ -106,7 +106,7 @@ body {
   gap: 0.55rem;
   cursor: pointer;
   font-family: "Manrope", "Inter", sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
@@ -160,7 +160,7 @@ body {
   padding: 0.56rem 0.62rem;
   display: block;
   font-family: "Manrope", "Inter", sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -179,7 +179,7 @@ body {
   padding: 0.5rem 1rem;
   border-radius: 0.7rem;
   font-family: "Manrope", "Inter", sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 700;
   background: linear-gradient(135deg, var(--primary), var(--primary-container));
   color: #fff;
@@ -465,7 +465,7 @@ tbody tr:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.82rem;
+    font-size: 0.92rem;
   }
 
   .top-auth-actions {

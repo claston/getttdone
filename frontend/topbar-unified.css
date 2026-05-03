@@ -111,7 +111,8 @@
   background: linear-gradient(130deg, var(--topbar-primary-strong) 0%, #1f58d9 100%);
 }
 
-.top-account-trigger {
+.top-account-trigger,
+.account-trigger {
   border: 1px solid rgba(67, 70, 86, 0.18);
   background: #fff !important;
   color: var(--topbar-ink) !important;
@@ -121,9 +122,15 @@
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+  font-family: "Manrope", "Source Sans 3", "Inter", "Segoe UI", sans-serif !important;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
 }
 
-.top-account-avatar {
+.top-account-avatar,
+.account-avatar {
   width: 1.7rem;
   height: 1.7rem;
   border-radius: 999px;
@@ -136,16 +143,20 @@
   font-weight: 800;
 }
 
-.top-account-email {
+.top-account-email,
+.account-email {
   max-width: 180px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--topbar-ink);
+  font-size: inherit;
+  line-height: 1;
   font-weight: 500;
 }
 
-.top-account-caret {
+.top-account-caret,
+.account-caret {
   font-size: 0.72rem;
   color: var(--topbar-ink-soft);
 }
