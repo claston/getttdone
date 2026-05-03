@@ -52,10 +52,7 @@
   }
 
   function renderLoggedOutTop() {
-    if (topAuthLoginLink) {
-      topAuthLoginLink.classList.remove("hidden");
-      topAuthLoginLink.setAttribute("href", "./login.html?next=%2Fofx-convert.html");
-    }
+    if (topAuthLoginLink) topAuthLoginLink.classList.remove("hidden");
     if (topAuthPrimaryLink) {
       topAuthPrimaryLink.textContent = "Converter agora";
       topAuthPrimaryLink.classList.remove("top-account-trigger");

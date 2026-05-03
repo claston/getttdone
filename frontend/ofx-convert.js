@@ -8,15 +8,15 @@
   const selectedFile = document.getElementById("selected-file");
   const convertBtn = document.getElementById("convert-btn");
   const statusMsg = document.getElementById("status-msg");
-  const authLoginLink = document.getElementById("auth-login-link");
-  const authSignupLink = document.getElementById("auth-signup-link");
-  const authClientLink = document.getElementById("auth-client-link");
+  const topAuthLoginLink = document.getElementById("top-auth-login-link");
+  const topAuthPrimaryLink = document.getElementById("top-auth-primary-link");
   const menuToggle = document.getElementById("menu-toggle");
   const topLinks = document.getElementById("top-links");
   const quotaLockOverlay = document.getElementById("quota-lock-overlay");
   const quotaLockMessage = document.getElementById("quota-lock-message");
   const quotaLockSignupLink = document.getElementById("quota-lock-signup-link");
   const quotaLockLoginLink = document.getElementById("quota-lock-login-link");
+  const uploadLimitsText = document.getElementById("upload-limits-text");
 
   const reviewSection = document.getElementById("review-section");
   const downloadSection = document.getElementById("download-section");
@@ -43,6 +43,7 @@
     lastChangedRowId: null,
     lastChangedRowKind: null,
     rowHighlightTimer: null,
+    quotaMode: "conversion",
   };
 
   function isDraftRowId(rowId) {
@@ -67,6 +68,7 @@
   const QUOTA_SIGNUP_URL = "./signup.html?next=%2Fclient-area.html&reason=quota";
   const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html&force_auth=1";
   const USER_TOKEN_KEY = "ofxsimples_user_token";
+  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
   const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
 
   function getAnonymousFingerprint() {
@@ -87,6 +89,15 @@
 
   function clearUserToken() {
     localStorage.removeItem(USER_TOKEN_KEY);
+  }
+
+  function getProfileHint() {
+    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
+  }
+
+  function setProfileHint(email) {
+    const value = String(email || "").trim();
+    if (value) localStorage.setItem(PROFILE_HINT_KEY, value);
   }
 
   function consumeLogoutQueryFlag() {
@@ -229,8 +240,8 @@
     const resetAt = detail && typeof detail === "object" ? formatResetAt(detail.reset_at) : null;
     if (quotaLockMessage) {
       quotaLockMessage.textContent = resetAt
-        ? `Você usou as 3 conversões gratuitas desta semana. O próximo ciclo libera novas conversões em ${resetAt}. Cadastre-se para liberar +10 conversões semanais agora.`
-        : "Você usou as 3 conversões gratuitas desta semana. Cadastre-se para liberar +10 conversões semanais agora.";
+        ? `Voce usou as 3 conversoes gratuitas desta semana. O proximo ciclo libera novas conversoes em ${resetAt}. Cadastre-se para liberar +10 conversoes semanais agora.`
+        : "Voce usou as 3 conversoes gratuitas desta semana. Cadastre-se para liberar +10 conversoes semanais agora.";
     }
     if (quotaLockSignupLink) {
       quotaLockSignupLink.setAttribute("href", QUOTA_SIGNUP_URL);
@@ -303,9 +314,38 @@
 
   function syncHeroAuthLinks() {
     const hasSession = Boolean(getUserToken());
-    if (authClientLink) authClientLink.classList.toggle("hidden", !hasSession);
-    if (authLoginLink) authLoginLink.classList.toggle("hidden", hasSession);
-    if (authSignupLink) authSignupLink.classList.toggle("hidden", hasSession);
+    if (topAuthLoginLink) topAuthLoginLink.classList.toggle("hidden", hasSession);
+    if (topAuthPrimaryLink) {
+      if (hasSession) {
+        const email = getProfileHint();
+        const initial = email.charAt(0).toUpperCase();
+        topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${email}</span><span class="top-account-caret">&#9662;</span>`;
+        topAuthPrimaryLink.classList.add("top-account-trigger");
+      } else {
+        topAuthPrimaryLink.textContent = "Converter agora";
+        topAuthPrimaryLink.classList.remove("top-account-trigger");
+      }
+      topAuthPrimaryLink.setAttribute("href", hasSession ? "./client-area.html" : "./ofx-convert.html");
+    }
+  }
+
+  async function hydrateTopAccountEmail() {
+    const token = getUserToken();
+    if (!token || !topAuthPrimaryLink) return;
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      if (!response.ok) {
+        if (response.status === 401) clearUserToken();
+        return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      const email = String(payload.email || "conta").trim() || "conta";
+      setProfileHint(email);
+      const initial = email.charAt(0).toUpperCase();
+      topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${email}</span><span class="top-account-caret">&#9662;</span>`;
+    } catch (_error) {
+      // Keep fallback.
+    }
   }
 
   function markChangedRow(rowId, kind) {
@@ -442,12 +482,12 @@
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
         dropzoneLoaded.classList.remove("hidden");
-        dropzoneFileMeta.textContent = `${file.name} • ${formatFileSize(file.size)}`;
+        dropzoneFileMeta.textContent = `${file.name} - ${formatFileSize(file.size)}`;
       } else if (hasRestoredMeta) {
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
         dropzoneLoaded.classList.remove("hidden");
-        dropzoneFileMeta.textContent = `${restoredMeta.name} • ${formatFileSize(restoredMeta.size)}`;
+        dropzoneFileMeta.textContent = `${restoredMeta.name} - ${formatFileSize(restoredMeta.size)}`;
       } else {
         dropzone.classList.remove("is-filled");
         dropzoneEmpty.classList.remove("hidden");
@@ -498,9 +538,20 @@
     resetConversionSession({ silent: false });
   }
 
+  function resolveConvertedPages(analysis) {
+    const metrics = analysis && typeof analysis === "object" ? analysis.pdf_processing_metrics : null;
+    const pageCount = metrics && typeof metrics === "object" ? Number(metrics.page_count) : NaN;
+    if (Number.isFinite(pageCount) && pageCount > 0) {
+      return String(Math.trunc(pageCount));
+    }
+    return "1";
+  }
+
   function renderKpis(analysis) {
+    const pagesConverted = resolveConvertedPages(analysis);
     const entries = [
       ["Transações", analysis.transactions_total],
+      ["Páginas convertidas", pagesConverted],
       ["Entradas", formatCurrency(analysis.total_inflows)],
       ["Saídas", formatCurrency(analysis.total_outflows)],
       ["Saldo", formatCurrency(analysis.net_total)],
@@ -828,10 +879,10 @@
             <td><input class="cell-input cell-input-money" data-edit-field="debit" inputmode="decimal" placeholder="0,00" value="${escapeAttr(state.editDraft.debit)}" /></td>
             <td class="actions-cell">
               <button class="btn btn-secondary btn-inline" type="button" data-action="save-row" data-row-id="${row.rowId}" aria-label="Salvar edição">
-                <span class="btn-icon" aria-hidden="true">✓</span><span>Salvar</span>
+                <span class="btn-icon" aria-hidden="true">&#10003;</span><span>Salvar</span>
               </button>
               <button class="btn btn-inline btn-ghost" type="button" data-action="cancel-row" aria-label="Cancelar edição">
-                <span class="btn-icon" aria-hidden="true">✕</span><span>Cancelar</span>
+                <span class="btn-icon" aria-hidden="true">&#10005;</span><span>Cancelar</span>
               </button>
             </td>
           </tr>
@@ -856,17 +907,17 @@
               ${
                 !rowDeleted && !isDraftRowId(row.rowId)
                   ? `<button class="btn btn-inline btn-secondary" type="button" data-action="edit-row" data-row-id="${row.rowId}" aria-label="Editar linha">
-                <span class="btn-icon" aria-hidden="true">✎</span><span>Editar</span>
+                <span class="btn-icon" aria-hidden="true">&#9998;</span><span>Editar</span>
               </button>
               <button class="btn btn-inline btn-ghost" type="button" data-action="delete-row" data-row-id="${row.rowId}" aria-label="Apagar linha">
-                <span class="btn-icon" aria-hidden="true">🗑</span><span>Apagar</span>
+                <span class="btn-icon" aria-hidden="true">&#128465;</span><span>Apagar</span>
               </button>`
                   : ""
               }
               ${
                 rowChanged
                   ? `<button class="btn btn-inline btn-ghost" type="button" data-action="revert-row" data-row-id="${row.rowId}" aria-label="Voltar para valor original">
-                <span class="btn-icon" aria-hidden="true">↩</span><span>Voltar</span>
+                <span class="btn-icon" aria-hidden="true">&#8634;</span><span>Voltar</span>
               </button>`
                   : ""
               }
@@ -936,10 +987,6 @@
 
     const payload = await response.json().catch(() => ({}));
 
-    if (response.status === 404 || response.status === 405) {
-      return null;
-    }
-
     if (!response.ok) {
       throw buildApiError(response.status, payload.detail || "Falha ao converter arquivo.");
     }
@@ -947,28 +994,32 @@
     return payload;
   }
 
-  async function postAnalyze(file) {
-    const formData = new FormData();
-    formData.append("file", file);
+  function setUploadLimitsText(maxUploadBytes, maxPagesPerFile) {
+    if (!uploadLimitsText) return;
+    const mb = Number(maxUploadBytes || 0) / (1024 * 1024);
+    const pages = Number(maxPagesPerFile || 0);
+    const safeMb = Number.isFinite(mb) && mb > 0 ? mb.toFixed(0) : "2";
+    const safePages = Number.isFinite(pages) && pages > 0 ? String(pages) : "5";
+    uploadLimitsText.textContent = `Somente PDF (ate ${safeMb} MB e ${safePages} paginas por arquivo)`;
+  }
 
-    const response = await fetch(`${apiBase}/analyze`, {
-      method: "POST",
-      body: formData,
-    });
-
-      const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw buildApiError(response.status, payload.detail || "Falha ao processar arquivo via /analyze.");
+  async function syncUploadLimitsBySession() {
+    const token = getUserToken();
+    if (!token) {
+      setUploadLimitsText(2 * 1024 * 1024, 5);
+      return;
     }
-
-    return {
-      processing_id: payload.analysis_id,
-      quota_remaining: null,
-      quota_limit: null,
-      analysis: payload,
-      mode: "analyze",
-    };
+    try {
+      const response = await fetch(`${apiBase}/auth/me?user_token=${encodeURIComponent(token)}`);
+      if (!response.ok) {
+        setUploadLimitsText(2 * 1024 * 1024, 5);
+        return;
+      }
+      const me = await response.json().catch(() => ({}));
+      setUploadLimitsText(Number(me.max_upload_size_bytes || 2 * 1024 * 1024), Number(me.max_pages_per_file || 5));
+    } catch (_error) {
+      setUploadLimitsText(2 * 1024 * 1024, 5);
+    }
   }
 
   async function postConvertEdit(processingId, editPatch) {
@@ -1018,10 +1069,8 @@
         formData.append("anonymous_fingerprint", getAnonymousFingerprint());
       }
 
-      let payload = await postConvert(formData);
-      if (!payload) {
-        payload = await postAnalyze(file);
-      }
+      const payload = await postConvert(formData);
+      state.quotaMode = String(payload.quota_mode || "conversion").toLowerCase();
 
       const analysis = payload.analysis;
       state.analysisId = analysis.analysis_id;
@@ -1037,11 +1086,8 @@
 
       if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
       if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
-      if (payload.quota_remaining === null || payload.quota_limit === null) {
-        quotaRemainingNode.textContent = "n/d (modo analyze)";
-      } else {
-        quotaRemainingNode.textContent = `${payload.quota_remaining} / ${payload.quota_limit}`;
-      }
+      const quotaLabel = state.quotaMode === "pages" ? "paginas" : "conversoes";
+      quotaRemainingNode.textContent = `${payload.quota_remaining} / ${payload.quota_limit} (${quotaLabel})`;
 
       reviewSection.classList.remove("hidden");
       downloadSection.classList.remove("hidden");
@@ -1050,11 +1096,7 @@
 
       persistCurrentViewState();
 
-      if (payload.mode === "analyze") {
-        setStatus("Conversão concluída via /analyze. Revise os dados e baixe o relatório.", "success");
-      } else {
-        setStatus("Conversão concluída. Revise os dados e baixe o relatório.", "success");
-      }
+      setStatus("Conversão concluída. Revise os dados e baixe o relatório.", "success");
       reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado.";
@@ -1074,6 +1116,10 @@
           setStatus("Você atingiu o limite gratuito desta semana.", "error");
           return;
         }
+      }
+      if (status === 429 && code === "monthly_pages_quota_exceeded") {
+        setStatus("Voce atingiu o limite mensal de paginas do seu plano.", "error");
+        return;
       }
       setStatus(message, "error");
     } finally {
@@ -1220,6 +1266,8 @@
   setSelectedFileLabel();
   const didForceLogout = consumeLogoutQueryFlag();
   syncHeroAuthLinks();
+  void hydrateTopAccountEmail();
+  void syncUploadLimitsBySession();
   syncQuotaAuthLinks();
   const navigationType = getNavigationType();
   const shouldRestoreState = navigationType === "reload";

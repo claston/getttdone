@@ -176,6 +176,20 @@ h1 {
   margin-right: auto;
 }
 
+.lead-desktop-break {
+  display: none;
+}
+
+@media (min-width: 981px) {
+  .lead {
+    max-width: 76ch;
+  }
+
+  .lead-desktop-break {
+    display: block;
+  }
+}
+
 .hero-cta {
   margin-top: 24px;
   display: flex;

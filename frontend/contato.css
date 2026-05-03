@@ -105,6 +105,10 @@ body {
   background: linear-gradient(130deg, var(--primary-strong) 0%, #1f58d9 100%);
 }
 
+.hidden {
+  display: none !important;
+}
+
 .page {
   max-width: 1200px;
   margin: 0 auto;
