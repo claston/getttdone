@@ -37,6 +37,9 @@ def register(
         user_token=user.token,
         quota_remaining=service.get_remaining_quota(identity),
         quota_limit=identity.quota_limit,
+        quota_mode=identity.quota_mode,
+        plan_code=identity.plan_code,
+        plan_name=identity.plan_name,
     )
 
 
@@ -58,6 +61,9 @@ def login(
         user_token=user.token,
         quota_remaining=service.get_remaining_quota(identity),
         quota_limit=identity.quota_limit,
+        quota_mode=identity.quota_mode,
+        plan_code=identity.plan_code,
+        plan_name=identity.plan_name,
     )
 
 
@@ -78,6 +84,9 @@ def me(
         email=user.email,
         quota_remaining=service.get_remaining_quota(identity),
         quota_limit=identity.quota_limit,
+        quota_mode=identity.quota_mode,
+        plan_code=identity.plan_code,
+        plan_name=identity.plan_name,
     )
 
 

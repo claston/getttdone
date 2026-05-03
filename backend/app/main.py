@@ -16,6 +16,7 @@ from app.routers import (
     contact_router,
     convert_router,
     health_router,
+    plans_router,
     reconcile_router,
     report_router,
 )
@@ -67,6 +68,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(plans_router)
 app.include_router(analyze_router)
 app.include_router(convert_router)
 app.include_router(auth_router)

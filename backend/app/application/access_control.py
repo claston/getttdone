@@ -29,8 +29,11 @@ from app.application.errors import (
 ANONYMOUS_QUOTA_LIMIT = 3
 REGISTERED_QUOTA_LIMIT = 10
 MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024
+PAID_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+PAID_MAX_PAGES_PER_FILE = 100
 PASSWORD_HASH_ITERATIONS = 390_000
 QUOTA_WINDOW_DAYS = 7
+MONTHLY_QUOTA_WINDOW_DAYS = 30
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,12 @@ class IdentityContext:
     identity_type: str
     identity_id: str
     quota_limit: int
+    quota_mode: str = "conversion"
+    quota_window_days: int = QUOTA_WINDOW_DAYS
+    max_upload_size_bytes: int = MAX_UPLOAD_SIZE_BYTES
+    max_pages_per_file: int = 5
+    plan_code: str | None = None
+    plan_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,10 +97,25 @@ class AccessControlService:
             user_id = self._decode_token(user_token)
             if not self._user_exists(user_id):
                 raise InvalidUserTokenError
+            active_plan = self._read_active_user_plan(user_id=user_id)
+            if active_plan is not None:
+                return IdentityContext(
+                    identity_type="user",
+                    identity_id=user_id,
+                    quota_limit=int(active_plan["quota_limit"]),
+                    quota_mode=str(active_plan["quota_mode"]),
+                    quota_window_days=int(active_plan["quota_window_days"]),
+                    max_upload_size_bytes=int(active_plan["max_upload_size_bytes"]),
+                    max_pages_per_file=int(active_plan["max_pages_per_file"]),
+                    plan_code=str(active_plan["code"]),
+                    plan_name=str(active_plan["name"]),
+                )
             return IdentityContext(
                 identity_type="user",
                 identity_id=user_id,
                 quota_limit=self.registered_quota_limit,
+                quota_mode="conversion",
+                quota_window_days=self.quota_window_days,
             )
 
         fingerprint = (anonymous_fingerprint or "").strip()
@@ -102,6 +126,8 @@ class AccessControlService:
             identity_type="anonymous",
             identity_id=anon_id,
             quota_limit=self.anonymous_quota_limit,
+            quota_mode="conversion",
+            quota_window_days=self.quota_window_days,
         )
 
     def register_user(self, name: str, email: str, password: str) -> RegisteredUser:
@@ -367,21 +393,23 @@ class AccessControlService:
             "next_path": self._normalize_next_path(str(row["next_path"])),
         }
 
-    def assert_upload_size(self, raw_bytes: bytes) -> None:
-        if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
+    def assert_upload_size(self, raw_bytes: bytes, max_upload_size_bytes: int = MAX_UPLOAD_SIZE_BYTES) -> None:
+        if len(raw_bytes) > max(1, int(max_upload_size_bytes)):
             raise FileTooLargeError
 
-    def ensure_quota_available(self, identity: IdentityContext) -> None:
+    def ensure_quota_available(self, identity: IdentityContext, *, required_units: int = 1) -> None:
         usage = self._read_usage(identity)
-        if usage["used_count"] >= identity.quota_limit:
+        units = max(1, int(required_units))
+        if (int(usage["used_count"]) + units) > identity.quota_limit:
             raise QuotaExceededError
 
-    def consume_quota(self, identity: IdentityContext) -> int:
+    def consume_quota(self, identity: IdentityContext, *, consumed_units: int = 1) -> int:
+        units = max(1, int(consumed_units))
         with self._lock:
             usage = self._read_usage(identity)
-            if usage["used_count"] >= identity.quota_limit:
+            if (int(usage["used_count"]) + units) > identity.quota_limit:
                 raise QuotaExceededError
-            used_count = usage["used_count"] + 1
+            used_count = int(usage["used_count"]) + units
             window_started_at = usage["window_started_at"].isoformat()
             with self._connect() as conn:
                 self._execute(
@@ -421,7 +449,7 @@ class AccessControlService:
 
     def get_quota_reset_at(self, identity: IdentityContext) -> str:
         usage = self._read_usage(identity)
-        reset_at = usage["window_started_at"] + timedelta(days=self.quota_window_days)
+        reset_at = usage["window_started_at"] + timedelta(days=max(1, int(identity.quota_window_days)))
         return reset_at.isoformat()
 
     def record_user_conversion(
@@ -515,6 +543,151 @@ class AccessControlService:
             items.append(item)
         return items
 
+    def list_public_plans(self) -> list[dict[str, str | int]]:
+        with self._lock:
+            with self._connect() as conn:
+                rows = self._fetchall(
+                    conn,
+                    """
+                    SELECT
+                      id,
+                      code,
+                      name,
+                      version,
+                      currency,
+                      price_cents,
+                      billing_period,
+                      quota_mode,
+                      quota_limit,
+                      quota_window_days,
+                      max_upload_size_bytes,
+                      max_pages_per_file
+                    FROM plan_versions
+                    WHERE is_public = ? AND is_active = ?
+                    ORDER BY code ASC, version DESC
+                    """,
+                    (self._true_value(), self._true_value()),
+                )
+        items: list[dict[str, str | int]] = []
+        for row in rows:
+            items.append(
+                {
+                    "id": str(row["id"]),
+                    "code": str(row["code"]),
+                    "name": str(row["name"]),
+                    "version": int(row["version"]),
+                    "currency": str(row["currency"]),
+                    "price_cents": int(row["price_cents"]),
+                    "billing_period": str(row["billing_period"]),
+                    "quota_mode": str(row["quota_mode"]),
+                    "quota_limit": int(row["quota_limit"]),
+                    "quota_window_days": int(row["quota_window_days"]),
+                    "max_upload_size_bytes": int(row["max_upload_size_bytes"]),
+                    "max_pages_per_file": int(row["max_pages_per_file"]),
+                }
+            )
+        return items
+
+    def activate_user_plan(self, *, user_id: str, plan_code: str) -> dict[str, str | int]:
+        normalized_code = str(plan_code or "").strip().lower()
+        if not normalized_code:
+            raise ValueError("plan_code is required")
+        now_iso = self.now_provider().isoformat()
+
+        with self._lock:
+            with self._connect() as conn:
+                if self._fetchone(conn, "SELECT id FROM users WHERE id = ?", (user_id,)) is None:
+                    raise InvalidUserTokenError
+                plan = self._fetchone(
+                    conn,
+                    """
+                    SELECT
+                      id,
+                      code,
+                      name,
+                      version,
+                      quota_mode,
+                      quota_limit,
+                      quota_window_days,
+                      max_upload_size_bytes,
+                      max_pages_per_file
+                    FROM plan_versions
+                    WHERE code = ? AND is_active = ?
+                    ORDER BY version DESC
+                    LIMIT 1
+                    """,
+                    (normalized_code, self._true_value()),
+                )
+                if plan is None:
+                    raise ValueError("plan not found")
+
+                self._execute(
+                    conn,
+                    """
+                    UPDATE user_plan_subscriptions
+                    SET status = 'ended', ended_at = ?
+                    WHERE user_id = ? AND status = 'active'
+                    """,
+                    (now_iso, user_id),
+                )
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO user_plan_subscriptions (
+                      id,
+                      user_id,
+                      plan_version_id,
+                      status,
+                      started_at,
+                      ended_at
+                    )
+                    VALUES (?, ?, ?, 'active', ?, NULL)
+                    """,
+                    (
+                        f"sub_{uuid4().hex[:16]}",
+                        user_id,
+                        str(plan["id"]),
+                        now_iso,
+                    ),
+                )
+                # Reset usage on plan change so previous free-conversion usage does not contaminate paid pages.
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO usage (
+                      identity_type,
+                      identity_id,
+                      used_count,
+                      quota_limit,
+                      updated_at,
+                      window_started_at
+                    )
+                    VALUES (?, ?, 0, ?, ?, ?)
+                    ON CONFLICT(identity_type, identity_id)
+                    DO UPDATE SET
+                      used_count=excluded.used_count,
+                      quota_limit=excluded.quota_limit,
+                      updated_at=excluded.updated_at,
+                      window_started_at=excluded.window_started_at
+                    """,
+                    (
+                        "user",
+                        user_id,
+                        int(plan["quota_limit"]),
+                        now_iso,
+                        now_iso,
+                    ),
+                )
+                conn.commit()
+
+        return {
+            "code": str(plan["code"]),
+            "name": str(plan["name"]),
+            "version": int(plan["version"]),
+            "quota_mode": str(plan["quota_mode"]),
+            "quota_limit": int(plan["quota_limit"]),
+        }
+
     def _ensure_anonymous_identity(self, fingerprint: str) -> str:
         now = self.now_provider().isoformat()
         with self._lock:
@@ -544,6 +717,42 @@ class AccessControlService:
                 )
                 conn.commit()
                 return anon_id
+
+    def _read_active_user_plan(self, *, user_id: str) -> dict[str, str | int] | None:
+        with self._lock:
+            with self._connect() as conn:
+                row = self._fetchone(
+                    conn,
+                    """
+                    SELECT
+                      pv.code,
+                      pv.name,
+                      pv.version,
+                      pv.quota_mode,
+                      pv.quota_limit,
+                      pv.quota_window_days,
+                      pv.max_upload_size_bytes,
+                      pv.max_pages_per_file
+                    FROM user_plan_subscriptions ups
+                    JOIN plan_versions pv ON pv.id = ups.plan_version_id
+                    WHERE ups.user_id = ? AND ups.status = 'active'
+                    ORDER BY pv.version DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+                if row is None:
+                    return None
+                return {
+                    "code": str(row["code"]),
+                    "name": str(row["name"]),
+                    "version": int(row["version"]),
+                    "quota_mode": str(row["quota_mode"]),
+                    "quota_limit": int(row["quota_limit"]),
+                    "quota_window_days": int(row["quota_window_days"]),
+                    "max_upload_size_bytes": int(row["max_upload_size_bytes"]),
+                    "max_pages_per_file": int(row["max_pages_per_file"]),
+                }
 
     def _read_usage(self, identity: IdentityContext) -> dict[str, int | datetime]:
         with self._lock:
@@ -591,7 +800,7 @@ class AccessControlService:
                     fallback=now,
                 )
 
-                if self._is_quota_window_expired(window_started_at, now):
+                if self._is_quota_window_expired(window_started_at, now, quota_window_days=identity.quota_window_days):
                     window_started_at = now
                     used_count = 0
                     started_at = window_started_at.isoformat()
@@ -724,6 +933,35 @@ class AccessControlService:
                         created_at TEXT NOT NULL,
                         expires_at TEXT NOT NULL
                     );
+
+                    CREATE TABLE IF NOT EXISTS plan_versions (
+                        id TEXT PRIMARY KEY,
+                        code TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        version INTEGER NOT NULL,
+                        currency TEXT NOT NULL,
+                        price_cents INTEGER NOT NULL,
+                        billing_period TEXT NOT NULL,
+                        quota_mode TEXT NOT NULL,
+                        quota_limit INTEGER NOT NULL,
+                        quota_window_days INTEGER NOT NULL,
+                        max_upload_size_bytes INTEGER NOT NULL,
+                        max_pages_per_file INTEGER NOT NULL,
+                        is_public INTEGER NOT NULL DEFAULT 1,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL
+                    );
+
+                    CREATE TABLE IF NOT EXISTS user_plan_subscriptions (
+                        id TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        plan_version_id TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        started_at TEXT NOT NULL,
+                        ended_at TEXT,
+                        FOREIGN KEY(user_id) REFERENCES users(id),
+                        FOREIGN KEY(plan_version_id) REFERENCES plan_versions(id)
+                    );
                     """
                 )
 
@@ -763,6 +1001,7 @@ class AccessControlService:
                     WHERE window_started_at IS NULL OR window_started_at = ''
                     """
                 )
+                self._seed_default_plans_sqlite(conn)
                 conn.commit()
 
     def _init_postgres_db(self) -> None:
@@ -837,6 +1076,41 @@ class AccessControlService:
                     )
                     cur.execute(
                         """
+                        CREATE TABLE IF NOT EXISTS plan_versions (
+                            id TEXT PRIMARY KEY,
+                            code TEXT NOT NULL,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL,
+                            currency TEXT NOT NULL,
+                            price_cents INTEGER NOT NULL,
+                            billing_period TEXT NOT NULL,
+                            quota_mode TEXT NOT NULL,
+                            quota_limit INTEGER NOT NULL,
+                            quota_window_days INTEGER NOT NULL,
+                            max_upload_size_bytes INTEGER NOT NULL,
+                            max_pages_per_file INTEGER NOT NULL,
+                            is_public BOOLEAN NOT NULL DEFAULT TRUE,
+                            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                            created_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_plan_subscriptions (
+                            id TEXT PRIMARY KEY,
+                            user_id TEXT NOT NULL,
+                            plan_version_id TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            started_at TEXT NOT NULL,
+                            ended_at TEXT,
+                            FOREIGN KEY(user_id) REFERENCES users(id),
+                            FOREIGN KEY(plan_version_id) REFERENCES plan_versions(id)
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
                         CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_provider_user_id
                         ON users(provider_user_id)
                         WHERE auth_provider = 'google' AND provider_user_id IS NOT NULL
@@ -856,7 +1130,115 @@ class AccessControlService:
                         WHERE window_started_at IS NULL OR window_started_at = ''
                         """
                     )
+                    self._seed_default_plans_postgres(conn)
                 conn.commit()
+
+    def _seed_default_plans_sqlite(self, conn: sqlite3.Connection) -> None:
+        existing = conn.execute("SELECT COUNT(*) AS cnt FROM plan_versions").fetchone()
+        if existing is not None and int(existing["cnt"] or 0) > 0:
+            return
+        now_iso = self.now_provider().isoformat()
+        plans = [
+            ("essencial", "Essencial", 1, "BRL", 990, 150),
+            ("profissional", "Profissional", 1, "BRL", 1990, 300),
+            ("escritorio", "Escritorio", 1, "BRL", 2990, 500),
+        ]
+        for code, name, version, currency, price_cents, quota_limit in plans:
+            conn.execute(
+                """
+                INSERT INTO plan_versions (
+                  id,
+                  code,
+                  name,
+                  version,
+                  currency,
+                  price_cents,
+                  billing_period,
+                  quota_mode,
+                  quota_limit,
+                  quota_window_days,
+                  max_upload_size_bytes,
+                  max_pages_per_file,
+                  is_public,
+                  is_active,
+                  created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"plan_{code}_v{version}",
+                    code,
+                    name,
+                    version,
+                    currency,
+                    price_cents,
+                    "monthly",
+                    "pages",
+                    quota_limit,
+                    MONTHLY_QUOTA_WINDOW_DAYS,
+                    PAID_MAX_UPLOAD_SIZE_BYTES,
+                    PAID_MAX_PAGES_PER_FILE,
+                    1,
+                    1,
+                    now_iso,
+                ),
+            )
+
+    def _seed_default_plans_postgres(self, conn) -> None:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT COUNT(*) AS cnt FROM plan_versions")
+            existing = cur.fetchone()
+            if existing is not None and int(existing["cnt"] or 0) > 0:
+                return
+            now_iso = self.now_provider().isoformat()
+            plans = [
+                ("essencial", "Essencial", 1, "BRL", 990, 150),
+                ("profissional", "Profissional", 1, "BRL", 1990, 300),
+                ("escritorio", "Escritorio", 1, "BRL", 2990, 500),
+            ]
+            for code, name, version, currency, price_cents, quota_limit in plans:
+                cur.execute(
+                    """
+                    INSERT INTO plan_versions (
+                      id,
+                      code,
+                      name,
+                      version,
+                      currency,
+                      price_cents,
+                      billing_period,
+                      quota_mode,
+                      quota_limit,
+                      quota_window_days,
+                      max_upload_size_bytes,
+                      max_pages_per_file,
+                      is_public,
+                      is_active,
+                      created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        f"plan_{code}_v{version}",
+                        code,
+                        name,
+                        version,
+                        currency,
+                        price_cents,
+                        "monthly",
+                        "pages",
+                        quota_limit,
+                        MONTHLY_QUOTA_WINDOW_DAYS,
+                        PAID_MAX_UPLOAD_SIZE_BYTES,
+                        PAID_MAX_PAGES_PER_FILE,
+                        True,
+                        True,
+                        now_iso,
+                    ),
+                )
+        finally:
+            cur.close()
 
     def _is_expired(self, expires_at_raw: str, now: datetime) -> bool:
         try:
@@ -867,8 +1249,8 @@ class AccessControlService:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         return expires_at < now
 
-    def _is_quota_window_expired(self, window_started_at: datetime, now: datetime) -> bool:
-        return now >= (window_started_at + timedelta(days=self.quota_window_days))
+    def _is_quota_window_expired(self, window_started_at: datetime, now: datetime, *, quota_window_days: int) -> bool:
+        return now >= (window_started_at + timedelta(days=max(1, int(quota_window_days))))
 
     def _parse_usage_datetime(self, raw_value: str, fallback: datetime) -> datetime:
         try:
@@ -889,6 +1271,11 @@ class AccessControlService:
         if self._use_postgres:
             return query.replace("?", "%s")
         return query
+
+    def _true_value(self):
+        if self._use_postgres:
+            return True
+        return 1
 
     def _execute(self, conn, query: str, params: tuple = ()):
         adapted = self._adapt_query(query)
