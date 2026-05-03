@@ -538,9 +538,20 @@
     resetConversionSession({ silent: false });
   }
 
+  function resolveConvertedPages(analysis) {
+    const metrics = analysis && typeof analysis === "object" ? analysis.pdf_processing_metrics : null;
+    const pageCount = metrics && typeof metrics === "object" ? Number(metrics.page_count) : NaN;
+    if (Number.isFinite(pageCount) && pageCount > 0) {
+      return String(Math.trunc(pageCount));
+    }
+    return "1";
+  }
+
   function renderKpis(analysis) {
+    const pagesConverted = resolveConvertedPages(analysis);
     const entries = [
       ["Transações", analysis.transactions_total],
+      ["Páginas convertidas", pagesConverted],
       ["Entradas", formatCurrency(analysis.total_inflows)],
       ["Saídas", formatCurrency(analysis.total_outflows)],
       ["Saldo", formatCurrency(analysis.net_total)],
