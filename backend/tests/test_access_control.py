@@ -141,3 +141,34 @@ def test_google_oauth_state_can_be_consumed_once(tmp_path) -> None:
     assert consumed["code_verifier"] == verifier
     assert consumed["next_path"] == "/client-area.html"
     assert consumed_again is None
+
+
+def test_public_plans_are_seeded_with_versions(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+
+    plans = service.list_public_plans()
+    codes = {str(item["code"]) for item in plans}
+    assert {"essencial", "profissional", "escritorio"}.issubset(codes)
+    assert all(int(item["version"]) >= 1 for item in plans)
+
+
+def test_registered_user_can_use_pages_plan_quota(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+    user = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+    service.activate_user_plan(user_id=user.user_id, plan_code="essencial")
+
+    identity = service.resolve_identity(anonymous_fingerprint=None, user_token=user.token)
+    assert identity.identity_type == "user"
+    assert identity.quota_mode == "pages"
+    assert identity.quota_limit == 150
+    assert identity.plan_code == "essencial"
+
+    service.ensure_quota_available(identity, required_units=10)
+    remaining = service.consume_quota(identity, consumed_units=10)
+    assert remaining == 140

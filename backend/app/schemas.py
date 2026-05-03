@@ -179,6 +179,9 @@ class RegisterResponse(BaseModel):
     user_token: str
     quota_remaining: int
     quota_limit: int
+    quota_mode: str = "conversion"
+    plan_code: str | None = None
+    plan_name: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -193,6 +196,9 @@ class LoginResponse(BaseModel):
     user_token: str
     quota_remaining: int
     quota_limit: int
+    quota_mode: str = "conversion"
+    plan_code: str | None = None
+    plan_name: str | None = None
 
 
 class AuthMeResponse(BaseModel):
@@ -200,6 +206,42 @@ class AuthMeResponse(BaseModel):
     name: str
     email: str
     quota_remaining: int
+    quota_limit: int
+    quota_mode: str = "conversion"
+    plan_code: str | None = None
+    plan_name: str | None = None
+
+
+class PlanCatalogItem(BaseModel):
+    id: str
+    code: str
+    name: str
+    version: int
+    currency: str
+    price_cents: int
+    billing_period: str
+    quota_mode: str
+    quota_limit: int
+    quota_window_days: int
+    max_upload_size_bytes: int
+    max_pages_per_file: int
+
+
+class PlanCatalogResponse(BaseModel):
+    items: list[PlanCatalogItem]
+
+
+class AdminActivatePlanRequest(BaseModel):
+    user_id: str
+    plan_code: str
+
+
+class AdminActivatePlanResponse(BaseModel):
+    user_id: str
+    plan_code: str
+    plan_name: str
+    plan_version: int
+    quota_mode: str
     quota_limit: int
 
 
