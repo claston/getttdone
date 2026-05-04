@@ -29,6 +29,18 @@ class ContactDeliveryResult:
     provider_message_id: str | None = None
 
 
+def _mask_email(value: str) -> str:
+    raw = value.strip()
+    if "@" not in raw:
+        return "***"
+    local, domain = raw.split("@", 1)
+    if not local:
+        return f"***@{domain}"
+    if len(local) == 1:
+        return f"{local}***@{domain}"
+    return f"{local[0]}***{local[-1]}@{domain}"
+
+
 class ContactService:
     def __init__(
         self,
@@ -60,9 +72,9 @@ class ContactService:
         if self._dry_run:
             print(
                 "[contact-dry-run]",
-                f"name={contact.name}",
-                f"email={contact.email}",
-                f"subject={contact.subject}",
+                f"name_len={len(contact.name.strip())}",
+                f"email={_mask_email(contact.email)}",
+                f"subject_len={len(contact.subject.strip())}",
                 f"has_attachment={bool(contact.attachment)}",
             )
             return ContactDeliveryResult(delivery_mode="dry_run")
@@ -101,8 +113,8 @@ class ContactService:
         if self._dry_run:
             print(
                 "[contact-dry-run]",
-                f"to={clean_to}",
-                f"subject={subject}",
+                f"to={_mask_email(clean_to)}",
+                f"subject_len={len(subject.strip())}",
             )
             return ContactDeliveryResult(delivery_mode="dry_run")
         if not self._api_key:
