@@ -1,5 +1,6 @@
 from app.routers.analyze import router as analyze_router
 from app.routers.auth import router as auth_router
+from app.routers.checkout import router as checkout_router
 from app.routers.client import router as client_router
 from app.routers.contact import router as contact_router
 from app.routers.convert import router as convert_router
@@ -12,6 +13,7 @@ __all__ = [
     "analyze_router",
     "auth_router",
     "client_router",
+    "checkout_router",
     "contact_router",
     "convert_router",
     "health_router",

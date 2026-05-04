@@ -12,6 +12,7 @@ from app.dependencies import get_analyze_service, get_report_service
 from app.routers import (
     analyze_router,
     auth_router,
+    checkout_router,
     client_router,
     contact_router,
     convert_router,
@@ -73,6 +74,7 @@ app.include_router(analyze_router)
 app.include_router(convert_router)
 app.include_router(auth_router)
 app.include_router(client_router)
+app.include_router(checkout_router)
 app.include_router(contact_router)
 app.include_router(reconcile_router)
 app.include_router(report_router)

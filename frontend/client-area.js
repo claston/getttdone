@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const profileEmail = document.getElementById("profile-email");
   const accountEmail = document.getElementById("account-email");
   const accountAvatar = document.getElementById("account-avatar");
@@ -181,9 +181,28 @@
     return null;
   }
 
+  function resolvePages(item) {
+    const possible = [
+      item.pages_count,
+      item.page_count,
+      item.pages,
+    ];
+
+    for (const value of possible) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+        return Number(value);
+      }
+    }
+
+    return null;
+  }
+
   function renderRows(items) {
     if (!items || items.length === 0) {
-      historyRows.innerHTML = '<tr><td colspan="4">Nenhuma conversao encontrada.</td></tr>';
+      historyRows.innerHTML = '<tr><td colspan="5">Nenhuma conversão encontrada.</td></tr>';
       return;
     }
 
@@ -193,8 +212,11 @@
         const filename = escapeHtml(item.filename || "arquivo_sem_nome.ofx");
         const created = formatDate(item.created_at);
         const transactions = resolveTransactions(item);
+        const pages = resolvePages(item);
         const txClass = typeof transactions === "number" && transactions > 0 ? "transactions-strong" : "transactions-dim";
+        const pagesClass = typeof pages === "number" && pages > 0 ? "transactions-strong" : "transactions-dim";
         const txText = typeof transactions === "number" ? String(transactions) : "--";
+        const pagesText = typeof pages === "number" ? String(pages) : "--";
 
         return `
           <tr>
@@ -206,6 +228,7 @@
             </td>
             <td>${created}</td>
             <td class="${txClass}">${txText}</td>
+            <td class="${pagesClass}">${pagesText}</td>
             <td>
               <span class="status-chip ${normalizedStatus.className}">${normalizedStatus.label}</span>
             </td>
@@ -247,36 +270,36 @@
       setProfileHint(me.email || "");
       const quotaMode = String(me.quota_mode || "conversion").toLowerCase();
       if (quotaMode === "pages") {
-        quotaText.textContent = `Paginas restantes no mes: ${me.quota_remaining} / ${me.quota_limit}`;
+        quotaText.textContent = `Páginas restantes no mês: ${me.quota_remaining} / ${me.quota_limit}`;
       } else {
-        quotaText.textContent = `Conversoes restantes na semana: ${me.quota_remaining} / ${me.quota_limit}`;
+        quotaText.textContent = `Conversões restantes na semana: ${me.quota_remaining} / ${me.quota_limit}`;
       }
       const maxMb = Number(me.max_upload_size_bytes || 0) / (1024 * 1024);
       const maxPages = Number(me.max_pages_per_file || 0);
       if (planText) {
         planText.textContent =
           quotaMode === "pages"
-            ? `Plano pago: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} paginas`
-            : `Plano gratuito: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} paginas`;
+            ? `Plano pago: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} páginas`
+            : `Plano gratuito: limite por arquivo ${maxMb.toFixed(0)} MB e ${maxPages} páginas`;
       }
       if (planSummary) {
-        planSummary.textContent = quotaMode === "pages" ? "Plano pago por paginas" : "Plano gratuito por conversoes";
+        planSummary.textContent = quotaMode === "pages" ? "Plano pago por páginas" : "Plano gratuito por conversões";
       }
       renderRows(history.items || []);
-      setStatus("Historico carregado com sucesso.", null);
+      setStatus("Histórico carregado com sucesso.", null);
 
       if (viewAllLink && (!history.items || history.items.length < 20)) {
         viewAllLink.style.visibility = "hidden";
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao carregar area do cliente.";
+      const message = error instanceof Error ? error.message : "Falha ao carregar área do cliente.";
       if (message.toLowerCase().includes("invalid user token")) {
         clearUserToken();
         window.location.href = "./login.html?next=%2Fclient-area.html";
         return;
       }
       setStatus(message, "error");
-      historyRows.innerHTML = '<tr><td colspan="4">Nao foi possivel carregar as conversoes.</td></tr>';
+      historyRows.innerHTML = '<tr><td colspan="5">Não foi possível carregar as conversões.</td></tr>';
     }
   }
 
@@ -312,3 +335,4 @@
   bootstrapAccountPreview();
   void loadClientArea();
 })();
+

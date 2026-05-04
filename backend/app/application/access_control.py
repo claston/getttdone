@@ -34,6 +34,11 @@ PAID_MAX_PAGES_PER_FILE = 100
 PASSWORD_HASH_ITERATIONS = 390_000
 QUOTA_WINDOW_DAYS = 7
 MONTHLY_QUOTA_WINDOW_DAYS = 30
+DEFAULT_PUBLIC_PLANS = [
+    ("essencial", "Essencial", 1, "BRL", 2990, 150),
+    ("profissional", "Profissional", 1, "BRL", 3990, 300),
+    ("escritorio", "Escritorio", 1, "BRL", 4990, 500),
+]
 
 
 @dataclass(frozen=True)
@@ -462,6 +467,7 @@ class AccessControlService:
         conversion_type: str,
         status: str,
         transactions_count: int | None,
+        pages_count: int | None = None,
         created_at: str | None = None,
         expires_at: str | None = None,
     ) -> None:
@@ -479,9 +485,10 @@ class AccessControlService:
                       model,
                       conversion_type,
                       status,
-                      transactions_count
+                      transactions_count,
+                      pages_count
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(analysis_id)
                     DO UPDATE SET
                       user_id=excluded.user_id,
@@ -491,7 +498,8 @@ class AccessControlService:
                       model=excluded.model,
                       conversion_type=excluded.conversion_type,
                       status=excluded.status,
-                      transactions_count=excluded.transactions_count
+                      transactions_count=excluded.transactions_count,
+                      pages_count=excluded.pages_count
                     """,
                     (
                         processing_id,
@@ -503,6 +511,7 @@ class AccessControlService:
                         conversion_type.strip() or "pdf-ofx",
                         status.strip() or "Sucesso",
                         transactions_count,
+                        pages_count,
                     ),
                 )
                 conn.commit()
@@ -513,7 +522,7 @@ class AccessControlService:
                 rows = self._fetchall(
                     conn,
                     """
-                    SELECT analysis_id, created_at, expires_at, filename, model, conversion_type, status, transactions_count
+                    SELECT analysis_id, created_at, expires_at, filename, model, conversion_type, status, transactions_count, pages_count
                     FROM user_conversions
                     WHERE user_id = ?
                     ORDER BY created_at DESC
@@ -540,6 +549,9 @@ class AccessControlService:
             tx_count = row["transactions_count"]
             if isinstance(tx_count, int):
                 item["transactions_count"] = tx_count
+            pg_count = row["pages_count"]
+            if isinstance(pg_count, int):
+                item["pages_count"] = pg_count
             items.append(item)
         return items
 
@@ -686,6 +698,97 @@ class AccessControlService:
             "version": int(plan["version"]),
             "quota_mode": str(plan["quota_mode"]),
             "quota_limit": int(plan["quota_limit"]),
+        }
+
+    def create_checkout_intent(
+        self,
+        *,
+        plan_code: str,
+        customer_name: str,
+        customer_email: str,
+        customer_whatsapp: str,
+        customer_document: str | None = None,
+        customer_notes: str | None = None,
+    ) -> dict[str, str | int]:
+        normalized_code = str(plan_code or "").strip().lower()
+        clean_name = str(customer_name or "").strip()
+        clean_email = str(customer_email or "").strip().lower()
+        clean_whatsapp = str(customer_whatsapp or "").strip()
+        clean_document = str(customer_document or "").strip()
+        clean_notes = str(customer_notes or "").strip()
+        if not normalized_code:
+            raise ValueError("plan_code is required")
+        if not clean_name or not clean_email or not clean_whatsapp:
+            raise ValueError("name, email, and whatsapp are required")
+
+        now_iso = self.now_provider().isoformat()
+        intent_id = f"chk_{uuid4().hex[:16]}"
+        with self._lock:
+            with self._connect() as conn:
+                plan = self._fetchone(
+                    conn,
+                    """
+                    SELECT code, name, price_cents, currency, billing_period
+                    FROM plan_versions
+                    WHERE code = ? AND is_active = ? AND is_public = ?
+                    ORDER BY version DESC
+                    LIMIT 1
+                    """,
+                    (normalized_code, self._true_value(), self._true_value()),
+                )
+                if plan is None:
+                    raise ValueError("plan not found")
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO checkout_intents (
+                      id,
+                      created_at,
+                      updated_at,
+                      status,
+                      plan_code,
+                      plan_name,
+                      price_cents,
+                      currency,
+                      billing_period,
+                      customer_name,
+                      customer_email,
+                      customer_whatsapp,
+                      customer_document,
+                      customer_notes
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        intent_id,
+                        now_iso,
+                        now_iso,
+                        "pending",
+                        str(plan["code"]),
+                        str(plan["name"]),
+                        int(plan["price_cents"]),
+                        str(plan["currency"]),
+                        str(plan["billing_period"]),
+                        clean_name,
+                        clean_email,
+                        clean_whatsapp,
+                        clean_document or None,
+                        clean_notes or None,
+                    ),
+                )
+                conn.commit()
+        return {
+            "id": intent_id,
+            "created_at": now_iso,
+            "status": "pending",
+            "plan_code": str(plan["code"]),
+            "plan_name": str(plan["name"]),
+            "price_cents": int(plan["price_cents"]),
+            "currency": str(plan["currency"]),
+            "billing_period": str(plan["billing_period"]),
+            "customer_name": clean_name,
+            "customer_email": clean_email,
+            "customer_whatsapp": clean_whatsapp,
         }
 
     def _ensure_anonymous_identity(self, fingerprint: str) -> str:
@@ -923,6 +1026,7 @@ class AccessControlService:
                         conversion_type TEXT NOT NULL,
                         status TEXT NOT NULL,
                         transactions_count INTEGER NOT NULL DEFAULT 0,
+                        pages_count INTEGER,
                         FOREIGN KEY(user_id) REFERENCES users(id)
                     );
 
@@ -962,6 +1066,23 @@ class AccessControlService:
                         FOREIGN KEY(user_id) REFERENCES users(id),
                         FOREIGN KEY(plan_version_id) REFERENCES plan_versions(id)
                     );
+
+                    CREATE TABLE IF NOT EXISTS checkout_intents (
+                        id TEXT PRIMARY KEY,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        plan_code TEXT NOT NULL,
+                        plan_name TEXT NOT NULL,
+                        price_cents INTEGER NOT NULL,
+                        currency TEXT NOT NULL,
+                        billing_period TEXT NOT NULL,
+                        customer_name TEXT NOT NULL,
+                        customer_email TEXT NOT NULL,
+                        customer_whatsapp TEXT NOT NULL,
+                        customer_document TEXT,
+                        customer_notes TEXT
+                    );
                     """
                 )
 
@@ -992,8 +1113,14 @@ class AccessControlService:
                     str(row["name"])
                     for row in conn.execute("PRAGMA table_info(usage)").fetchall()
                 }
+                user_conversions_columns = {
+                    str(row["name"])
+                    for row in conn.execute("PRAGMA table_info(user_conversions)").fetchall()
+                }
                 if "window_started_at" not in usage_columns:
                     conn.execute("ALTER TABLE usage ADD COLUMN window_started_at TEXT")
+                if "pages_count" not in user_conversions_columns:
+                    conn.execute("ALTER TABLE user_conversions ADD COLUMN pages_count INTEGER")
                 conn.execute(
                     """
                     UPDATE usage
@@ -1002,6 +1129,7 @@ class AccessControlService:
                     """
                 )
                 self._seed_default_plans_sqlite(conn)
+                self._apply_default_plan_prices_sqlite(conn)
                 conn.commit()
 
     def _init_postgres_db(self) -> None:
@@ -1059,8 +1187,15 @@ class AccessControlService:
                             conversion_type TEXT NOT NULL,
                             status TEXT NOT NULL,
                             transactions_count INTEGER NOT NULL DEFAULT 0,
+                            pages_count INTEGER,
                             FOREIGN KEY(user_id) REFERENCES users(id)
                         )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        ALTER TABLE user_conversions
+                        ADD COLUMN IF NOT EXISTS pages_count INTEGER
                         """
                     )
                     cur.execute(
@@ -1111,6 +1246,26 @@ class AccessControlService:
                     )
                     cur.execute(
                         """
+                        CREATE TABLE IF NOT EXISTS checkout_intents (
+                            id TEXT PRIMARY KEY,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            plan_code TEXT NOT NULL,
+                            plan_name TEXT NOT NULL,
+                            price_cents INTEGER NOT NULL,
+                            currency TEXT NOT NULL,
+                            billing_period TEXT NOT NULL,
+                            customer_name TEXT NOT NULL,
+                            customer_email TEXT NOT NULL,
+                            customer_whatsapp TEXT NOT NULL,
+                            customer_document TEXT,
+                            customer_notes TEXT
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
                         CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_provider_user_id
                         ON users(provider_user_id)
                         WHERE auth_provider = 'google' AND provider_user_id IS NOT NULL
@@ -1131,6 +1286,7 @@ class AccessControlService:
                         """
                     )
                     self._seed_default_plans_postgres(conn)
+                    self._apply_default_plan_prices_postgres(conn)
                 conn.commit()
 
     def _seed_default_plans_sqlite(self, conn: sqlite3.Connection) -> None:
@@ -1138,12 +1294,7 @@ class AccessControlService:
         if existing is not None and int(existing["cnt"] or 0) > 0:
             return
         now_iso = self.now_provider().isoformat()
-        plans = [
-            ("essencial", "Essencial", 1, "BRL", 990, 150),
-            ("profissional", "Profissional", 1, "BRL", 1990, 300),
-            ("escritorio", "Escritorio", 1, "BRL", 2990, 500),
-        ]
-        for code, name, version, currency, price_cents, quota_limit in plans:
+        for code, name, version, currency, price_cents, quota_limit in DEFAULT_PUBLIC_PLANS:
             conn.execute(
                 """
                 INSERT INTO plan_versions (
@@ -1184,6 +1335,17 @@ class AccessControlService:
                 ),
             )
 
+    def _apply_default_plan_prices_sqlite(self, conn: sqlite3.Connection) -> None:
+        for code, _name, _version, _currency, price_cents, _quota_limit in DEFAULT_PUBLIC_PLANS:
+            conn.execute(
+                """
+                UPDATE plan_versions
+                SET price_cents = ?
+                WHERE code = ? AND is_active = ? AND is_public = ?
+                """,
+                (price_cents, code, self._true_value(), self._true_value()),
+            )
+
     def _seed_default_plans_postgres(self, conn) -> None:
         cur = conn.cursor()
         try:
@@ -1192,12 +1354,7 @@ class AccessControlService:
             if existing is not None and int(existing["cnt"] or 0) > 0:
                 return
             now_iso = self.now_provider().isoformat()
-            plans = [
-                ("essencial", "Essencial", 1, "BRL", 990, 150),
-                ("profissional", "Profissional", 1, "BRL", 1990, 300),
-                ("escritorio", "Escritorio", 1, "BRL", 2990, 500),
-            ]
-            for code, name, version, currency, price_cents, quota_limit in plans:
+            for code, name, version, currency, price_cents, quota_limit in DEFAULT_PUBLIC_PLANS:
                 cur.execute(
                     """
                     INSERT INTO plan_versions (
@@ -1236,6 +1393,21 @@ class AccessControlService:
                         True,
                         now_iso,
                     ),
+                )
+        finally:
+            cur.close()
+
+    def _apply_default_plan_prices_postgres(self, conn) -> None:
+        cur = conn.cursor()
+        try:
+            for code, _name, _version, _currency, price_cents, _quota_limit in DEFAULT_PUBLIC_PLANS:
+                cur.execute(
+                    """
+                    UPDATE plan_versions
+                    SET price_cents = %s
+                    WHERE code = %s AND is_active = %s AND is_public = %s
+                    """,
+                    (price_cents, code, self._true_value(), self._true_value()),
                 )
         finally:
             cur.close()

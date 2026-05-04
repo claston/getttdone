@@ -28,6 +28,14 @@ def _resolve_consumed_units(identity, analysis) -> int:
     return max(1, page_count)
 
 
+def _resolve_pages_count(analysis) -> int:
+    metrics = getattr(analysis, "pdf_processing_metrics", None)
+    if metrics is None:
+        return 1
+    page_count = int(getattr(metrics, "page_count", 0) or 0)
+    return max(1, page_count)
+
+
 @router.post("/convert", response_model=ConvertResponse)
 async def convert(
     file: UploadFile = File(...),
@@ -65,6 +73,7 @@ async def convert(
                 conversion_type=conversion_type,
                 status="Sucesso",
                 transactions_count=int(analysis.transactions_total),
+                pages_count=_resolve_pages_count(analysis),
                 expires_at=analysis.expires_at,
             )
         return ConvertResponse(

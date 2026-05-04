@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const topAuthLoginLink = document.getElementById("top-auth-login-link");
   const topAuthPrimaryLink = document.getElementById("top-auth-primary-link");
   const USER_TOKEN_KEY = "ofxsimples_user_token";
@@ -45,7 +45,7 @@
     if (topAuthPrimaryLink) {
       const safe = String(email || "conta").trim() || "conta";
       const initial = safe.charAt(0).toUpperCase();
-      topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${safe}</span><span class="top-account-caret">▾</span>`;
+      topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${safe}</span><span class="top-account-caret">▼</span>`;
       topAuthPrimaryLink.classList.add("top-account-trigger");
       topAuthPrimaryLink.setAttribute("href", "./client-area.html");
     }
@@ -132,7 +132,7 @@
       const response = await fetch(`${apiBase}/contact`, { method: "POST", body: formData });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setFeedback(String(payload.detail || "Nao foi possivel enviar a mensagem agora."), "error");
+        setFeedback(String(payload.detail || "Não foi possível enviar a mensagem agora."), "error");
         return;
       }
       if (payload.delivery_mode === "dry_run") {
@@ -150,3 +150,4 @@
 
   void syncTopAuthBySession();
 })();
+

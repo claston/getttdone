@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from app.application.access_control import (
@@ -153,6 +154,35 @@ def test_public_plans_are_seeded_with_versions(tmp_path) -> None:
     codes = {str(item["code"]) for item in plans}
     assert {"essencial", "profissional", "escritorio"}.issubset(codes)
     assert all(int(item["version"]) >= 1 for item in plans)
+    prices = {str(item["code"]): int(item["price_cents"]) for item in plans}
+    assert prices["essencial"] == 2990
+    assert prices["profissional"] == 3990
+    assert prices["escritorio"] == 4990
+
+
+def test_existing_plans_have_prices_backfilled_on_init(tmp_path) -> None:
+    state_file = tmp_path / "state.json"
+    service = AccessControlService(
+        state_file=state_file,
+        token_secret="test-secret",
+    )
+    del service
+
+    db_file = state_file.with_suffix(".db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("UPDATE plan_versions SET price_cents = 990 WHERE code = 'essencial'")
+        conn.execute("UPDATE plan_versions SET price_cents = 1990 WHERE code = 'profissional'")
+        conn.execute("UPDATE plan_versions SET price_cents = 2990 WHERE code = 'escritorio'")
+        conn.commit()
+
+    reloaded = AccessControlService(
+        state_file=state_file,
+        token_secret="test-secret",
+    )
+    prices = {str(item["code"]): int(item["price_cents"]) for item in reloaded.list_public_plans()}
+    assert prices["essencial"] == 2990
+    assert prices["profissional"] == 3990
+    assert prices["escritorio"] == 4990
 
 
 def test_registered_user_can_use_pages_plan_quota(tmp_path) -> None:
@@ -172,3 +202,23 @@ def test_registered_user_can_use_pages_plan_quota(tmp_path) -> None:
     service.ensure_quota_available(identity, required_units=10)
     remaining = service.consume_quota(identity, consumed_units=10)
     assert remaining == 140
+
+
+def test_create_checkout_intent_persists_pending_order(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+
+    intent = service.create_checkout_intent(
+        plan_code="profissional",
+        customer_name="Erica Souza",
+        customer_email="erica@example.com",
+        customer_whatsapp="+55 11 99999-1111",
+        customer_document="123.456.789-00",
+        customer_notes="Contato preferencial por WhatsApp",
+    )
+    assert str(intent["id"]).startswith("chk_")
+    assert intent["status"] == "pending"
+    assert intent["plan_code"] == "profissional"
+    assert intent["price_cents"] == 3990

@@ -1,4 +1,4 @@
-function bindDropzone(config) {
+﻿function bindDropzone(config) {
         const dropzone = document.getElementById(config.dropzoneId);
         const fileInput = document.getElementById(config.inputId);
         const fileName = document.getElementById(config.fileNameId);
@@ -179,7 +179,7 @@ function bindDropzone(config) {
             return;
         }
         if (getUserToken()) {
-            topCtaStart.textContent = "Minha area";
+            topCtaStart.textContent = "Minha área";
             if (topCtaSignup) {
                 topCtaSignup.classList.add("hidden");
             }
@@ -236,10 +236,10 @@ function bindDropzone(config) {
         }
 
         if (normalized.includes("ambiguous column mapping")) {
-            return "Nao consegui identificar com seguranca as colunas da planilha. Use nomes mais claros como Data, Descricao e Valor.";
+            return "Não consegui identificar com segurança as colunas da planilha. Use nomes mais claros como Data, Descrição e Valor.";
         }
 
-        return message || "Falha ao processar conciliacao.";
+        return message || "Falha ao processar conciliação.";
     }
 
     function isSheetColumnValidationError(detail) {
@@ -303,8 +303,8 @@ function bindDropzone(config) {
     function problemTypeMeta(type) {
         const meta = {
             missing_payment: {
-                title: "Pagamento nao encontrado",
-                badge: "Critico",
+                title: "Pagamento não encontrado",
+                badge: "Crítico",
                 accent: "border-red-200 bg-red-50/90",
                 badgeClass: "bg-red-100 text-red-700",
                 icon: "error",
@@ -312,8 +312,8 @@ function bindDropzone(config) {
                 label: "Maior impacto"
             },
             missing_receipt: {
-                title: "Recebimento nao registrado",
-                badge: "Atencao",
+                title: "Recebimento não registrado",
+                badge: "Atenção",
                 accent: "border-orange-200 bg-orange-50/90",
                 badgeClass: "bg-orange-100 text-orange-700",
                 icon: "warning",
@@ -330,7 +330,7 @@ function bindDropzone(config) {
                 label: "Revisar pares"
             },
             possible_duplicate: {
-                title: "Possivel duplicidade",
+                title: "Possível duplicidade",
                 badge: "Observacao",
                 accent: "border-slate-200 bg-slate-50/90",
                 badgeClass: "bg-slate-100 text-slate-700",
@@ -390,7 +390,7 @@ function bindDropzone(config) {
 <span class="text-sm font-semibold text-on-surface-variant">Planilha: ${escapeHtml(String(totalSheetRows || 0))} linhas</span>
 <span class="text-sm font-semibold text-on-surface-variant">Problemas: ${escapeHtml(String(problemCount || 0))}</span>
 <span class="text-sm font-semibold text-on-surface-variant">Sem pareamento: ${escapeHtml(String(unresolvedRows || 0))}</span>
-<span class="ml-auto inline-flex items-center rounded-full bg-secondary-container/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">Conciliacao: ${escapeHtml(ratio)}</span>
+<span class="ml-auto inline-flex items-center rounded-full bg-secondary-container/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-secondary">Conciliação: ${escapeHtml(ratio)}</span>
 </div>
 </div>
 <article class="rounded-2xl border border-slate-200 bg-slate-50/80 p-6 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
@@ -427,7 +427,7 @@ function bindDropzone(config) {
 <p class="text-xs font-bold uppercase tracking-[0.2em] text-on-secondary-container">Depois</p>
 <h4 class="text-2xl font-extrabold text-on-secondary-container mt-1">Resumo acionável</h4>
 </div>
-<span class="inline-flex items-center rounded-full bg-secondary-container/70 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-secondary-container">Saida</span>
+<span class="inline-flex items-center rounded-full bg-secondary-container/70 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-secondary-container">Saída</span>
 </div>
 <p class="text-sm text-on-secondary-container/80 mb-5">Agora a leitura fica clara: o que bateu, o que falta e o que merece revisão.</p>
 <div class="grid grid-cols-2 gap-3">
@@ -503,7 +503,7 @@ function bindDropzone(config) {
 <span class="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${meta.badgeClass}">${escapeHtml(meta.badge)}</span>
 </div>
 <p class="text-sm leading-relaxed text-on-surface-variant">${escapeHtml(problem.description || "-")}</p>
-<div class="mt-4 text-xs font-semibold uppercase tracking-widest text-on-surface-variant/80">${isPrimary ? "Destaque principal" : "Ponto de atencao"}</div>
+<div class="mt-4 text-xs font-semibold uppercase tracking-widest text-on-surface-variant/80">${isPrimary ? "Destaque principal" : "Ponto de atenção"}</div>
 </article>`;
         }).join("");
     }
@@ -526,7 +526,7 @@ function bindDropzone(config) {
     async function fetchDemoFileAsFile(url, filename) {
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
-            throw new Error(`Nao foi possivel carregar o arquivo de demo (${filename}).`);
+            throw new Error(`Não foi possível carregar o arquivo de demo (${filename}).`);
         }
 
         const blob = await response.blob();
@@ -625,7 +625,7 @@ function bindDropzone(config) {
             sheetDropzone.classList.remove("is-invalid");
         }
 
-        setValidationMessage(`Selecione ${missing.join(" e ")} para gerar o relatorio.`);
+        setValidationMessage(`Selecione ${missing.join(" e ")} para gerar o relatório.`);
     }
 
     function setTopNavHidden(hidden) {
@@ -656,8 +656,8 @@ function bindDropzone(config) {
         const labels = {
             missing_in_sheet: "Pendente na planilha",
             missing_in_bank: "Pendente no banco",
-            amount_mismatch: "Diferenca de valor",
-            date_out_of_tolerance_window: "Data fora da tolerancia"
+            amount_mismatch: "Diferença de valor",
+            date_out_of_tolerance_window: "Data fora da tolerância"
         };
         return labels[reason] || "-";
     }
@@ -865,7 +865,7 @@ function bindDropzone(config) {
 
         const items = getPageRows(filteredReconcileRows, reconcileCurrentPage);
         if (items.length === 0) {
-            const emptyStateRow = '<tr><td class="px-6 py-4 text-sm text-on-surface-variant" colspan="9">Sem linhas de conciliacao para exibir.</td></tr>';
+            const emptyStateRow = '<tr><td class="px-6 py-4 text-sm text-on-surface-variant" colspan="9">Sem linhas de conciliação para exibir.</td></tr>';
             const fillerRows = buildFillerRowsHtml(Math.max(0, ROWS_PER_PAGE - 1));
             reconcileRowsBody.innerHTML = `${emptyStateRow}${fillerRows}`;
             renderPaginationControls();
@@ -1002,7 +1002,7 @@ ${meta.percent}
             const payload = await parseJsonSafe(response);
 
             if (!response.ok) {
-                const detail = payload.detail || "Falha ao processar conciliacao.";
+                const detail = payload.detail || "Falha ao processar conciliação.";
                 if (response.status === 422 && isSheetColumnValidationError(detail)) {
                     setSheetValidationErrorState(true);
                 }
@@ -1145,3 +1145,4 @@ ${meta.percent}
     }
 
     syncTopCtaBySession();
+

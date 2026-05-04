@@ -240,8 +240,8 @@
     const resetAt = detail && typeof detail === "object" ? formatResetAt(detail.reset_at) : null;
     if (quotaLockMessage) {
       quotaLockMessage.textContent = resetAt
-        ? `Voce usou as 3 conversoes gratuitas desta semana. O proximo ciclo libera novas conversoes em ${resetAt}. Cadastre-se para liberar +10 conversoes semanais agora.`
-        : "Voce usou as 3 conversoes gratuitas desta semana. Cadastre-se para liberar +10 conversoes semanais agora.";
+        ? `Você usou as 3 conversões gratuitas desta semana. O próximo ciclo libera novas conversões em ${resetAt}. Cadastre-se para liberar +10 conversões semanais agora.`
+        : "Você usou as 3 conversões gratuitas desta semana. Cadastre-se para liberar +10 conversões semanais agora.";
     }
     if (quotaLockSignupLink) {
       quotaLockSignupLink.setAttribute("href", QUOTA_SIGNUP_URL);
@@ -1000,7 +1000,7 @@
     const pages = Number(maxPagesPerFile || 0);
     const safeMb = Number.isFinite(mb) && mb > 0 ? mb.toFixed(0) : "2";
     const safePages = Number.isFinite(pages) && pages > 0 ? String(pages) : "5";
-    uploadLimitsText.textContent = `Somente PDF (ate ${safeMb} MB e ${safePages} paginas por arquivo)`;
+    uploadLimitsText.textContent = `Somente PDF (até ${safeMb} MB e ${safePages} páginas por arquivo)`;
   }
 
   async function syncUploadLimitsBySession() {
@@ -1086,7 +1086,7 @@
 
       if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
       if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
-      const quotaLabel = state.quotaMode === "pages" ? "paginas" : "conversoes";
+      const quotaLabel = state.quotaMode === "pages" ? "páginas" : "conversões";
       quotaRemainingNode.textContent = `${payload.quota_remaining} / ${payload.quota_limit} (${quotaLabel})`;
 
       reviewSection.classList.remove("hidden");
@@ -1118,7 +1118,7 @@
         }
       }
       if (status === 429 && code === "monthly_pages_quota_exceeded") {
-        setStatus("Voce atingiu o limite mensal de paginas do seu plano.", "error");
+        setStatus("Você atingiu o limite mensal de páginas do seu plano.", "error");
         return;
       }
       setStatus(message, "error");
@@ -1283,3 +1283,4 @@
     setStatus("Sessão encerrada. Você está no modo gratuito (anônimo).", "success");
   }
 })();
+

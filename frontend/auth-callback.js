@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const statusMsg = document.getElementById("status-msg");
   const USER_TOKEN_KEY = "ofxsimples_user_token";
 
@@ -36,9 +36,9 @@
   }
 
   if (error) {
-    setStatus("Nao foi possivel concluir o login com Google. Tente novamente.", "error");
+    setStatus("Não foi possível concluir o login com Google. Tente novamente.", "error");
   } else {
-    setStatus("Resposta de autenticacao invalida.", "error");
+    setStatus("Resposta de autenticação inválida.", "error");
   }
 
   window.setTimeout(() => {
@@ -48,3 +48,4 @@
   function storeUserToken(token) {
     localStorage.setItem(USER_TOKEN_KEY, token);
   }
+

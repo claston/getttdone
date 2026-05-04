@@ -182,6 +182,8 @@ class RegisterResponse(BaseModel):
     quota_mode: str = "conversion"
     plan_code: str | None = None
     plan_name: str | None = None
+    max_upload_size_bytes: int
+    max_pages_per_file: int
 
 
 class LoginRequest(BaseModel):
@@ -199,6 +201,8 @@ class LoginResponse(BaseModel):
     quota_mode: str = "conversion"
     plan_code: str | None = None
     plan_name: str | None = None
+    max_upload_size_bytes: int
+    max_pages_per_file: int
 
 
 class AuthMeResponse(BaseModel):
@@ -210,6 +214,8 @@ class AuthMeResponse(BaseModel):
     quota_mode: str = "conversion"
     plan_code: str | None = None
     plan_name: str | None = None
+    max_upload_size_bytes: int
+    max_pages_per_file: int
 
 
 class PlanCatalogItem(BaseModel):
@@ -245,6 +251,30 @@ class AdminActivatePlanResponse(BaseModel):
     quota_limit: int
 
 
+class CheckoutIntentRequest(BaseModel):
+    plan_code: str
+    name: str
+    email: str
+    whatsapp: str
+    document: str | None = None
+    notes: str | None = None
+    accepted_terms: bool = False
+
+
+class CheckoutIntentResponse(BaseModel):
+    intent_id: str
+    status: str
+    created_at: str
+    plan_code: str
+    plan_name: str
+    price_cents: int
+    currency: str
+    billing_period: str
+    admin_delivery_mode: str
+    customer_delivery_mode: str
+    message: str
+
+
 class ClientConversionItem(BaseModel):
     processing_id: str
     created_at: str
@@ -253,6 +283,7 @@ class ClientConversionItem(BaseModel):
     conversion_type: str
     status: str
     transactions_count: int | None = None
+    pages_count: int | None = None
 
 
 class ClientConversionsResponse(BaseModel):

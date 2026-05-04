@@ -103,7 +103,7 @@
           `<li>Tamanho máximo: ${Math.round(Number(plan.max_upload_size_bytes || 0) / (1024 * 1024))} MB por arquivo</li>`,
           "<li>Suporte por contato</li>",
           "</ul>",
-          `<a class="${ctaClass}" href="./contato.html?plano=${encodeURIComponent(code)}">Quero este plano</a>`,
+          `<a class="${ctaClass}" href="./checkout.html?plan=${encodeURIComponent(code)}">Quero este plano</a>`,
           "</article>",
         ].join("");
       })
