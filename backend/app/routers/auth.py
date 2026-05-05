@@ -40,6 +40,8 @@ def register(
         quota_mode=identity.quota_mode,
         plan_code=identity.plan_code,
         plan_name=identity.plan_name,
+        max_upload_size_bytes=identity.max_upload_size_bytes,
+        max_pages_per_file=identity.max_pages_per_file,
     )
 
 
@@ -64,6 +66,8 @@ def login(
         quota_mode=identity.quota_mode,
         plan_code=identity.plan_code,
         plan_name=identity.plan_name,
+        max_upload_size_bytes=identity.max_upload_size_bytes,
+        max_pages_per_file=identity.max_pages_per_file,
     )
 
 
@@ -87,6 +91,8 @@ def me(
         quota_mode=identity.quota_mode,
         plan_code=identity.plan_code,
         plan_name=identity.plan_name,
+        max_upload_size_bytes=identity.max_upload_size_bytes,
+        max_pages_per_file=identity.max_pages_per_file,
     )
 
 

@@ -75,7 +75,7 @@
         "<h2>Planos indisponiveis</h2>",
         '<p class="price">Consulte suporte</p>',
         "<ul><li>Tente novamente em instantes</li></ul>",
-        '<a class="btn btn-outline" href="./contato.html">Falar com suporte</a>',
+        '<a class="btn btn-outline" href="./checkout.html">Ir para checkout</a>',
         "</article>",
       ].join("");
       return;
@@ -103,7 +103,7 @@
           `<li>Tamanho máximo: ${Math.round(Number(plan.max_upload_size_bytes || 0) / (1024 * 1024))} MB por arquivo</li>`,
           "<li>Suporte por contato</li>",
           "</ul>",
-          `<a class="${ctaClass}" href="./contato.html?plano=${encodeURIComponent(code)}">Quero este plano</a>`,
+          `<a class="${ctaClass}" href="./checkout.html?plan=${encodeURIComponent(code)}">Quero este plano</a>`,
           "</article>",
         ].join("");
       })

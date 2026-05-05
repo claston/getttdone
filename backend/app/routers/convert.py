@@ -18,14 +18,19 @@ from app.schemas import ConvertResponse
 router = APIRouter()
 
 
+def _resolve_processed_pages(analysis) -> int | None:
+    metrics = getattr(analysis, "pdf_processing_metrics", None)
+    if metrics is None:
+        return None
+    page_count = int(getattr(metrics, "page_count", 0) or 0)
+    return max(1, page_count)
+
+
 def _resolve_consumed_units(identity, analysis) -> int:
     if getattr(identity, "quota_mode", "conversion") != "pages":
         return 1
-    metrics = getattr(analysis, "pdf_processing_metrics", None)
-    if metrics is None:
-        return 1
-    page_count = int(getattr(metrics, "page_count", 0) or 0)
-    return max(1, page_count)
+    pages_count = _resolve_processed_pages(analysis)
+    return pages_count if pages_count is not None else 1
 
 
 @router.post("/convert", response_model=ConvertResponse)
@@ -52,6 +57,7 @@ async def convert(
             identity_type=identity.identity_type,
             identity_id=identity.identity_id,
         )
+        pages_count = _resolve_processed_pages(analysis)
         consumed_units = _resolve_consumed_units(identity, analysis)
         quota_remaining = access_control_service.consume_quota(identity, consumed_units=consumed_units)
         if identity.identity_type == "user":
@@ -65,6 +71,7 @@ async def convert(
                 conversion_type=conversion_type,
                 status="Sucesso",
                 transactions_count=int(analysis.transactions_total),
+                pages_count=pages_count,
                 expires_at=analysis.expires_at,
             )
         return ConvertResponse(
