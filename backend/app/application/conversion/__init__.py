@@ -1,3 +1,4 @@
+from app.application.conversion.conversion_capacity import ConversionCapacityController, ConversionCapacityLease
 from app.application.conversion.conversion_document_store import (
     ConversionDocumentReference,
     ConversionDocumentStore,
@@ -37,6 +38,8 @@ __all__ = [
     "ConversionJobExecutor",
     "ConversionJobFactory",
     "ConversionJobCleanupService",
+    "ConversionCapacityController",
+    "ConversionCapacityLease",
     "ConversionJobFailure",
     "ConversionJobRecord",
     "ConversionJobRepository",

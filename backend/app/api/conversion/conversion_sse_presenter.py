@@ -1,13 +1,12 @@
 ﻿import json
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Empty, Queue
-from threading import Thread
 from time import monotonic
 
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
-from starlette.background import BackgroundTask
 
 from app.api.conversion.conversion_error_mapper import (
     CORRUPTED_PDF_USER_MESSAGE,
@@ -19,6 +18,8 @@ from app.api.conversion.conversion_error_mapper import (
 from app.api.conversion.upload_staging import StagedUpload, _cleanup_staged_upload
 from app.application import (
     AccessControlService,
+    ConversionCapacityController,
+    ConversionCapacityLease,
     ConvertDocumentUseCase,
     FileTooLargeError,
     InvalidFileContentError,
@@ -87,6 +88,8 @@ class _ConversionUploadSseMachine:
     scanned_likely: bool | None
     total_pages: int | None
     execute_conversion_and_build_response: Callable[..., ConvertResponse]
+    capacity_controller: ConversionCapacityController
+    capacity_lease: ConversionCapacityLease
 
     def build_response(self) -> StreamingResponse:
         headers = {
@@ -95,14 +98,22 @@ class _ConversionUploadSseMachine:
         }
         if self.scanned_likely and self.total_pages:
             headers["X-OCR-Estimated-Pages"] = str(self.total_pages)
+        progress_queue: Queue[tuple[str, dict | ConvertResponse | Exception]] = Queue()
+        conversion_future = self.capacity_controller.submit(
+            self.capacity_lease,
+            lambda: self._worker(progress_queue),
+        )
         return StreamingResponse(
-            self.iter_events(),
+            self.iter_events(progress_queue, conversion_future),
             media_type="text/event-stream",
             headers=headers,
-            background=BackgroundTask(_cleanup_staged_upload, self.staged_upload),
         )
 
-    def iter_events(self) -> Iterator[str]:
+    def iter_events(
+        self,
+        progress_queue: Queue[tuple[str, dict | ConvertResponse | Exception]],
+        conversion_future: Future[None],
+    ) -> Iterator[str]:
         yield _sse_event("processing_status", {"stage": "document_received", "progress": 5, "message": "Documento recebido."})
         yield _sse_event(
             "processing_status",
@@ -123,18 +134,15 @@ class _ConversionUploadSseMachine:
                 {"stage": "document_processing", "progress": 28, "message": "Processando o documento..."},
             )
 
-        progress_queue: Queue[tuple[str, dict | ConvertResponse | Exception]] = Queue()
-        thread = Thread(target=self._worker, args=(progress_queue,), daemon=True)
-        thread.start()
         heartbeat_progress = 77 if self.scanned_likely else 35
         last_heartbeat_at = monotonic()
 
-        while thread.is_alive() or not progress_queue.empty():
+        while not conversion_future.done() or not progress_queue.empty():
             try:
                 kind, payload = progress_queue.get(timeout=0.2)
             except Empty:
                 now = monotonic()
-                if now - last_heartbeat_at >= 0.9 and thread.is_alive():
+                if now - last_heartbeat_at >= 0.9 and not conversion_future.done():
                     heartbeat_progress, heartbeat_event = self._build_heartbeat_event(heartbeat_progress)
                     yield _sse_event("processing_status", heartbeat_event)
                     last_heartbeat_at = now
@@ -190,6 +198,8 @@ class _ConversionUploadSseMachine:
             progress_queue.put(("result", payload))
         except Exception as exc:
             progress_queue.put(("error", exc))
+        finally:
+            _cleanup_staged_upload(self.staged_upload)
 
     def _build_on_ocr_progress(
         self,
@@ -338,6 +348,8 @@ def _build_conversion_upload_sse_response(
     scanned_likely: bool,
     total_pages: int | None,
     execute_conversion_and_build_response: Callable[..., ConvertResponse],
+    capacity_controller: ConversionCapacityController,
+    capacity_lease: ConversionCapacityLease,
 ) -> StreamingResponse:
     return _ConversionUploadSseMachine(
         file=file,
@@ -351,4 +363,6 @@ def _build_conversion_upload_sse_response(
         scanned_likely=scanned_likely,
         total_pages=total_pages,
         execute_conversion_and_build_response=execute_conversion_and_build_response,
+        capacity_controller=capacity_controller,
+        capacity_lease=capacity_lease,
     ).build_response()

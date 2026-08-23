@@ -6,6 +6,7 @@ from fastapi import Depends
 from app.application import (
     AccessControlService,
     ContactService,
+    ConversionCapacityController,
     ConversionDocumentStore,
     ConversionJobCleanupService,
     ConversionJobExecutor,
@@ -51,6 +52,7 @@ _conversion_job_cleanup_service = ConversionJobCleanupService(
 _access_control_service: AccessControlService | None = None
 _contact_service: ContactService | None = None
 _google_oauth_service: GoogleOAuthService | None = None
+_conversion_capacity_controller: ConversionCapacityController | None = None
 
 
 def _resolve_access_control_state_file() -> Path:
@@ -138,6 +140,20 @@ def close_access_control_service() -> None:
     if _access_control_service is not None:
         _access_control_service.close()
         _access_control_service = None
+
+
+def get_conversion_capacity_controller() -> ConversionCapacityController:
+    global _conversion_capacity_controller
+    if _conversion_capacity_controller is None:
+        _conversion_capacity_controller = ConversionCapacityController.from_env()
+    return _conversion_capacity_controller
+
+
+def close_conversion_capacity_controller() -> None:
+    global _conversion_capacity_controller
+    if _conversion_capacity_controller is not None:
+        _conversion_capacity_controller.close()
+        _conversion_capacity_controller = None
 
 
 def get_quota_validator_service(
