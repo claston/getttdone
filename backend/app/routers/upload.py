@@ -1,7 +1,9 @@
+import asyncio
 import logging
+from functools import partial
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, Depends, File, Form, Header, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, UploadFile
 
 from app.api.conversion.conversion_error_mapper import _raise_http_convert_error
 from app.api.conversion.conversion_response_mapper import _result_to_convert_response
@@ -18,6 +20,8 @@ from app.api.conversion.upload_staging import (
 )
 from app.application import (
     AccessControlService,
+    ConversionCapacityController,
+    ConversionCapacityLease,
     ConvertDocumentUseCase,
     DocumentPreflightService,
     MaxPagesPerFileExceededError,
@@ -29,7 +33,11 @@ from app.application.conversion.document_preflight_service import (
     OCR_CONTEXT_UNIDENTIFIED_MODEL_FALLBACK,
 )
 from app.application.conversion.uploaded_document import UploadedDocument
-from app.dependencies import get_access_control_service, get_convert_document_use_case
+from app.dependencies import (
+    get_access_control_service,
+    get_conversion_capacity_controller,
+    get_convert_document_use_case,
+)
 from app.routers.auth_session import SESSION_ACCESS_COOKIE_NAME
 from app.schemas import ConvertResponse
 
@@ -39,6 +47,9 @@ TEXT_PDF_MAX_PAGES_PER_FILE = document_preflight_service_module.TEXT_PDF_MAX_PAG
 TEXT_PDF_MAX_UPLOAD_SIZE_BYTES = document_preflight_service_module.TEXT_PDF_MAX_UPLOAD_SIZE_BYTES
 OCR_PDF_MAX_PAGES_PER_FILE = document_preflight_service_module.OCR_PDF_MAX_PAGES_PER_FILE
 OCR_PDF_MAX_UPLOAD_SIZE_BYTES = document_preflight_service_module.OCR_PDF_MAX_UPLOAD_SIZE_BYTES
+CONVERSION_BUSY_MESSAGE = (
+    "Estamos processando outros arquivos no momento. Aguarde alguns segundos e tente novamente."
+)
 
 
 def _resolve_ocr_limit_context(scanned_likely: bool | None) -> str:
@@ -59,6 +70,26 @@ def _resolve_conversion_type_from_filename(filename: str) -> str:
 
 def _is_sse_request(accept: str | None) -> bool:
     return "text/event-stream" in str(accept or "").lower()
+
+
+def _acquire_conversion_capacity_or_raise(
+    controller: ConversionCapacityController,
+    *,
+    source: str,
+) -> ConversionCapacityLease:
+    lease = controller.try_acquire(source=source)
+    if lease is not None:
+        return lease
+    raise HTTPException(
+        status_code=503,
+        headers={"Retry-After": str(controller.retry_after_seconds)},
+        detail={
+            "code": "conversion_capacity_exceeded",
+            "message": CONVERSION_BUSY_MESSAGE,
+            "retryable": True,
+            "retry_after_seconds": controller.retry_after_seconds,
+        },
+    )
 
 
 def _inspect_pdf_scan_likely(filename: str, raw_bytes: bytes) -> tuple[bool | None, int | None]:
@@ -115,7 +146,7 @@ def _inspect_staged_pdf(*, file: UploadFile, staged_upload: _StagedUpload) -> tu
     return scanned_likely, total_pages
 
 
-def _handle_conversion_upload_json(
+async def _handle_conversion_upload_json(
     *,
     file: UploadFile,
     staged_upload: _StagedUpload,
@@ -125,25 +156,36 @@ def _handle_conversion_upload_json(
     access_cookie_token: str | None,
     use_case: ConvertDocumentUseCase,
     access_control_service: AccessControlService,
+    capacity_controller: ConversionCapacityController,
+    capacity_lease: ConversionCapacityLease,
 ) -> ConvertResponse:
     identity = None
+    pending_lease: ConversionCapacityLease | None = capacity_lease
     try:
         scanned_likely, total_pages = _inspect_staged_pdf(file=file, staged_upload=staged_upload)
-        return _execute_conversion_and_build_response(
-            file=file,
-            staged_upload=staged_upload,
-            anonymous_fingerprint=anonymous_fingerprint,
-            user_token=user_token,
-            authorization=authorization,
-            access_cookie_token=access_cookie_token,
-            use_case=use_case,
-            scanned_likely=scanned_likely,
-            estimated_pages_count=total_pages,
+        conversion_future = capacity_controller.submit(
+            capacity_lease,
+            partial(
+                _execute_conversion_and_build_response,
+                file=file,
+                staged_upload=staged_upload,
+                anonymous_fingerprint=anonymous_fingerprint,
+                user_token=user_token,
+                authorization=authorization,
+                access_cookie_token=access_cookie_token,
+                use_case=use_case,
+                scanned_likely=scanned_likely,
+                estimated_pages_count=total_pages,
+            ),
         )
+        pending_lease = None
+        return await asyncio.wrap_future(conversion_future)
     except Exception as exc:
         _raise_http_convert_error(exc, identity=identity, access_control_service=access_control_service)
         raise
     finally:
+        if pending_lease is not None:
+            pending_lease.release(outcome="rejected_before_submission")
         _cleanup_staged_upload(staged_upload)
 
 
@@ -156,27 +198,38 @@ async def convert(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     use_case: ConvertDocumentUseCase = Depends(get_convert_document_use_case),
     access_control_service: AccessControlService = Depends(get_access_control_service),
+    capacity_controller: ConversionCapacityController = Depends(get_conversion_capacity_controller),
 ) -> ConvertResponse:
+    capacity_lease = _acquire_conversion_capacity_or_raise(capacity_controller, source="/convert")
     identity = None
     staged_upload: _StagedUpload | None = None
+    pending_lease: ConversionCapacityLease | None = capacity_lease
     try:
         staged_upload = await _stage_upload_to_temp_file(file)
         scanned_likely, total_pages = _inspect_pdf_scan_likely_from_path(file.filename or "", staged_upload.path)
-        return _execute_conversion_and_build_response(
-            file=file,
-            staged_upload=staged_upload,
-            anonymous_fingerprint=anonymous_fingerprint,
-            user_token=user_token,
-            authorization=authorization,
-            access_cookie_token=access_cookie_token,
-            use_case=use_case,
-            scanned_likely=scanned_likely,
-            estimated_pages_count=total_pages,
+        conversion_future = capacity_controller.submit(
+            capacity_lease,
+            partial(
+                _execute_conversion_and_build_response,
+                file=file,
+                staged_upload=staged_upload,
+                anonymous_fingerprint=anonymous_fingerprint,
+                user_token=user_token,
+                authorization=authorization,
+                access_cookie_token=access_cookie_token,
+                use_case=use_case,
+                scanned_likely=scanned_likely,
+                estimated_pages_count=total_pages,
+            ),
         )
+        pending_lease = None
+        return await asyncio.wrap_future(conversion_future)
     except Exception as exc:
         _raise_http_convert_error(exc, identity=identity, access_control_service=access_control_service)
         raise
     finally:
+        if pending_lease is not None:
+            pending_lease.release(outcome="rejected_before_submission")
         _cleanup_staged_upload(staged_upload)
 
 
@@ -190,9 +243,14 @@ async def conversion_upload_stream(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     use_case: ConvertDocumentUseCase = Depends(get_convert_document_use_case),
     access_control_service: AccessControlService = Depends(get_access_control_service),
+    capacity_controller: ConversionCapacityController = Depends(get_conversion_capacity_controller),
 ):
     logger.info("conversion_upload_received filename=%s accept=%s", file.filename or "", accept or "")
     wants_sse = _is_sse_request(accept)
+    capacity_lease = _acquire_conversion_capacity_or_raise(
+        capacity_controller,
+        source="/api/conversions/upload",
+    )
     try:
         staged_upload = await _stage_upload_to_temp_file(file)
         logger.info(
@@ -201,6 +259,7 @@ async def conversion_upload_stream(
             staged_upload.size_bytes,
         )
     except Exception as exc:
+        capacity_lease.release(outcome="staging_failed")
         if not wants_sse:
             _raise_http_convert_error(exc, identity=None, access_control_service=access_control_service)
             raise
@@ -208,7 +267,7 @@ async def conversion_upload_stream(
         return _build_failed_upload_streaming_response(exc)
 
     if not wants_sse:
-        return _handle_conversion_upload_json(
+        return await _handle_conversion_upload_json(
             file=file,
             staged_upload=staged_upload,
             anonymous_fingerprint=anonymous_fingerprint,
@@ -217,9 +276,16 @@ async def conversion_upload_stream(
             access_cookie_token=access_cookie_token,
             use_case=use_case,
             access_control_service=access_control_service,
+            capacity_controller=capacity_controller,
+            capacity_lease=capacity_lease,
         )
 
-    scanned_likely, total_pages = _inspect_staged_pdf(file=file, staged_upload=staged_upload)
+    try:
+        scanned_likely, total_pages = _inspect_staged_pdf(file=file, staged_upload=staged_upload)
+    except Exception as exc:
+        capacity_lease.release(outcome="preflight_failed")
+        _cleanup_staged_upload(staged_upload)
+        return _build_failed_upload_streaming_response(exc)
     logger.info(
         "conversion_pdf_inspection_complete filename=%s scanned_likely=%s estimated_pages_count=%s",
         file.filename or "",
@@ -227,19 +293,26 @@ async def conversion_upload_stream(
         total_pages,
     )
 
-    return _build_conversion_upload_sse_response(
-        file=file,
-        staged_upload=staged_upload,
-        anonymous_fingerprint=anonymous_fingerprint,
-        user_token=user_token,
-        authorization=authorization,
-        access_cookie_token=access_cookie_token,
-        use_case=use_case,
-        access_control_service=access_control_service,
-        scanned_likely=scanned_likely,
-        total_pages=total_pages,
-        execute_conversion_and_build_response=_execute_conversion_and_build_response,
-    )
+    try:
+        return _build_conversion_upload_sse_response(
+            file=file,
+            staged_upload=staged_upload,
+            anonymous_fingerprint=anonymous_fingerprint,
+            user_token=user_token,
+            authorization=authorization,
+            access_cookie_token=access_cookie_token,
+            use_case=use_case,
+            access_control_service=access_control_service,
+            scanned_likely=scanned_likely,
+            total_pages=total_pages,
+            execute_conversion_and_build_response=_execute_conversion_and_build_response,
+            capacity_controller=capacity_controller,
+            capacity_lease=capacity_lease,
+        )
+    except Exception:
+        capacity_lease.release(outcome="stream_setup_failed")
+        _cleanup_staged_upload(staged_upload)
+        raise
 
 
 

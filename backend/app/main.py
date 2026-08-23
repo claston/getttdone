@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.dependencies import (
     close_access_control_service,
+    close_conversion_capacity_controller,
     get_report_service,
 )
 from app.routers import (
@@ -64,6 +65,7 @@ app = FastAPI(
 
 @app.on_event("shutdown")
 def _shutdown_services() -> None:
+    close_conversion_capacity_controller()
     close_access_control_service()
 
 

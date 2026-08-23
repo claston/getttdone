@@ -81,6 +81,8 @@
     statusPendingTimer: null,
     lastStatusAt: 0,
     quotaLockVariant: null,
+    capacityRetryUntil: 0,
+    capacityRetryTimer: null,
   };
   let bankCodeOptions = [{ code: "", label: "Selecione o banco", name: "", short_name: "", aliases: [] }];
 
@@ -1004,10 +1006,54 @@
     });
   }
 
+  function getCapacityRetrySeconds() {
+    return Math.max(0, Math.ceil((Number(state.capacityRetryUntil || 0) - Date.now()) / 1000));
+  }
+
+  function syncConvertButton() {
+    const retrySeconds = getCapacityRetrySeconds();
+    const hasFile = Boolean(input.files && input.files.length > 0);
+    convertBtn.disabled = isQuotaLocked() || state.isLoading || retrySeconds > 0 || !hasFile;
+    convertBtn.textContent = state.isLoading
+      ? "Convertendo..."
+      : retrySeconds > 0
+        ? `Tentar novamente em ${retrySeconds}s`
+        : "Converter";
+  }
+
+  function startCapacityRetryCooldown(retryAfterSeconds) {
+    const parsedRetrySeconds = Number(retryAfterSeconds);
+    const safeRetrySeconds = Number.isFinite(parsedRetrySeconds)
+      ? Math.max(1, Math.min(300, parsedRetrySeconds))
+      : 15;
+    state.capacityRetryUntil = Date.now() + safeRetrySeconds * 1000;
+    if (state.capacityRetryTimer) {
+      window.clearTimeout(state.capacityRetryTimer);
+    }
+
+    function updateCapacityRetryCountdown() {
+      const remainingSeconds = getCapacityRetrySeconds();
+      syncConvertButton();
+      if (remainingSeconds > 0) {
+        setStatus(
+          `Estamos processando outros arquivos. Tente novamente em ${remainingSeconds}s. Seu arquivo continua selecionado.`,
+          "error",
+        );
+        state.capacityRetryTimer = window.setTimeout(updateCapacityRetryCountdown, 1000);
+        return;
+      }
+      state.capacityRetryUntil = 0;
+      state.capacityRetryTimer = null;
+      syncConvertButton();
+      setStatus('Já há capacidade disponível. Clique em "Converter" para tentar novamente.', null);
+    }
+
+    updateCapacityRetryCountdown();
+  }
+
   function setLoading(isLoading) {
     state.isLoading = isLoading;
-    convertBtn.disabled = isQuotaLocked() || isLoading || !input.files || input.files.length === 0;
-    convertBtn.textContent = isLoading ? "Convertendo..." : "Converter";
+    syncConvertButton();
     if (!isLoading) {
       resetProgressBar();
     }
@@ -1022,7 +1068,7 @@
       : hasRestoredMeta
         ? `${restoredMeta.name} (${formatFileSize(restoredMeta.size)})`
         : "Nenhum arquivo selecionado";
-    convertBtn.disabled = isQuotaLocked() || !file || state.isLoading;
+    syncConvertButton();
     if (dropzoneEmpty && dropzoneLoaded && dropzoneFileMeta) {
       if (file) {
         state.restoredFileMeta = null;
@@ -2270,6 +2316,10 @@
       setStatus("Limite semanal atingido. Crie sua conta para continuar.", "error");
       return;
     }
+    if (getCapacityRetrySeconds() > 0) {
+      syncConvertButton();
+      return;
+    }
     const file = input.files && input.files[0];
     if (!file) {
       setStatus("Selecione um arquivo antes de converter.", "error");
@@ -2367,6 +2417,12 @@
       const detail = error && typeof error === "object" ? error.detail : null;
       const status = error && typeof error === "object" ? Number(error.status || 0) : 0;
       const code = error && typeof error === "object" ? String(error.code || "") : "";
+      if (status === 503 && code === "conversion_capacity_exceeded") {
+        const retryAfterSeconds =
+          detail && typeof detail === "object" ? Number(detail.retry_after_seconds || 15) : 15;
+        startCapacityRetryCooldown(retryAfterSeconds);
+        return;
+      }
       if (isUnrecognizedPdfLayoutError(message)) {
         setStatusHtml(
           'Não conseguimos identificar as transações neste PDF. <a href="./contato.html">Falar com suporte</a> ou tente outro arquivo.',

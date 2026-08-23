@@ -40,6 +40,14 @@ TTL de analises (opcional):
 $env:ANALYSIS_TTL_SECONDS = "86400" # 24 horas
 ```
 
+Proteção de capacidade da conversão inline:
+
+- `CONVERSION_MAX_CONCURRENCY=1` limita o processo a uma conversão ativa por vez; são aceitos valores de `1` a `4`.
+- Aumentar o tamanho da máquina não altera esse valor automaticamente. Ajuste a variável gradualmente e reinicie o serviço após observar memória, CPU, duração e rejeições `conversion_capacity_rejected` nos logs.
+- `CONVERSION_BUSY_RETRY_AFTER_SECONDS=15` define a espera sugerida quando a capacidade está ocupada.
+- Quando todas as vagas estão em uso, os endpoints de conversão retornam `503` com `Retry-After`, sem iniciar a conversão nem consumir cota.
+- O limite é por processo da aplicação. A configuração atual do Render usa um processo Uvicorn, portanto ele também representa o limite da instância.
+
 OCR para PDF sem camada de texto:
 
 - Em `development`, o OCR pode ser autoativado quando houver Tesseract instalado e `backend/tmp/tessdata` com idiomas disponiveis.
