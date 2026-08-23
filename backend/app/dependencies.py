@@ -22,6 +22,7 @@ from app.application import (
     InlineConversionJobExecutor,
     QuotaValidatorService,
     ReportService,
+    S3ConversionDocumentStore,
     TempAnalysisStorage,
 )
 from app.application.conversion_pipeline import ConversionPipeline
@@ -30,6 +31,25 @@ from app.application.repositories import AnalysisRepository
 from app.security_baseline import is_production_env, read_bool_env
 
 _backend_root = Path(__file__).resolve().parents[1]
+
+
+def _build_conversion_document_store(*, backend_root: Path) -> ConversionDocumentStore:
+    mode = os.getenv("CONVERSION_DOCUMENT_STORE", "filesystem").strip().lower()
+    if mode == "filesystem":
+        return FilesystemConversionDocumentStore(
+            root_dir=backend_root / "tmp" / "conversion_jobs" / "documents",
+        )
+    if mode == "s3":
+        return S3ConversionDocumentStore(
+            bucket=os.getenv("CONVERSION_S3_BUCKET", ""),
+            prefix=os.getenv("CONVERSION_S3_PREFIX", "conversion/jobs"),
+            region=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
+            server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
+            kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
+        )
+    raise RuntimeError("CONVERSION_DOCUMENT_STORE must be 'filesystem' or 's3'.")
+
+
 _storage = TempAnalysisStorage(
     root_dir=_backend_root / "tmp" / "analyses",
     ttl_seconds=int(os.getenv("ANALYSIS_TTL_SECONDS", "86400")),
@@ -37,9 +57,7 @@ _storage = TempAnalysisStorage(
 _conversion_processing_pipeline = build_default_conversion_pipeline()
 _report_service = ReportService(storage=_storage)
 _document_preflight_service = DocumentPreflightService()
-_conversion_document_store = FilesystemConversionDocumentStore(
-    root_dir=_backend_root / "tmp" / "conversion_jobs" / "documents",
-)
+_conversion_document_store = _build_conversion_document_store(backend_root=_backend_root)
 _conversion_job_repository = FilesystemConversionJobRepository(
     root_dir=_backend_root / "tmp" / "conversion_jobs" / "registry",
     active_ttl_seconds=int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400")),
