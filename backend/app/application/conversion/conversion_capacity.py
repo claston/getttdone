@@ -46,8 +46,8 @@ class ConversionCapacityLease:
 
 class ConversionCapacityController(Generic[_ResultT]):
     def __init__(self, *, max_concurrency: int, retry_after_seconds: int) -> None:
-        if max_concurrency not in {1, 2}:
-            raise ValueError("CONVERSION_MAX_CONCURRENCY must be 1 or 2.")
+        if not 1 <= max_concurrency <= 4:
+            raise ValueError("CONVERSION_MAX_CONCURRENCY must be between 1 and 4.")
         if not 1 <= retry_after_seconds <= 300:
             raise ValueError("CONVERSION_BUSY_RETRY_AFTER_SECONDS must be between 1 and 300.")
 

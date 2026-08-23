@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from threading import Event, current_thread
 
 import pytest
@@ -54,32 +55,33 @@ def test_capacity_releases_slot_when_submitted_conversion_fails() -> None:
     controller.close()
 
 
-def test_capacity_with_two_workers_accepts_two_and_rejects_the_third() -> None:
-    controller = ConversionCapacityController(max_concurrency=2, retry_after_seconds=15)
-    first = controller.try_acquire(source="first")
-    second = controller.try_acquire(source="second")
+def test_capacity_with_four_workers_accepts_four_and_rejects_the_fifth(caplog) -> None:
+    controller = ConversionCapacityController(max_concurrency=4, retry_after_seconds=15)
+    leases = [controller.try_acquire(source=f"accepted-{index}") for index in range(4)]
 
-    assert first is not None
-    assert second is not None
-    assert controller.active_count == 2
-    assert controller.try_acquire(source="third") is None
+    assert all(lease is not None for lease in leases)
+    assert controller.active_count == 4
+    with caplog.at_level(logging.WARNING):
+        assert controller.try_acquire(source="fifth") is None
 
-    first.release(outcome="test_complete")
-    second.release(outcome="test_complete")
+    assert "conversion_capacity_rejected source=fifth active=4 max=4 retry_after_seconds=15" in caplog.text
+    for lease in leases:
+        assert lease is not None
+        lease.release(outcome="test_complete")
     controller.close()
 
 
-def test_capacity_from_env_accepts_only_one_or_two_workers(monkeypatch) -> None:
-    monkeypatch.setenv("CONVERSION_MAX_CONCURRENCY", "2")
+def test_capacity_from_env_accepts_up_to_four_workers(monkeypatch) -> None:
+    monkeypatch.setenv("CONVERSION_MAX_CONCURRENCY", "4")
     monkeypatch.setenv("CONVERSION_BUSY_RETRY_AFTER_SECONDS", "9")
 
     controller = ConversionCapacityController.from_env()
 
-    assert controller.max_concurrency == 2
+    assert controller.max_concurrency == 4
     assert controller.retry_after_seconds == 9
     controller.close()
 
-    monkeypatch.setenv("CONVERSION_MAX_CONCURRENCY", "3")
+    monkeypatch.setenv("CONVERSION_MAX_CONCURRENCY", "5")
     with pytest.raises(ValueError, match="CONVERSION_MAX_CONCURRENCY"):
         ConversionCapacityController.from_env()
 
