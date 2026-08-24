@@ -3,6 +3,7 @@ from app.application.conversion.conversion_document_store import (
     ConversionDocumentReference,
     ConversionDocumentStore,
     FilesystemConversionDocumentStore,
+    S3ConversionDocumentStore,
 )
 from app.application.conversion.conversion_job import ConversionExecutionHooks, ConversionJob
 from app.application.conversion.conversion_job_cleanup_service import ConversionJobCleanupService
@@ -53,6 +54,7 @@ __all__ = [
     "FilesystemConversionDocumentStore",
     "FilesystemConversionJobRepository",
     "InlineConversionJobExecutor",
+    "S3ConversionDocumentStore",
     "ParsedBankStatement",
     "ParsedTransaction",
     "SUPPORTED_DOCUMENT_EXTENSIONS",

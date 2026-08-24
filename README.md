@@ -48,6 +48,14 @@ Proteção de capacidade da conversão inline:
 - Quando todas as vagas estão em uso, os endpoints de conversão retornam `503` com `Retry-After`, sem iniciar a conversão nem consumir cota.
 - O limite é por processo da aplicação. A configuração atual do Render usa um processo Uvicorn, portanto ele também representa o limite da instância.
 
+Armazenamento compartilhado de documentos de conversão:
+
+- `CONVERSION_DOCUMENT_STORE=filesystem` mantém o comportamento local atual e é o padrão.
+- `CONVERSION_DOCUMENT_STORE=s3` usa o bucket privado definido em `CONVERSION_S3_BUCKET`.
+- `CONVERSION_S3_PREFIX=conversion/jobs` separa os objetos temporários dentro do bucket.
+- `CONVERSION_S3_SERVER_SIDE_ENCRYPTION=AES256` habilita criptografia explícita no envio. Para KMS, use `aws:kms` e informe `CONVERSION_S3_KMS_KEY_ID`.
+- Essa configuração ainda não ativa processamento assíncrono: o fluxo continua inline, mas passa a armazenar, carregar e excluir o documento pelo S3. Isso permite validar o armazenamento antes da introdução de SQS e Lambda.
+
 OCR para PDF sem camada de texto:
 
 - Em `development`, o OCR pode ser autoativado quando houver Tesseract instalado e `backend/tmp/tessdata` com idiomas disponiveis.
