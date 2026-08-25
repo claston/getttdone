@@ -13,6 +13,7 @@ from app.application.parsers.pdf.layout_specific.contract import (
 from app.application.parsers.pdf.layout_specific.inter import InterLayoutParser
 from app.application.parsers.pdf.layout_specific.itau import ItauLayoutParser
 from app.application.parsers.pdf.layout_specific.santander_credit_card import SantanderCreditCardLayoutParser
+from app.application.parsers.pdf.layout_specific.sicoob import SicoobLayoutParser
 from app.application.parsers.pdf.models import _PdfLine
 
 
@@ -55,5 +56,6 @@ DEFAULT_PDF_LAYOUT_PARSER_REGISTRY = PdfLayoutParserRegistry(
         BanrisulLayoutParser(),
         ItauLayoutParser(),
         InterLayoutParser(),
+        SicoobLayoutParser(),
     )
 )

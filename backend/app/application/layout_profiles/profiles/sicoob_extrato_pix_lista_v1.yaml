@@ -1,0 +1,47 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_extrato_pix_lista_v1
+  bank: Sicoob
+  layout_family: sicoob_extrato_pix_lista_mensal
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "PLATAFORMA DE SERVIÇOS FINANCEIROS DO SICOOB - SISBR"
+      - "PIX RECEBIDO"
+      - "Recebimento Pix"
+      - "+ R$"
+    optional_keywords:
+      - "ABR"
+      - "PIX ENVIADO"
+      - "Pagamento Pix"
+    negative_keywords:
+      - "HISTÓRICO DE MOVIMENTAÇÃO"
+      - "EXTRATO DE APLICAÇÕES"
+      - "Comprovante"
+    min_score_hint: 0.76
+  table_detection:
+    header_keywords: []
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "MMM dd"
+    date_year_source: "statement_period"
+    month_language: "pt-BR"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "- R$ {amount}"
+    positive_patterns:
+      - "+ R$ {amount_without_minus}"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - counterparty
