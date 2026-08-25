@@ -70,5 +70,10 @@ def test_default_layout_parser_registry_contains_current_specific_families() -> 
             "itau_empresas_transferencias_recebidas_v1",
             "itau_empresas_extrato_completo_tabela_v1",
             "itau_comprovante_transferencia_pix_v1",
+            "banco_inter_extrato_conta_corrente_movimentacoes_v1",
+            "banco_inter_extrato_conta_corrente_lista_diaria_v1",
+            "banco_inter_fatura_cartao_despesas_v1",
+            "banco_inter_extrato_conta_corrente_saldo_transacao_v1",
+            "banco_inter_extrato_posicao_renda_fixa_v1",
         }
     )

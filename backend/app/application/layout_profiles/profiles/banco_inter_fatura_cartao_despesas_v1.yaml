@@ -1,0 +1,64 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banco_inter_fatura_cartao_despesas_v1
+  bank: Banco Inter
+  layout_family: banco_inter_fatura_cartao_despesas
+  statement_type: cartao_credito_fatura
+  confidence: high
+  classifier:
+    required_keywords:
+      - "inter"
+      - "Sua fatura"
+      - "VENCIMENTO"
+      - "Resumo da fatura"
+      - "Despesas da fatura"
+      - "CARTÃO"
+      - "DATA"
+      - "MOVIMENTAÇÃO"
+      - "VALOR"
+    optional_keywords:
+      - "Pagamento On Line"
+      - "Parcela"
+      - "Iof Internacional"
+      - "Cotação do dólar americano"
+    negative_keywords:
+      - "Extrato Conta Corrente"
+      - "Saldo por transação"
+      - "Renda Fixa"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords:
+      - "DATA"
+      - "MOVIMENTAÇÃO"
+      - "VALOR"
+    expected_column_order:
+      - date
+      - description
+      - amount
+    column_aliases:
+      date:
+        - "DATA"
+      description:
+        - "MOVIMENTAÇÃO"
+      amount:
+        - "VALOR"
+  parsing:
+    date_format: "dd MMM yyyy"
+    date_year_source: "transaction"
+    month_language: "pt-BR"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "invoice_expense"
+    positive_patterns:
+      - "+ R$ {amount_without_minus}"
+      - "invoice_payment"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []

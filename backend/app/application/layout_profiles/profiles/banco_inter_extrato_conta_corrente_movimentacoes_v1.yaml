@@ -1,0 +1,69 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banco_inter_extrato_conta_corrente_movimentacoes_v1
+  bank: Banco Inter
+  layout_family: banco_inter_conta_corrente_movimentacoes_tabela
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Inter"
+      - "Extrato Conta Corrente"
+      - "Tipo: Conta Corrente"
+      - "Saldo Atual"
+      - "Saldo Disponível"
+      - "Movimentações"
+      - "Data Lançamento"
+      - "Lançamentos"
+      - "Valor"
+      - "Saldo"
+    optional_keywords:
+      - "PAGAMENTO DE TITULO"
+      - "PIX ENVIADO"
+      - "PIX RECEBIDO"
+      - "Depósito de Cheque"
+    negative_keywords:
+      - "Fatura"
+      - "Renda Fixa"
+      - "Saldo por transação"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Data Lançamento"
+      - "Lançamentos"
+      - "Valor"
+      - "Saldo"
+    expected_column_order:
+      - date
+      - description
+      - amount
+      - balance
+    column_aliases:
+      date:
+        - "Data Lançamento"
+      description:
+        - "Lançamentos"
+      amount:
+        - "Valor"
+      balance:
+        - "Saldo"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "- R$ {amount}"
+      - "-R$ {amount}"
+    positive_patterns:
+      - "R$ {amount_without_minus}"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - balance

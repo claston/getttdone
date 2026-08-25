@@ -1,0 +1,67 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banco_inter_extrato_conta_corrente_saldo_transacao_v1
+  bank: Banco Inter
+  layout_family: banco_inter_conta_corrente_saldo_por_transacao
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "inter"
+      - "CPF/CNPJ"
+      - "Período"
+      - "Saldo total"
+      - "Saldo disponível"
+      - "Saldo bloqueado"
+      - "Saldo do dia"
+      - "Valor"
+      - "Saldo por transação"
+    optional_keywords:
+      - "TED RECEBIDA"
+      - "PIX RECEBIDO"
+      - "PAGAMENTO DE TITULO"
+    negative_keywords:
+      - "Fatura"
+      - "Renda Fixa"
+      - "Movimentações"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords:
+      - "Saldo do dia"
+      - "Valor"
+      - "Saldo por transação"
+    expected_column_order:
+      - date_group
+      - description
+      - amount
+      - balance
+    column_aliases:
+      date:
+        - "Saldo do dia"
+      description:
+        - "Lançamento"
+      amount:
+        - "Valor"
+      balance:
+        - "Saldo por transação"
+  parsing:
+    date_format: "dd 'de' MMMM 'de' yyyy"
+    date_year_source: "date_group"
+    month_language: "pt-BR"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "-R$ {amount}"
+    positive_patterns:
+      - "R$ {amount_without_minus}"
+    ignore_rows:
+      - "Saldo do dia"
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - balance

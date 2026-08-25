@@ -1,0 +1,81 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banco_inter_extrato_posicao_renda_fixa_v1
+  bank: Banco Inter
+  layout_family: banco_inter_posicao_renda_fixa
+  statement_type: investimento_posicao
+  confidence: high
+  classifier:
+    required_keywords:
+      - "inter"
+      - "EXTRATO DE POSIÇÃO DE RENDA FIXA"
+      - "Emissão"
+      - "CDB LIQUIDEZ DIARIA"
+      - "Valor Aplicado Total"
+      - "Nota"
+      - "Data Início"
+      - "Data Vencimento"
+      - "Valor Aplicação"
+      - "Tipo Aplicação"
+      - "Valor Rendimento"
+      - "Valor Líquido"
+    optional_keywords:
+      - "100% do CDI"
+      - "IR/IOF"
+      - "Valor Bruto Total"
+      - "Valor Retirada"
+    negative_keywords:
+      - "Conta Corrente"
+      - "Fatura"
+      - "PIX"
+    min_score_hint: 0.84
+  table_detection:
+    header_keywords:
+      - "Nota"
+      - "Data Início"
+      - "Data Vencimento"
+      - "Valor Aplicação"
+      - "Tipo Aplicação"
+      - "Valor Rendimento"
+      - "Valor Líquido"
+    expected_column_order:
+      - document
+      - date
+      - due_date
+      - amount
+      - type
+      - rate
+      - yield
+      - withdrawal
+      - gross_value
+      - net_value
+    column_aliases:
+      date:
+        - "Data Início"
+      description:
+        - "Tipo Aplicação"
+      document:
+        - "Nota"
+      amount:
+        - "Valor Aplicação"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "investment_application"
+    positive_patterns: []
+    ignore_rows:
+      - "Valor Aplicado Total"
+      - "Valor Bruto Total"
+      - "Valor Líquido Total"
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
