@@ -432,6 +432,8 @@ def _resolve_ofx_account_type(
             "banco_inter_fatura_cartao_despesas_v1",
             "sicoob_fatura_cartao_credito_movimentos_v1",
             "sicoob_cartao_lancamentos_futuros_v1",
+            "banrisul_fatura_cartao_historico_transacoes_v1",
+            "banrisul_extrato_cartao_credito_simples_v1",
         }:
             return "credit_card"
 

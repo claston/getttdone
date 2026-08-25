@@ -1,0 +1,66 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banrisul_demonstrativo_cdb_automatico_v1
+  bank: Banrisul
+  layout_family: banrisul_demonstrativo_cdb_automatico_mensal
+  statement_type: investimento_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Banrisul"
+      - "DEMONSTRATIVO DE MOVIMENTAÇÃO"
+      - "CDB AUTOMATICO - MENSAL"
+      - "IDENTIFICAÇÃO DAS OPERAÇÕES"
+      - "MOVIMENTAÇÕES"
+      - "Histórico"
+      - "Rendimento Bruto"
+      - "Valor Líquido"
+    optional_keywords:
+      - "APLICACAO"
+      - "RESGATE"
+      - "SLD ANTER"
+      - "Posição Final do Período"
+    negative_keywords:
+      - "Cartão de Crédito"
+      - "Operações Pix"
+      - "Recibo de Pagamento"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Histórico"
+      - "Valor"
+      - "Rendimento Bruto"
+      - "Valor Líquido"
+    expected_column_order:
+      - application_date
+      - application_amount
+      - modality
+      - due_date
+      - date
+      - description
+      - amount
+      - gross_yield
+      - iof
+      - income_tax
+      - net_amount
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "APLICACAO"
+    positive_patterns:
+      - "RESGATE"
+    ignore_rows:
+      - "SLD ANTER"
+      - "SOMATÓRIO"
+    opening_balance_rows:
+      - "SLD ANTER"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - net_amount

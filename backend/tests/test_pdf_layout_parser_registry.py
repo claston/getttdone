@@ -86,5 +86,11 @@ def test_default_layout_parser_registry_contains_current_specific_families() -> 
             "pagbank_extrato_conta_corrente_simples_v1",
             "pagseguro_relatorio_conta_bloqueada_v1",
             "pagbank_extrato_transacoes_operacionais_v1",
+            "banrisul_consulta_operacoes_recibos_v1",
+            "banrisul_operacoes_pix_v1",
+            "banrisul_recibo_pagamento_v1",
+            "banrisul_demonstrativo_cdb_automatico_v1",
+            "banrisul_fatura_cartao_historico_transacoes_v1",
+            "banrisul_extrato_cartao_credito_simples_v1",
         }
     )

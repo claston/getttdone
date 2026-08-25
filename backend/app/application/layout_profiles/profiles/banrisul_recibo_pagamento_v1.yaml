@@ -1,0 +1,50 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banrisul_recibo_pagamento_v1
+  bank: Banrisul
+  layout_family: banrisul_recibo_pagamento
+  statement_type: comprovante_pagamento
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Banrisul"
+      - "Recibo de Pagamento"
+      - "Canal"
+      - "Tipo Pagamento"
+      - "Emissor"
+      - "Valor"
+      - "Valor Juros"
+      - "Data Débito"
+    optional_keywords:
+      - "Office Banking"
+      - "Títulos Banrisul / Outros Bancos"
+      - "Data Vencimento"
+      - "Beneficiário Original"
+    negative_keywords:
+      - "Operações Pix"
+      - "Consulta Operações"
+      - "Cartão de Crédito"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords: []
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "debit_date"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "payment_total"
+    positive_patterns: []
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
+      - counterparty
