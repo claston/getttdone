@@ -1,0 +1,62 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banrisul_consulta_operacoes_recibos_v1
+  bank: Banrisul
+  layout_family: banrisul_consulta_operacoes_emite_recibos
+  statement_type: transferencias_relatorio
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Banrisul"
+      - "BANCO DO ESTADO DO RIO GRANDE DO SUL S.A."
+      - "Consulta Operações / Emite Recibos"
+      - "NSU"
+      - "Situação"
+      - "Operação"
+      - "Agência/Conta"
+      - "Complemento"
+    optional_keywords:
+      - "EFETUADA"
+      - "Transferência"
+      - "Crédito"
+    negative_keywords:
+      - "Operações Pix"
+      - "Recibo de Pagamento"
+      - "Cartão de Crédito"
+    min_score_hint: 0.78
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "NSU"
+      - "Situação"
+      - "Valor"
+      - "Operação"
+      - "Agência/Conta"
+      - "Complemento"
+    expected_column_order:
+      - date
+      - document
+      - status
+      - amount
+      - description
+      - account
+      - complement
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "Débito"
+    positive_patterns:
+      - "Crédito"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
+      - status
+      - account

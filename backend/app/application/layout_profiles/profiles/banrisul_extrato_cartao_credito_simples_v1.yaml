@@ -1,0 +1,45 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banrisul_extrato_cartao_credito_simples_v1
+  bank: Banrisul
+  layout_family: banrisul_extrato_cartao_credito_simples
+  statement_type: cartao_credito_fatura
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Banrisul"
+      - "Extrato de Cartão de Crédito"
+      - "R$"
+    optional_keywords:
+      - "PGTO HOME/OFFICE BANKING"
+      - "MERCADOPAGO"
+      - "APPLE.COM/BILL"
+      - "janeiro"
+    negative_keywords:
+      - "HISTÓRICO DE TRANSAÇÕES"
+      - "Operações Pix"
+      - "Recibo de Pagamento"
+    min_score_hint: 0.68
+  table_detection:
+    header_keywords:
+      - "Extrato de Cartão de Crédito"
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "invoice_expense"
+    positive_patterns:
+      - "invoice_payment_or_credit"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []

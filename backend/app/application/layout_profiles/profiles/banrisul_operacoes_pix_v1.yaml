@@ -1,0 +1,57 @@
+layout_profile:
+  schema_version: 2
+  profile_name: banrisul_operacoes_pix_v1
+  bank: Banrisul
+  layout_family: banrisul_operacoes_pix
+  statement_type: pix_relatorio
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Banrisul"
+      - "Banco do Estado do Rio Grande do Sul"
+      - "Operações Pix"
+      - "Operação"
+      - "Situação"
+      - "Pagador/Recebedor"
+      - "Data"
+      - "Valor"
+    optional_keywords:
+      - "Pix Recebido"
+      - "Pix Enviado"
+      - "Efetivado"
+    negative_keywords:
+      - "Consulta Operações"
+      - "Recibo de Pagamento"
+      - "Cartão de Crédito"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Operação"
+      - "Situação"
+      - "Pagador/Recebedor"
+      - "Data"
+      - "Valor"
+    expected_column_order:
+      - description
+      - status
+      - counterparty
+      - date
+      - amount
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "Pix Enviado"
+    positive_patterns:
+      - "Pix Recebido"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - counterparty
+      - status
