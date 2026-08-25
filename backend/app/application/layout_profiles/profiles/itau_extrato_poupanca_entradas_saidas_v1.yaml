@@ -1,0 +1,76 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_extrato_poupanca_entradas_saidas_v1
+  bank: Itaú
+  layout_family: itau_extrato_poupanca_entradas_saidas
+  statement_type: poupanca_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Itaú"
+      - "extrato de poupança"
+      - "Minha conta"
+      - "Minha agência"
+      - "data"
+      - "descrição"
+      - "entradas R$"
+      - "saídas R$"
+      - "saldo R$"
+    optional_keywords:
+      - "rentabilidade %"
+      - "Saldo anterior"
+      - "Remuner Básica"
+      - "Juros"
+      - "PIX TRANSF"
+    negative_keywords:
+      - "conta corrente"
+      - "Comprovante"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "data"
+      - "descrição"
+      - "entradas R$"
+      - "saídas R$"
+      - "saldo R$"
+    expected_column_order:
+      - date
+      - description
+      - origin_agency
+      - profitability
+      - credit
+      - debit
+      - balance
+    column_aliases:
+      date:
+        - "data"
+      description:
+        - "descrição"
+      amount:
+        - "entradas R$"
+        - "saídas R$"
+      balance:
+        - "saldo R$"
+  parsing:
+    date_format: "dd/MM"
+    date_year_source: "statement_header"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "value_in_debit_column"
+      - "{amount}-"
+    positive_patterns:
+      - "value_in_credit_column"
+    ignore_rows:
+      - "Saldo anterior"
+    opening_balance_rows:
+      - "Saldo anterior"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - origin_agency
+      - balance

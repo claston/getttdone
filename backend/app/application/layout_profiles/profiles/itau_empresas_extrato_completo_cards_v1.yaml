@@ -160,13 +160,15 @@ layout_profile:
       - "Itaú Empresas"
       - "Itaú"
       - "dados gerais"
+      - "saldo do dia"
+      - "consolidado"
+    optional_keywords:
+      - "ItaúEmpresas"
       - "nome"
       - "agência/conta"
       - "data"
       - "horário"
       - "extrato completo"
-      - "saldo do dia"
-    optional_keywords:
       - "REDE ELO"
       - "REDE VISA"
       - "REDE MAST"
@@ -181,7 +183,7 @@ layout_profile:
       - "Cartão de Crédito"
       - "Fatura"
       - "Comprovante"
-    min_score_hint: 0.8
+    min_score_hint: 0.68
   table_detection:
     header_keywords: []
     expected_column_order:

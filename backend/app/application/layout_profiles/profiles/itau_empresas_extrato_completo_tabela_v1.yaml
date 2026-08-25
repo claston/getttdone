@@ -1,0 +1,77 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_empresas_extrato_completo_tabela_v1
+  bank: Itaú
+  layout_family: itau_empresas_extrato_completo_tabela
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Itaú"
+      - "Lançamentos do período"
+      - "Data"
+      - "Lançamentos"
+      - "Razão Social"
+      - "CNPJ/CPF"
+      - "Valor (R$)"
+      - "Saldo (R$)"
+    optional_keywords:
+      - "Itaú Empresas"
+      - "ItaúEmpresas"
+      - "extrato completo"
+      - "REDE MAST"
+      - "REDE ELO"
+      - "REDE VISA"
+      - "REDECARD INSTITUICAO DE PAGAMENTO"
+      - "SALDO ANTERIOR"
+    negative_keywords:
+      - "saldo do dia"
+      - "consolidado"
+      - "Comprovante"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Lançamentos"
+      - "Razão Social"
+      - "CNPJ/CPF"
+      - "Valor (R$)"
+      - "Saldo (R$)"
+    expected_column_order:
+      - date
+      - description
+      - counterparty
+      - counterparty_document
+      - amount
+      - balance
+    column_aliases:
+      date:
+        - "Data"
+      description:
+        - "Lançamentos"
+      amount:
+        - "Valor (R$)"
+      balance:
+        - "Saldo (R$)"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "-{amount}"
+      - "{amount}-"
+    positive_patterns:
+      - "{amount_without_minus}"
+    ignore_rows:
+      - "SALDO ANTERIOR"
+    opening_balance_rows:
+      - "SALDO ANTERIOR"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - balance
