@@ -75,5 +75,13 @@ def test_default_layout_parser_registry_contains_current_specific_families() -> 
             "banco_inter_fatura_cartao_despesas_v1",
             "banco_inter_extrato_conta_corrente_saldo_transacao_v1",
             "banco_inter_extrato_posicao_renda_fixa_v1",
+            "sicoob_fatura_cartao_credito_movimentos_v1",
+            "sicoob_sisbr_extrato_conta_corrente_historico_movimentacao_v1",
+            "sicoob_sisbr_extrato_conta_corrente_monospace_valor_dc_v1",
+            "sicoob_cartao_lancamentos_futuros_v1",
+            "sicoob_extrato_aplicacoes_v1",
+            "sicoob_extrato_pix_lista_v1",
+            "sicoob_extrato_conta_corrente_moderno_v1",
+            "sicoob_comprovante_pagamento_boleto_v1",
         }
     )

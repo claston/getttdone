@@ -1,0 +1,59 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_extrato_aplicacoes_v1
+  bank: Sicoob
+  layout_family: sicoob_extrato_aplicacoes_movimentacao
+  statement_type: investimento_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "EXTRATO DE APLICAÇÕES"
+      - "DADOS DA APLICAÇÃO"
+      - "HISTÓRICO DE MOVIMENTAÇÃO"
+      - "DATA"
+      - "HISTÓRICO"
+      - "VALOR"
+    optional_keywords:
+      - "SALDO ATUAL"
+      - "APLICAÇÃO FINANCEIRA"
+      - "CAPITALIZAÇÃO DE CORREÇÃO MONETÁRIA"
+      - "RESGATE DE APLICAÇÃO FINANCEIRA"
+      - "RETENÇÃO DE IRRF"
+      - "ÍNDICE CM"
+    negative_keywords:
+      - "APROPRIAÇÃO DIÁRIA"
+      - "EXTRATO CONTA CORRENTE"
+      - "Comprovante"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "DATA"
+      - "HISTÓRICO"
+      - "VALOR"
+    expected_column_order:
+      - date
+      - description
+      - amount
+      - balance
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "statement_or_issue_date"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "{amount}D"
+      - "redemption_or_tax"
+    positive_patterns:
+      - "{amount}C"
+      - "capitalization"
+    ignore_rows:
+      - "APLICAÇÃO FINANCEIRA"
+    opening_balance_rows:
+      - "APLICAÇÃO FINANCEIRA"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - balance

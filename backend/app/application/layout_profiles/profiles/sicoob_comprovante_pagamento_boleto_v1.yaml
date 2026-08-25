@@ -1,0 +1,49 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_comprovante_pagamento_boleto_v1
+  bank: Sicoob
+  layout_family: sicoob_comprovante_pagamento_boleto
+  statement_type: comprovante_pagamento
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "Comprovante de Pagamento de Boleto"
+      - "Linha digitável"
+      - "Nosso Número"
+      - "Data Pagamento"
+      - "Valor Pago"
+      - "Situação"
+    optional_keywords:
+      - "Nome/Razão Social do Beneficiário"
+      - "Instituição Emissora"
+      - "Efetivado"
+      - "Autenticação"
+    negative_keywords:
+      - "EXTRATO CONTA CORRENTE"
+      - "EXTRATO DE APLICAÇÕES"
+      - "Fatura"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords: []
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "payment_date"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "Valor Pago"
+    positive_patterns: []
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
+      - counterparty

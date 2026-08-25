@@ -1,0 +1,57 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_extrato_conta_corrente_moderno_v1
+  bank: Sicoob
+  layout_family: sicoob_extrato_conta_corrente_moderno
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "EXTRATO DE CONTA CORRENTE"
+      - "Cooperativa"
+      - "Período"
+      - "HISTÓRICO DE MOVIMENTAÇÃO"
+      - "Data"
+      - "Documento"
+      - "Histórico"
+      - "Valor"
+    optional_keywords:
+      - "SALDO DO DIA"
+      - "TARIFA COBRANÇA"
+      - "CRÉD.LIQUIDAÇÃO COBRANÇA"
+    negative_keywords:
+      - "EXTRATO DETALHADO CONTA"
+      - "EXTRATO DE APLICAÇÕES"
+      - "Comprovante"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Documento"
+      - "Histórico"
+      - "Valor"
+    expected_column_order:
+      - date
+      - document
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM"
+    date_year_source: "statement_period"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "debit_description_or_explicit_sign"
+    positive_patterns:
+      - "credit_description_or_explicit_sign"
+    ignore_rows:
+      - "SALDO DO DIA"
+    opening_balance_rows:
+      - "SALDO DO DIA"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

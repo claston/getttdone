@@ -1,0 +1,48 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_fatura_cartao_credito_movimentos_v1
+  bank: Sicoob
+  layout_family: sicoob_fatura_cartao_credito_movimentos
+  statement_type: cartao_credito_fatura
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "EXTRATO DE FATURA DE CARTÃO DE CRÉDITO"
+      - "Fatura de"
+      - "Vencimento"
+      - "Movimentos"
+    optional_keywords:
+      - "Mastercard"
+      - "SALDO ANTERIOR"
+      - "PAGAMENTO-BOLETO BANCARIO"
+      - "ANUIDADE MASTERCARD"
+    negative_keywords:
+      - "LANÇAMENTOS FUTUROS"
+      - "EXTRATO CONTA CORRENTE"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "Movimentos"
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM"
+    date_year_source: "invoice_due_date"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "invoice_expense"
+    positive_patterns:
+      - "invoice_payment"
+    ignore_rows:
+      - "SALDO ANTERIOR"
+    opening_balance_rows:
+      - "SALDO ANTERIOR"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []

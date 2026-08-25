@@ -1,0 +1,48 @@
+layout_profile:
+  schema_version: 2
+  profile_name: sicoob_cartao_lancamentos_futuros_v1
+  bank: Sicoob
+  layout_family: sicoob_cartao_lancamentos_futuros
+  statement_type: cartao_credito_lancamentos_futuros
+  confidence: high
+  classifier:
+    required_keywords:
+      - "SICOOB"
+      - "LANÇAMENTOS FUTUROS DO CARTÃO DE CRÉDITO"
+      - "AUTORIZAÇÕES PENDENTES"
+      - "MOVIMENTOS PARA A PRÓXIMA FATURA"
+      - "Data"
+      - "Comércio"
+      - "Valor"
+    optional_keywords:
+      - "Não há autorizações pendentes"
+      - "Nº CARTÃO"
+    negative_keywords:
+      - "EXTRATO DE FATURA"
+      - "EXTRATO CONTA CORRENTE"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Comércio"
+      - "Valor"
+    expected_column_order:
+      - date
+      - description
+      - amount
+  parsing:
+    date_format: "dd/MM"
+    date_year_source: "pdf_metadata"
+    amount_locale: "pt-BR"
+    negative_patterns:
+      - "invoice_expense"
+    positive_patterns: []
+    ignore_rows:
+      - "Não há autorizações pendentes"
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []

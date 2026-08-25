@@ -180,17 +180,17 @@ layout_profile:
   classifier:
     required_keywords:
       - "SICOOB"
-      - "SISTEMA DE COOPERATIVAS DE CRÉDITO DO BRASIL"
-      - "PLATAFORMA DE SERVIÇOS FINANCEIROS DO SICOOB - SISBR"
       - "EXTRATO CONTA CORRENTE"
-      - "COOP."
-      - "CONTA"
-      - "PERÍODO"
       - "HISTÓRICO DE MOVIMENTAÇÃO"
       - "DATA"
       - "HISTÓRICO"
       - "VALOR"
     optional_keywords:
+      - "SISTEMA DE COOPERATIVAS DE CRÉDITO DO BRASIL"
+      - "PLATAFORMA DE SERVIÇOS FINANCEIROS DO SICOOB - SISBR"
+      - "COOP."
+      - "CONTA"
+      - "PERÍODO"
       - "SALDO ANTERIOR"
       - "SALDO BLOQ ANTERIOR"
       - "PIX EMIT.OUTRA IF"
@@ -228,7 +228,7 @@ layout_profile:
       - "PicPay"
       - "Fatura"
       - "Comprovante"
-    min_score_hint: 0.9
+    min_score_hint: 0.75
   table_detection:
     header_keywords:
       - "DATA"
