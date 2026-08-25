@@ -176,15 +176,15 @@ layout_profile:
       - "PagBank"
       - "PagSeguro Internet S/A"
       - "Extrato da conta corrente"
-      - "Emitido em"
       - "Período"
-      - "CNPJ"
       - "Agência"
       - "Conta Corrente"
       - "Data"
       - "Descrição"
       - "Valor"
     optional_keywords:
+      - "Emitido em"
+      - "CNPJ"
       - "Pix enviado"
       - "Pagamento de conta"
       - "Vendas - Plano de Recebimento"
@@ -219,7 +219,7 @@ layout_profile:
       - "mercado pago"
       - "Fatura"
       - "Comprovante"
-    min_score_hint: 0.85
+    min_score_hint: 0.65
   table_detection:
     header_keywords:
       - "Data"

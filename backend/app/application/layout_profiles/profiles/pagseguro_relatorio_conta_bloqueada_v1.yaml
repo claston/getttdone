@@ -1,0 +1,59 @@
+layout_profile:
+  schema_version: 2
+  profile_name: pagseguro_relatorio_conta_bloqueada_v1
+  bank: PagSeguro
+  layout_family: pagseguro_relatorio_conta_bloqueada
+  statement_type: conta_bloqueada_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "PagSeguro"
+      - "CPF/CNPJ"
+      - "CÓDIGO DA TRANSAÇÃO"
+      - "DESCRIÇÃO"
+      - "CONTA"
+      - "VALOR (R$)"
+      - "SALDO (R$)"
+      - "Bloqueado"
+    optional_keywords:
+      - "Bloqueio"
+      - "Desbloq"
+    negative_keywords:
+      - "Extrato de transações"
+      - "Extrato da conta corrente"
+      - "PagSeguro Internet S/A"
+    min_score_hint: 0.8
+  table_detection:
+    header_keywords:
+      - "DATA"
+      - "CÓDIGO DA TRANSAÇÃO"
+      - "DESCRIÇÃO"
+      - "CONTA"
+      - "VALOR (R$)"
+      - "SALDO (R$)"
+    expected_column_order:
+      - datetime
+      - document
+      - description
+      - account
+      - amount
+      - balance
+  parsing:
+    date_format: "dd-MM-yyyy HH:mm:ss"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR-or-dot-decimal"
+    negative_patterns:
+      - "-{amount}"
+    positive_patterns:
+      - "{amount_without_minus}"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
+      - balance
+      - account
