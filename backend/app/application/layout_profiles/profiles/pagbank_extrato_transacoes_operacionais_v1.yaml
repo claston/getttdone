@@ -1,0 +1,77 @@
+layout_profile:
+  schema_version: 2
+  profile_name: pagbank_extrato_transacoes_operacionais_v1
+  bank: PagBank / PagSeguro
+  layout_family: pagbank_extrato_transacoes_operacionais
+  statement_type: conta_pagamento_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "PagBank"
+      - "Extrato de transações"
+      - "Data da transação"
+      - "Código da transação"
+      - "Tipo da transação"
+      - "Status"
+      - "Valor bruto (R$)"
+      - "Taxa (R$)"
+      - "Valor líquido (R$)"
+    optional_keywords:
+      - "Data de liberação"
+      - "NSU"
+      - "Parcelas"
+      - "Bandeira"
+      - "Aprovada"
+      - "Saque"
+      - "Transferência"
+    negative_keywords:
+      - "CÓDIGO DA TRANSAÇÃO DESCRIÇÃO CONTA"
+      - "Extrato da conta corrente"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords:
+      - "Data da transação"
+      - "Código da transação"
+      - "Tipo da transação"
+      - "Status"
+      - "Valor bruto (R$)"
+      - "Taxa (R$)"
+      - "Valor líquido (R$)"
+    expected_column_order:
+      - datetime
+      - release_date
+      - document
+      - type
+      - counterparty
+      - status
+      - nsu
+      - installments
+      - brand
+      - gross_amount
+      - fee
+      - net_amount
+  parsing:
+    date_format: "dd/MM/yyyy HH:mm"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR-or-dot-decimal"
+    negative_patterns:
+      - "Saque"
+      - "Transferência"
+    positive_patterns:
+      - "Venda"
+      - "Recebimento"
+    ignore_rows:
+      - "Cancelada"
+      - "Negada"
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document
+      - counterparty
+      - status
+      - gross_amount
+      - fee
