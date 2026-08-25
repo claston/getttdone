@@ -1,0 +1,71 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_empresas_cobranca_movimentacao_detalhada_v1
+  bank: Itaú
+  layout_family: itau_empresas_cobranca_movimentacao_detalhada
+  statement_type: cobranca_movimentacao
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Itaú"
+      - "Resultado da Busca"
+      - "Movimentação resumida de Cobrança"
+      - "Movimentação detalhada"
+      - "Nome do Pagador"
+      - "Movimentação"
+      - "Valor(R$)"
+    optional_keywords:
+      - "30 horas"
+      - "Nosso Número"
+      - "Agência Dep Rec"
+      - "BOLETO"
+      - "Data de movimentação"
+    negative_keywords:
+      - "Comprovante de Transferência"
+      - "consulta de pagamentos, transferências e Pix"
+    min_score_hint: 0.72
+  table_detection:
+    header_keywords:
+      - "Nome do Pagador"
+      - "Vcto."
+      - "Movimentação"
+      - "Valor(R$)"
+    expected_column_order:
+      - document
+      - description
+      - due_date
+      - movement_type
+      - date
+      - amount
+    column_aliases:
+      date:
+        - "Movimentação"
+      description:
+        - "Nome do Pagador"
+        - "Tipo"
+      document:
+        - "Nosso Número"
+        - "Seu Número"
+      amount:
+        - "Valor(R$)"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "movement_type_equals_saida"
+    positive_patterns:
+      - "movement_type_equals_entrada"
+    ignore_rows:
+      - "Tarifa Mensal"
+      - "Movimentação resumida de Cobrança"
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

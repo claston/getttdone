@@ -58,5 +58,17 @@ def test_default_layout_parser_registry_contains_current_specific_families() -> 
             "banco_do_nordeste_extrato_consolidado_v1",
             "banco_do_nordeste_fundos_investimentos_rentabilidade_v1",
             "banrisul_extrato_texto_movimentos_conta_corrente_v1",
+            "itau_empresas_extrato_lancamentos_conta_corrente_v1",
+            "itau_empresas_extrato_mensal_conta_corrente_aplicacoes_automaticas_v1",
+            "itau_empresas_extrato_30_horas_tabela_v1",
+            "itau_extrato_historico_lancamentos_orig_valor_saldo_v1",
+            "itau_empresas_extrato_completo_cards_v1",
+            "itau_empresas_extrato_30_horas_posicao_conta_corrente_v1",
+            "itau_empresas_cobranca_movimentacao_detalhada_v1",
+            "itau_empresas_consulta_pagamentos_transferencias_pix_v1",
+            "itau_extrato_poupanca_entradas_saidas_v1",
+            "itau_empresas_transferencias_recebidas_v1",
+            "itau_empresas_extrato_completo_tabela_v1",
+            "itau_comprovante_transferencia_pix_v1",
         }
     )

@@ -1,0 +1,63 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_empresas_transferencias_recebidas_v1
+  bank: Itaú
+  layout_family: itau_empresas_transferencias_recebidas
+  statement_type: transferencias_recebidas
+  confidence: high
+  classifier:
+    required_keywords:
+      - "ItaúEmpresas"
+      - "transferências recebidas"
+      - "emitida em"
+      - "pagador"
+      - "cpf/cnpj"
+      - "recebido em"
+      - "valor (R$)"
+    optional_keywords:
+      - "agência"
+      - "conta corrente"
+      - "id de pagamento"
+    negative_keywords:
+      - "consulta de pagamentos"
+      - "Comprovante de Transferência"
+    min_score_hint: 0.78
+  table_detection:
+    header_keywords:
+      - "pagador"
+      - "cpf/cnpj"
+      - "recebido em"
+      - "valor (R$)"
+    expected_column_order:
+      - description
+      - counterparty_document
+      - document
+      - date
+      - amount
+    column_aliases:
+      date:
+        - "recebido em"
+      description:
+        - "pagador"
+      amount:
+        - "valor (R$)"
+      document:
+        - "id de pagamento"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns: []
+    positive_patterns:
+      - "received_transfer"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

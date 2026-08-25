@@ -10,6 +10,7 @@ from app.application.parsers.pdf.layout_specific.contract import (
     LayoutSpecificParseResult,
     PdfLayoutParser,
 )
+from app.application.parsers.pdf.layout_specific.itau import ItauLayoutParser
 from app.application.parsers.pdf.layout_specific.santander_credit_card import SantanderCreditCardLayoutParser
 from app.application.parsers.pdf.models import _PdfLine
 
@@ -51,5 +52,6 @@ DEFAULT_PDF_LAYOUT_PARSER_REGISTRY = PdfLayoutParserRegistry(
         BradescoUnificadoLayoutParser(),
         BancoDoNordesteLayoutParser(),
         BanrisulLayoutParser(),
+        ItauLayoutParser(),
     )
 )

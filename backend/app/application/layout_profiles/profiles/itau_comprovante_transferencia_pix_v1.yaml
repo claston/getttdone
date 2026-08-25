@@ -1,0 +1,61 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_comprovante_transferencia_pix_v1
+  bank: Itaú
+  layout_family: itau_comprovante_transferencia_pix
+  statement_type: comprovante_transferencia
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Itaú"
+      - "30 horas"
+      - "Comprovante de Transferência"
+      - "dados do pagador"
+      - "dados do recebedor"
+      - "dados da transação"
+      - "valor"
+      - "data da transferência"
+      - "tipo de pagamento"
+    optional_keywords:
+      - "PIX TRANSFERENCIA"
+      - "autenticação no comprovante"
+      - "identificação no extrato"
+    negative_keywords:
+      - "Extrato de conta corrente"
+      - "transferências recebidas"
+    min_score_hint: 0.82
+  table_detection:
+    header_keywords:
+      - "dados da transação"
+      - "valor"
+      - "data da transferência"
+      - "tipo de pagamento"
+    expected_column_order:
+      - amount
+      - date
+      - description
+    column_aliases:
+      date:
+        - "data da transferência"
+      description:
+        - "tipo de pagamento"
+      amount:
+        - "valor"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "outbound_transfer"
+    positive_patterns: []
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

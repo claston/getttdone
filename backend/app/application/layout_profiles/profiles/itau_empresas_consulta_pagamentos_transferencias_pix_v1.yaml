@@ -1,0 +1,69 @@
+layout_profile:
+  schema_version: 2
+  profile_name: itau_empresas_consulta_pagamentos_transferencias_pix_v1
+  bank: Itaú
+  layout_family: itau_empresas_consulta_pagamentos_transferencias_pix
+  statement_type: pagamentos_realizados
+  confidence: high
+  classifier:
+    required_keywords:
+      - "Itaú"
+      - "30 horas"
+      - "consulta de pagamentos, transferências e Pix"
+      - "favorecido/beneficiário"
+      - "tipo de pagamento"
+      - "data do pagamento"
+      - "valor (R$)"
+      - "status"
+    optional_keywords:
+      - "PIX Transferências"
+      - "efetuado"
+      - "referência da empresa"
+      - "CPF/CNPJ"
+    negative_keywords:
+      - "Comprovante de Transferência"
+      - "transferências recebidas"
+    min_score_hint: 0.78
+  table_detection:
+    header_keywords:
+      - "favorecido/beneficiário"
+      - "tipo de pagamento"
+      - "data do pagamento"
+      - "valor (R$)"
+      - "status"
+    expected_column_order:
+      - description
+      - counterparty_document
+      - type
+      - reference
+      - date
+      - amount
+      - status
+    column_aliases:
+      date:
+        - "data do pagamento"
+      description:
+        - "favorecido/beneficiário"
+        - "tipo de pagamento"
+      amount:
+        - "valor (R$)"
+      document:
+        - "referência da empresa"
+  parsing:
+    date_format: "dd/MM/yyyy"
+    date_year_source: "transaction"
+    amount_locale: "pt-BR"
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "outbound_payment"
+    positive_patterns: []
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

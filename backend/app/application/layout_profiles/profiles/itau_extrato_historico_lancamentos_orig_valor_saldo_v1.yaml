@@ -23,6 +23,8 @@ layout_profile:
     negative_keywords:
       - "ItauEmpresas"
       - "30 horas"
+      - "Saldo resumido"
+      - "Extrato conta corrente / Lancamentos"
       - "Posicao da Conta Corrente"
       - "Extrato de conta corrente"
       - "Ag./Origem"
