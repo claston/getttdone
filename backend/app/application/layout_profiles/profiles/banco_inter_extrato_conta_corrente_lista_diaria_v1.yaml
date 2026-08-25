@@ -173,7 +173,6 @@ layout_profile:
   classifier:
     required_keywords:
       - "inter"
-      - "Solicitado em"
       - "CPF/CNPJ"
       - "Instituição: Banco Inter"
       - "Agência"
@@ -182,6 +181,7 @@ layout_profile:
       - "Saldo atual"
       - "Período"
     optional_keywords:
+      - "Solicitado em"
       - "Pix recebido"
       - "Pix enviado"
       - "Pagamento efetuado"
@@ -214,7 +214,7 @@ layout_profile:
       - "infinitepay"
       - "Fatura"
       - "Comprovante"
-    min_score_hint: 0.85
+    min_score_hint: 0.72
   table_detection:
     header_keywords: []
     expected_column_order:

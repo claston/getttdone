@@ -428,6 +428,9 @@ def _resolve_ofx_account_type(
         normalized = _normalize_text_for_profile((extracted_text or "") + " " + filename)
         layout_name = str(layout_inference_name or "").strip().lower()
 
+        if layout_name == "banco_inter_fatura_cartao_despesas_v1":
+            return "credit_card"
+
         bank_indicators = (
             "TRANSFERENCIA RECEBIDA",
             "TRANSFERENCIA ENVIADA",
