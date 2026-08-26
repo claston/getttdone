@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from app.application.access_control import (
@@ -8,6 +9,7 @@ from app.application.access_control import (
 from app.application.errors import (
     FileTooLargeError,
     GoogleOAuthAccountNotFoundError,
+    GoogleOAuthExchangeError,
     InvalidUserTokenError,
     QuotaExceededError,
 )
@@ -49,6 +51,104 @@ def test_register_user_gets_10_quota_and_valid_token(tmp_path) -> None:
     assert identity.quota_limit == REGISTERED_QUOTA_LIMIT
     assert identity.max_pages_per_file == 10
     assert service.get_remaining_quota(identity) == 10
+
+
+def test_inactive_user_cannot_resolve_conversion_identity(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+
+    service.set_user_active_status(user_id=registered.user_id, is_active=False)
+
+    try:
+        service.resolve_identity(anonymous_fingerprint=None, user_token=registered.token)
+        assert False, "Expected InvalidUserTokenError"
+    except InvalidUserTokenError:
+        assert True
+
+
+def test_inactive_user_cannot_authenticate_with_google_identity(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+    registered = service.register_or_authenticate_google_user(
+        provider_user_id="google-sub-123",
+        email="erica@example.com",
+        name="Erica",
+    )
+    service.set_user_active_status(user_id=registered.user_id, is_active=False)
+
+    try:
+        service.register_or_authenticate_google_user(
+            provider_user_id="google-sub-123",
+            email="erica@example.com",
+            name="Erica",
+        )
+        assert False, "Expected GoogleOAuthExchangeError"
+    except GoogleOAuthExchangeError:
+        assert True
+
+
+def test_sqlite_legacy_database_adds_active_status_and_keeps_existing_user_active(tmp_path) -> None:
+    state_file = tmp_path / "legacy-state.json"
+    db_file = state_file.with_suffix(".db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            """
+            CREATE TABLE users (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                auth_provider TEXT NOT NULL DEFAULT 'local',
+                provider_user_id TEXT,
+                terms_accepted_at TEXT,
+                privacy_accepted_at TEXT,
+                product_updates_opt_in INTEGER NOT NULL DEFAULT 0,
+                product_updates_opted_in_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO users (
+                id, name, email, is_admin, password_hash, password_salt,
+                auth_provider, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "usr_legacy123456",
+                "Legacy User",
+                "legacy@example.com",
+                0,
+                "hash",
+                "salt",
+                "local",
+                "2026-08-01T00:00:00+00:00",
+                "2026-08-01T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    service = AccessControlService(state_file=state_file, token_secret="test-secret")
+
+    with service._connect() as conn:
+        row = service._fetchone(
+            conn,
+            "SELECT is_active FROM users WHERE id = ?",
+            ("usr_legacy123456",),
+        )
+
+    assert row is not None
+    assert bool(row["is_active"]) is True
 
 
 def test_upload_larger_than_5mb_is_rejected(tmp_path) -> None:

@@ -14,6 +14,7 @@ from app.schemas import (
     AdminLoginResponse,
     AdminMeResponse,
     AdminSetUserRoleRequest,
+    AdminSetUserStatusRequest,
     AdminUserItem,
     AdminUserListResponse,
     AdminUserLoginEventItem,
@@ -93,6 +94,7 @@ def admin_logout() -> JSONResponse:
 def list_users_for_admin(
     query: str = Query(default=""),
     only_admin: bool | None = Query(default=None),
+    only_active: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     x_admin_token: str | None = Header(default=None),
@@ -109,6 +111,7 @@ def list_users_for_admin(
     items, total = access_control_service.list_users_for_admin(
         query=query,
         only_admin=only_admin,
+        only_active=only_active,
         limit=limit,
         offset=offset,
     )
@@ -143,6 +146,36 @@ def set_user_role_for_admin(
         updated = access_control_service.set_user_admin_role_with_actor(
             user_id=target_user_id,
             is_admin=payload.is_admin,
+            actor_user_id=actor_user.user_id,
+        )
+    except InvalidUserTokenError:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return AdminUserItem(**updated)
+
+
+@router.post("/admin/users/status", response_model=AdminUserItem)
+def set_user_status_for_admin(
+    payload: AdminSetUserStatusRequest,
+    x_admin_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    access_control_service: AccessControlService = Depends(get_access_control_service),
+) -> AdminUserItem:
+    actor_user = require_admin_user(
+        x_admin_token=x_admin_token,
+        authorization=authorization,
+        access_cookie_token=access_cookie_token,
+        access_control_service=access_control_service,
+    )
+    target_user_id = payload.user_id.strip()
+    if not target_user_id:
+        raise HTTPException(status_code=400, detail="user_id is required.")
+    if actor_user.user_id == target_user_id and not payload.is_active:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own user.")
+    try:
+        updated = access_control_service.set_user_active_status_with_actor(
+            user_id=target_user_id,
+            is_active=payload.is_active,
             actor_user_id=actor_user.user_id,
         )
     except InvalidUserTokenError:

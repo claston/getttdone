@@ -23,6 +23,7 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
             is_admin INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
             password_hash TEXT NOT NULL,
             password_salt TEXT NOT NULL,
             auth_provider TEXT NOT NULL DEFAULT 'local',
@@ -238,6 +239,8 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
         conn.execute("ALTER TABLE users ADD COLUMN provider_user_id TEXT")
     if "is_admin" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    if "is_active" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
     if "terms_accepted_at" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN terms_accepted_at TEXT")
     if "privacy_accepted_at" not in user_columns:

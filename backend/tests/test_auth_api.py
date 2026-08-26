@@ -205,6 +205,38 @@ def test_auth_me_rejects_invalid_token() -> None:
         shutil.rmtree(state_dir, ignore_errors=True)
 
 
+def test_inactive_user_cannot_login_or_reuse_legacy_token() -> None:
+    state_dir = Path(mkdtemp(prefix="auth-api-"))
+    client, service = build_client(state_dir)
+
+    try:
+        register = client.post(
+            "/auth/register",
+            json={
+                "name": "Erica",
+                "email": "erica@example.com",
+                "password": "strong-pass",
+                "accepted_terms": True,
+            },
+        )
+        assert register.status_code == 200
+        payload = register.json()
+
+        service.set_user_active_status(user_id=payload["user_id"], is_active=False)
+
+        login = client.post(
+            "/auth/login",
+            json={"email": "erica@example.com", "password": "strong-pass"},
+        )
+        assert login.status_code == 401
+
+        me = client.get("/auth/me", params={"user_token": payload["user_token"]})
+        assert me.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+        shutil.rmtree(state_dir, ignore_errors=True)
+
+
 def test_auth_me_reflects_active_pages_plan(tmp_path: Path) -> None:
     client, service = build_client(tmp_path)
 

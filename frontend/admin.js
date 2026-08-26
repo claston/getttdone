@@ -177,12 +177,20 @@
     if (!usersListNode) return;
     const query = String(usersQueryNode?.value || "").trim();
     const rawFilter = String(usersFilterNode?.value || "all");
-    const onlyAdminParam =
-      rawFilter === "admin" ? "&only_admin=true" : rawFilter === "non_admin" ? "&only_admin=false" : "";
+    const filterParam =
+      rawFilter === "admin"
+        ? "&only_admin=true"
+        : rawFilter === "non_admin"
+          ? "&only_admin=false"
+          : rawFilter === "active"
+            ? "&only_active=true"
+            : rawFilter === "inactive"
+              ? "&only_active=false"
+              : "";
     setUsersStatus("Carregando usuários...", null);
     try {
       const { response, payload } = await apiRequest(
-        `/admin/users?query=${encodeURIComponent(query)}${onlyAdminParam}&limit=${USER_PAGE_SIZE}&offset=${usersOffset}`,
+        `/admin/users?query=${encodeURIComponent(query)}${filterParam}&limit=${USER_PAGE_SIZE}&offset=${usersOffset}`,
       );
       if (!response.ok) {
         setUsersStatus(String(payload.detail || "Não foi possível carregar usuários."), "error");
@@ -258,6 +266,7 @@
     usersListNode.innerHTML = "";
     items.forEach(function (user) {
       const isAdmin = !!user.is_admin;
+      const isActive = user.is_active !== false;
       const card = document.createElement("article");
       card.className = "order-card";
       card.innerHTML = [
@@ -266,7 +275,10 @@
         `    <h3 class="order-title">${String(user.name || "-")}</h3>`,
         `    <p class="order-meta">${String(user.email || "-")}</p>`,
         `  </div>`,
-        `  <span class="badge ${isAdmin ? "released" : ""}">${isAdmin ? "Admin" : "Usuário"}</span>`,
+        `  <div class="pill-row">`,
+        `    <span class="badge ${isActive ? "released" : "awaiting"}">${isActive ? "Ativo" : "Inativo"}</span>`,
+        `    <span class="badge ${isAdmin ? "released" : ""}">${isAdmin ? "Admin" : "Usuário"}</span>`,
+        `  </div>`,
         `</div>`,
         `<div class="grid">`,
         `  <p><strong>User ID:</strong> ${String(user.user_id || "-")}</p>`,
@@ -280,6 +292,9 @@
         `<div class="pill-row">`,
         `  <button data-action="toggle-role" data-user-id="${String(user.user_id || "")}" data-is-admin="${isAdmin ? "1" : "0"}" class="ghost">${
           isAdmin ? "Revogar admin" : "Promover a admin"
+        }</button>`,
+        `  <button data-action="toggle-status" data-user-id="${String(user.user_id || "")}" data-is-active="${isActive ? "1" : "0"}" class="ghost">${
+          isActive ? "Inativar usuário" : "Reativar usuário"
         }</button>`,
         `  <button data-action="user-login-history" data-user-id="${String(user.user_id || "")}" class="ghost">Ver histórico de logins</button>`,
         `  <button data-action="user-role-history" data-user-id="${String(user.user_id || "")}" class="ghost">Ver histórico de permissões</button>`,
@@ -379,6 +394,32 @@
       await loadUsers();
     } catch (_error) {
       setUsersStatus("Falha de rede ao atualizar acesso.", "error");
+    }
+  }
+
+  async function toggleUserStatus(userId, currentIsActive) {
+    const targetState = !currentIsActive;
+    if (
+      !targetState &&
+      !window.confirm("Inativar este usuário? As sessões atuais serão encerradas e novos acessos serão bloqueados.")
+    ) {
+      return;
+    }
+    setUsersStatus(targetState ? "Reativando usuário..." : "Inativando usuário...", null);
+    try {
+      const { response, payload } = await apiRequest("/admin/users/status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user_id: userId, is_active: targetState }),
+      });
+      if (!response.ok) {
+        setUsersStatus(String(payload.detail || "Não foi possível atualizar o status do usuário."), "error");
+        return;
+      }
+      setUsersStatus(targetState ? "Usuário reativado." : "Usuário inativado.", "ok");
+      await loadUsers();
+    } catch (_error) {
+      setUsersStatus("Falha de rede ao atualizar o status do usuário.", "error");
     }
   }
 
@@ -587,6 +628,11 @@
       if (action === "toggle-role") {
         const currentIsAdmin = String(target.dataset.isAdmin || "") === "1";
         void toggleUserRole(userId, currentIsAdmin);
+        return;
+      }
+      if (action === "toggle-status") {
+        const currentIsActive = String(target.dataset.isActive || "") === "1";
+        void toggleUserStatus(userId, currentIsActive);
         return;
       }
       if (action === "user-role-history") {

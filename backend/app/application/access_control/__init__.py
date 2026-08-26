@@ -64,6 +64,7 @@ class RegisteredUser:
     name: str
     token: str
     is_admin: bool = False
+    is_active: bool = True
 
 
 @dataclass(frozen=True)
@@ -564,12 +565,14 @@ class AccessControlService:
         *,
         query: str | None = None,
         only_admin: bool | None = None,
+        only_active: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict[str, str | bool | int | None]], int]:
         return self.admin.list_users_for_admin(
             query=query,
             only_admin=only_admin,
+            only_active=only_active,
             limit=limit,
             offset=offset,
         )
@@ -587,6 +590,22 @@ class AccessControlService:
         return self.admin.set_user_admin_role_with_actor(
             user_id=user_id,
             is_admin=is_admin,
+            actor_user_id=actor_user_id,
+        )
+
+    def set_user_active_status(self, *, user_id: str, is_active: bool) -> dict[str, str | bool]:
+        return self.admin.set_user_active_status(user_id=user_id, is_active=is_active)
+
+    def set_user_active_status_with_actor(
+        self,
+        *,
+        user_id: str,
+        is_active: bool,
+        actor_user_id: str | None,
+    ) -> dict[str, str | bool]:
+        return self.admin.set_user_active_status_with_actor(
+            user_id=user_id,
+            is_active=is_active,
             actor_user_id=actor_user_id,
         )
 
@@ -688,8 +707,8 @@ class AccessControlService:
     def _user_exists(self, user_id: str) -> bool:
         with self._lock:
             with self._connect() as conn:
-                row = self._fetchone(conn, "SELECT id FROM users WHERE id = ?", (user_id,))
-                return row is not None
+                row = self._fetchone(conn, "SELECT id, is_active FROM users WHERE id = ?", (user_id,))
+                return row is not None and self._row_is_active(row)
 
     def _connect(self):
         return self.db.connect()
@@ -759,6 +778,9 @@ class AccessControlService:
 
     def _row_is_admin(self, row) -> bool:
         return self.admin.row_is_admin(row)
+
+    def _row_is_active(self, row) -> bool:
+        return self.admin.row_is_active(row)
 
     def _row_bool_from_value(self, raw) -> bool:
         return self.admin.row_bool_from_value(raw)
