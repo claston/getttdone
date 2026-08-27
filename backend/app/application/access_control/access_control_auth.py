@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.application.errors import (
     GoogleOAuthAccountNotFoundError,
+    GoogleOAuthExchangeError,
     InvalidCredentialsError,
     InvalidUserTokenError,
     UserAlreadyExistsError,
@@ -49,6 +50,7 @@ class AccessControlAuthComponent:
                         name,
                         email,
                         is_admin,
+                        is_active,
                         password_hash,
                         password_salt,
                         auth_provider,
@@ -60,13 +62,14 @@ class AccessControlAuthComponent:
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         user_id,
                         name.strip(),
                         normalized_email,
                         is_admin,
+                        self._service._true_value(),
                         password_hash,
                         salt,
                         "local",
@@ -86,6 +89,7 @@ class AccessControlAuthComponent:
             name=name.strip(),
             token=self._service._encode_token(user_id),
             is_admin=is_admin,
+            is_active=True,
         )
 
     def authenticate_user(self, email: str, password: str) -> RegisteredUser:
@@ -94,7 +98,7 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, password_hash, password_salt FROM users WHERE email = ?",
+                    "SELECT id, name, email, is_admin, is_active, password_hash, password_salt FROM users WHERE email = ?",
                     (normalized_email,),
                 )
                 if user is None:
@@ -105,12 +109,15 @@ class AccessControlAuthComponent:
                     stored_salt=str(user["password_salt"] or ""),
                 ):
                     raise InvalidCredentialsError
+                if not self._service._row_is_active(user):
+                    raise InvalidCredentialsError
                 return self._service._registered_user_factory(
                     user_id=str(user["id"]),
                     email=str(user["email"]),
                     name=str(user["name"] or ""),
                     token=self._service._encode_token(str(user["id"])),
                     is_admin=self._service._row_is_admin(user),
+                    is_active=True,
                 )
 
     def get_user_by_token(self, user_token: str) -> RegisteredUser:
@@ -119,10 +126,10 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin FROM users WHERE id = ?",
+                    "SELECT id, name, email, is_admin, is_active FROM users WHERE id = ?",
                     (user_id,),
                 )
-                if user is None:
+                if user is None or not self._service._row_is_active(user):
                     raise InvalidUserTokenError
                 return self._service._registered_user_factory(
                     user_id=str(user["id"]),
@@ -130,6 +137,7 @@ class AccessControlAuthComponent:
                     name=str(user["name"] or ""),
                     token=user_token,
                     is_admin=self._service._row_is_admin(user),
+                    is_active=True,
                 )
 
     def get_user_by_email(self, email: str) -> RegisteredUser:
@@ -138,10 +146,10 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin FROM users WHERE lower(email) = ?",
+                    "SELECT id, name, email, is_admin, is_active FROM users WHERE lower(email) = ?",
                     (normalized_email,),
                 )
-                if user is None:
+                if user is None or not self._service._row_is_active(user):
                     raise InvalidUserTokenError
                 user_id = str(user["id"])
                 return self._service._registered_user_factory(
@@ -150,6 +158,7 @@ class AccessControlAuthComponent:
                     name=str(user["name"] or ""),
                     token=self._service._encode_token(user_id),
                     is_admin=self._service._row_is_admin(user),
+                    is_active=True,
                 )
 
     def register_or_authenticate_google_user(
@@ -175,13 +184,15 @@ class AccessControlAuthComponent:
                 row = self._service._fetchone(
                     conn,
                     """
-                    SELECT id, name, email, is_admin
+                    SELECT id, name, email, is_admin, is_active
                     FROM users
                     WHERE auth_provider = 'google' AND provider_user_id = ?
                     """,
                     (provider_user_id,),
                 )
                 if row is not None:
+                    if not self._service._row_is_active(row):
+                        raise GoogleOAuthExchangeError("User account is inactive.")
                     user_id = str(row["id"])
                     self._service._execute(
                         conn,
@@ -219,14 +230,17 @@ class AccessControlAuthComponent:
                         name=display_name,
                         token=self._service._encode_token(user_id),
                         is_admin=self._service._row_is_admin(row),
+                        is_active=True,
                     )
 
                 existing_by_email = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin FROM users WHERE email = ?",
+                    "SELECT id, name, email, is_admin, is_active FROM users WHERE email = ?",
                     (normalized_email,),
                 )
                 if existing_by_email is not None:
+                    if not self._service._row_is_active(existing_by_email):
+                        raise GoogleOAuthExchangeError("User account is inactive.")
                     user_id = str(existing_by_email["id"])
                     self._service._execute(
                         conn,
@@ -265,6 +279,7 @@ class AccessControlAuthComponent:
                         name=display_name,
                         token=self._service._encode_token(user_id),
                         is_admin=self._service._row_is_admin(existing_by_email),
+                        is_active=True,
                     )
 
                 if not allow_create:
@@ -280,6 +295,7 @@ class AccessControlAuthComponent:
                         name,
                         email,
                         is_admin,
+                        is_active,
                         password_hash,
                         password_salt,
                         auth_provider,
@@ -291,13 +307,14 @@ class AccessControlAuthComponent:
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         user_id,
                         display_name,
                         normalized_email,
                         is_admin,
+                        true_value,
                         "",
                         "",
                         "google",
@@ -317,4 +334,5 @@ class AccessControlAuthComponent:
                     name=display_name,
                     token=self._service._encode_token(user_id),
                     is_admin=is_admin,
+                    is_active=True,
                 )

@@ -53,6 +53,7 @@ class AccessControlSchemaComponent:
                 "auth_provider",
                 "provider_user_id",
                 "is_admin",
+                "is_active",
                 "terms_accepted_at",
                 "privacy_accepted_at",
                 "product_updates_opt_in",

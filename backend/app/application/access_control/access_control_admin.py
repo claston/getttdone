@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -7,6 +8,9 @@ from app.application.errors import InvalidUserTokenError
 
 if TYPE_CHECKING:
     from app.application.access_control import AccessControlService
+
+
+logger = logging.getLogger(__name__)
 
 
 class AccessControlAdminComponent:
@@ -40,6 +44,14 @@ class AccessControlAdminComponent:
             return False
         return self.row_bool_from_value(row["is_admin"])
 
+    def row_is_active(self, row) -> bool:
+        if row is None:
+            return False
+        keys = row.keys() if hasattr(row, "keys") else ()
+        if "is_active" not in keys:
+            return True
+        return self.row_bool_from_value(row["is_active"])
+
     def sync_admin_emails(self, conn) -> None:
         if not self._service.admin_emails:
             return
@@ -55,10 +67,10 @@ class AccessControlAdminComponent:
             with self._service._connect() as conn:
                 row = self._service._fetchone(
                     conn,
-                    "SELECT is_admin FROM users WHERE id = ?",
+                    "SELECT is_admin, is_active FROM users WHERE id = ?",
                     (user_id,),
                 )
-                if row is None:
+                if row is None or not self.row_is_active(row):
                     raise InvalidUserTokenError
                 return self.row_is_admin(row)
 
@@ -67,6 +79,7 @@ class AccessControlAdminComponent:
         *,
         query: str | None = None,
         only_admin: bool | None = None,
+        only_active: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict[str, str | bool | int | None]], int]:
@@ -83,6 +96,12 @@ class AccessControlAdminComponent:
                     params.append(self._service._true_value())
                 elif only_admin is False:
                     where.append("users.is_admin = ?")
+                    params.append(self._service._false_value())
+                if only_active is True:
+                    where.append("users.is_active = ?")
+                    params.append(self._service._true_value())
+                elif only_active is False:
+                    where.append("users.is_active = ?")
                     params.append(self._service._false_value())
                 if normalized_query:
                     where.append(
@@ -105,6 +124,7 @@ class AccessControlAdminComponent:
                         users.name,
                         users.email,
                         users.is_admin,
+                        users.is_active,
                         users.created_at,
                         users.updated_at
                     {base}
@@ -150,6 +170,7 @@ class AccessControlAdminComponent:
                             "name": str(row["name"] or ""),
                             "email": str(row["email"] or ""),
                             "is_admin": self.row_is_admin(row),
+                            "is_active": self.row_is_active(row),
                             "created_at": str(row["created_at"] or ""),
                             "updated_at": str(row["updated_at"] or ""),
                             "login_count": int(login_stats.get("login_count") or 0),
@@ -183,7 +204,7 @@ class AccessControlAdminComponent:
             with self._service._connect() as conn:
                 row = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, created_at, updated_at FROM users WHERE id = ?",
+                    "SELECT id, name, email, is_admin, is_active, created_at, updated_at FROM users WHERE id = ?",
                     (normalized_user_id,),
                 )
                 if row is None:
@@ -239,6 +260,73 @@ class AccessControlAdminComponent:
                     "name": str(row["name"] or ""),
                     "email": str(row["email"] or ""),
                     "is_admin": bool(is_admin),
+                    "is_active": self.row_is_active(row),
+                    "created_at": str(row["created_at"] or ""),
+                    "updated_at": now_iso,
+                }
+
+    def set_user_active_status(self, *, user_id: str, is_active: bool) -> dict[str, str | bool]:
+        return self.set_user_active_status_with_actor(
+            user_id=user_id,
+            is_active=is_active,
+            actor_user_id=None,
+        )
+
+    def set_user_active_status_with_actor(
+        self,
+        *,
+        user_id: str,
+        is_active: bool,
+        actor_user_id: str | None,
+    ) -> dict[str, str | bool]:
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            raise InvalidUserTokenError
+        now_iso = self._service.now_provider().isoformat()
+
+        with self._service._lock:
+            with self._service._connect() as conn:
+                row = self._service._fetchone(
+                    conn,
+                    "SELECT id, name, email, is_admin, is_active, created_at, updated_at FROM users WHERE id = ?",
+                    (normalized_user_id,),
+                )
+                if row is None:
+                    raise InvalidUserTokenError
+                previous_is_active = self.row_is_active(row)
+                self._service._execute(
+                    conn,
+                    "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
+                    (
+                        self._service._true_value() if is_active else self._service._false_value(),
+                        now_iso,
+                        normalized_user_id,
+                    ),
+                )
+                if not is_active:
+                    self._service._execute(
+                        conn,
+                        """
+                        UPDATE user_sessions
+                        SET revoked_at = COALESCE(revoked_at, ?), revoke_reason = COALESCE(revoke_reason, ?)
+                        WHERE user_id = ? AND revoked_at IS NULL
+                        """,
+                        (now_iso, "user_deactivated", normalized_user_id),
+                    )
+                conn.commit()
+                logger.info(
+                    "admin_user_status_changed actor_user_id=%s target_user_id=%s previous_is_active=%s new_is_active=%s",
+                    str(actor_user_id or "").strip() or "system",
+                    normalized_user_id,
+                    previous_is_active,
+                    bool(is_active),
+                )
+                return {
+                    "user_id": str(row["id"]),
+                    "name": str(row["name"] or ""),
+                    "email": str(row["email"] or ""),
+                    "is_admin": self.row_is_admin(row),
+                    "is_active": bool(is_active),
                     "created_at": str(row["created_at"] or ""),
                     "updated_at": now_iso,
                 }

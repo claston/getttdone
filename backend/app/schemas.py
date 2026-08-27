@@ -456,6 +456,7 @@ class AdminUserItem(BaseModel):
     name: str
     email: str
     is_admin: bool
+    is_active: bool
     created_at: str
     updated_at: str
     login_count: int = 0
@@ -474,6 +475,11 @@ class AdminUserListResponse(BaseModel):
 class AdminSetUserRoleRequest(BaseModel):
     user_id: str
     is_admin: bool
+
+
+class AdminSetUserStatusRequest(BaseModel):
+    user_id: str
+    is_active: bool
 
 
 class AdminUserRoleEventItem(BaseModel):

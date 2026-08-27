@@ -108,7 +108,90 @@ def test_admin_can_list_users_and_filter_admins(tmp_path) -> None:
         assert payload["total"] >= 1
         assert payload["items"]
         assert all(item["is_admin"] for item in payload["items"])
+        assert all(item["is_active"] for item in payload["items"])
         assert all(item["login_count"] == 0 for item in payload["items"])
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_admin_can_deactivate_and_reactivate_another_user(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "access-control-state.json",
+        token_secret="test-secret",
+        admin_emails={"admin@example.com"},
+    )
+    service.register_user(name="Admin", email="admin@example.com", password="admin-pass")
+    user = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+    app.dependency_overrides[get_access_control_service] = lambda: service
+    client = TestClient(app)
+
+    try:
+        login = client.post(
+            "/admin/auth/login",
+            json={"email": "admin@example.com", "password": "admin-pass"},
+        )
+        assert login.status_code == 200
+
+        deactivate = client.post(
+            "/admin/users/status",
+            json={"user_id": user.user_id, "is_active": False},
+        )
+        assert deactivate.status_code == 200
+        assert deactivate.json()["is_active"] is False
+
+        inactive_users = client.get(
+            "/admin/users",
+            params={"only_active": "false", "limit": 10, "offset": 0},
+        )
+        assert inactive_users.status_code == 200
+        assert any(item["user_id"] == user.user_id for item in inactive_users.json()["items"])
+
+        blocked_login = client.post(
+            "/auth/login",
+            json={"email": "erica@example.com", "password": "strong-pass"},
+        )
+        assert blocked_login.status_code == 401
+
+        reactivate = client.post(
+            "/admin/users/status",
+            json={"user_id": user.user_id, "is_active": True},
+        )
+        assert reactivate.status_code == 200
+        assert reactivate.json()["is_active"] is True
+
+        restored_login = client.post(
+            "/auth/login",
+            json={"email": "erica@example.com", "password": "strong-pass"},
+        )
+        assert restored_login.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_admin_cannot_deactivate_own_user(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "access-control-state.json",
+        token_secret="test-secret",
+        admin_emails={"admin@example.com"},
+    )
+    admin = service.register_user(name="Admin", email="admin@example.com", password="admin-pass")
+    app.dependency_overrides[get_access_control_service] = lambda: service
+    client = TestClient(app)
+
+    try:
+        login = client.post(
+            "/admin/auth/login",
+            json={"email": "admin@example.com", "password": "admin-pass"},
+        )
+        assert login.status_code == 200
+
+        response = client.post(
+            "/admin/users/status",
+            json={"user_id": admin.user_id, "is_active": False},
+        )
+
+        assert response.status_code == 400
+        assert "own user" in response.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
 

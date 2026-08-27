@@ -44,10 +44,11 @@ def _find_free_port() -> int:
 
 
 @contextmanager
-def _run_http_server():
+def _run_http_server(*, admin_emails: set[str] | None = None):
     access_control = _AccessControlServiceInMemory(
         state_file=Path("access-control-state.json"),
         token_secret="test-secret",
+        admin_emails=admin_emails,
     )
     app.dependency_overrides[get_access_control_service] = lambda: access_control
 
@@ -177,3 +178,49 @@ def test_http_auth_session_logout_revokes_session_cookie() -> None:
             me = client.get(f"{base_url}/auth/me")
 
     assert me.status_code == 401
+
+
+def test_http_admin_deactivation_blocks_user_login() -> None:
+    with _run_http_server(admin_emails={"admin@example.com"}) as (base_url, _access_control):
+        with httpx.Client(timeout=5.0) as admin_client:
+            admin = admin_client.post(
+                f"{base_url}/auth/register",
+                json={
+                    "name": "Admin",
+                    "email": "admin@example.com",
+                    "password": "admin-pass",
+                    "accepted_terms": True,
+                },
+            )
+            assert admin.status_code == 200
+            user = admin_client.post(
+                f"{base_url}/auth/register",
+                json={
+                    "name": "Erica",
+                    "email": "erica@example.com",
+                    "password": "strong-pass",
+                    "accepted_terms": True,
+                },
+            )
+            assert user.status_code == 200
+
+            admin_login = admin_client.post(
+                f"{base_url}/admin/auth/login",
+                json={"email": "admin@example.com", "password": "admin-pass"},
+            )
+            assert admin_login.status_code == 200
+
+            deactivate = admin_client.post(
+                f"{base_url}/admin/users/status",
+                json={"user_id": user.json()["user_id"], "is_active": False},
+            )
+            assert deactivate.status_code == 200
+            assert deactivate.json()["is_active"] is False
+
+        with httpx.Client(timeout=5.0) as user_client:
+            blocked_login = user_client.post(
+                f"{base_url}/auth/session/login",
+                json={"email": "erica@example.com", "password": "strong-pass"},
+            )
+
+    assert blocked_login.status_code == 401

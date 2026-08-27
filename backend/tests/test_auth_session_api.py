@@ -151,3 +151,36 @@ def test_session_logout_revokes_cookie_session() -> None:
     finally:
         app.dependency_overrides.clear()
         shutil.rmtree(state_dir, ignore_errors=True)
+
+
+def test_deactivating_user_invalidates_existing_access_and_refresh_sessions() -> None:
+    state_dir = Path(mkdtemp(prefix="auth-session-api-"))
+    client, service = _build_client(state_dir)
+    try:
+        register = client.post(
+            "/auth/register",
+            json={
+                "name": "Erica",
+                "email": "erica@example.com",
+                "password": "strong-pass",
+                "accepted_terms": True,
+            },
+        )
+        assert register.status_code == 200
+
+        login = client.post(
+            "/auth/session/login",
+            json={"email": "erica@example.com", "password": "strong-pass"},
+        )
+        assert login.status_code == 200
+
+        service.set_user_active_status(user_id=register.json()["user_id"], is_active=False)
+
+        me = client.get("/auth/me")
+        assert me.status_code == 401
+
+        refresh = client.post("/auth/session/refresh")
+        assert refresh.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+        shutil.rmtree(state_dir, ignore_errors=True)
