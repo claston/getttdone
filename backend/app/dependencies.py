@@ -23,6 +23,7 @@ from app.application import (
     QuotaValidatorService,
     ReportService,
     S3ConversionDocumentStore,
+    SmtpContactService,
     TempAnalysisStorage,
 )
 from app.application.conversion_pipeline import ConversionPipeline
@@ -69,6 +70,7 @@ _conversion_job_cleanup_service = ConversionJobCleanupService(
 )
 _access_control_service: AccessControlService | None = None
 _contact_service: ContactService | None = None
+_contact_form_service: ContactService | SmtpContactService | None = None
 _google_oauth_service: GoogleOAuthService | None = None
 _conversion_capacity_controller: ConversionCapacityController | None = None
 
@@ -247,6 +249,19 @@ def get_contact_service() -> ContactService:
     if _contact_service is None:
         _contact_service = ContactService.from_env()
     return _contact_service
+
+
+def get_contact_form_service() -> ContactService | SmtpContactService:
+    global _contact_form_service
+    if _contact_form_service is None:
+        provider = os.getenv("CONTACT_DELIVERY_PROVIDER", "resend").strip().lower()
+        if provider == "resend":
+            _contact_form_service = ContactService.from_env()
+        elif provider in {"smtp", "hostinger_smtp"}:
+            _contact_form_service = SmtpContactService.from_env()
+        else:
+            raise RuntimeError("CONTACT_DELIVERY_PROVIDER must be 'resend' or 'hostinger_smtp'.")
+    return _contact_form_service
 
 
 def get_google_oauth_service() -> GoogleOAuthService:

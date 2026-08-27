@@ -105,3 +105,44 @@ def test_validate_baseline_requires_real_email_provider_when_verification_is_ena
     assert "RESEND_API_KEY must be configured" in message
     assert "CONTACT_RESEND_DRY_RUN must be false" in message
     assert "AUTH_EMAIL_VERIFICATION_FRONTEND_URL must use HTTPS" in message
+
+
+def test_validate_baseline_requires_smtp_credentials_for_hostinger_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://www.ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONTACT_DELIVERY_PROVIDER", "hostinger_smtp")
+    monkeypatch.setenv("CONTACT_SMTP_DRY_RUN", "true")
+    monkeypatch.delenv("CONTACT_SMTP_USERNAME", raising=False)
+    monkeypatch.delenv("CONTACT_SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("CONTACT_TO_EMAIL", raising=False)
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_security_baseline()
+
+    message = str(exc.value)
+    assert "CONTACT_SMTP_USERNAME must be configured" in message
+    assert "CONTACT_SMTP_PASSWORD must be configured" in message
+    assert "CONTACT_TO_EMAIL must be configured" in message
+    assert "CONTACT_SMTP_DRY_RUN must be false" in message
+
+
+def test_validate_baseline_accepts_hostinger_smtp_contact_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://www.ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONTACT_DELIVERY_PROVIDER", "hostinger_smtp")
+    monkeypatch.setenv("CONTACT_SMTP_DRY_RUN", "false")
+    monkeypatch.setenv("CONTACT_SMTP_USERNAME", "contato@ofxsimples.com.br")
+    monkeypatch.setenv("CONTACT_SMTP_PASSWORD", "smtp-secret")
+    monkeypatch.setenv("CONTACT_TO_EMAIL", "contato@ofxsimples.com.br")
+
+    validate_production_security_baseline()

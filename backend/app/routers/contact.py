@@ -7,8 +7,9 @@ from app.application import (
     ContactProviderNotConfiguredError,
     ContactService,
     FileTooLargeError,
+    SmtpContactService,
 )
-from app.dependencies import get_contact_service
+from app.dependencies import get_contact_form_service
 from app.schemas import ContactResponse
 
 router = APIRouter()
@@ -21,7 +22,7 @@ async def send_contact(
     subject: str = Form(...),
     message: str = Form(...),
     attachment: UploadFile | None = File(default=None),
-    contact_service: ContactService = Depends(get_contact_service),
+    contact_service: ContactService | SmtpContactService = Depends(get_contact_form_service),
 ) -> ContactResponse:
     clean_name = name.strip()
     clean_email = email.strip()
@@ -56,7 +57,7 @@ async def send_contact(
     except FileTooLargeError:
         raise HTTPException(status_code=413, detail="Attachment exceeds maximum size of 2 MB.")
     except ContactProviderNotConfiguredError:
-        raise HTTPException(status_code=503, detail="Contact channel not configured yet. Configure Resend and try again.")
+        raise HTTPException(status_code=503, detail="Contact channel is not configured. Configure the email provider.")
     except ContactDeliveryError as exc:
         raise HTTPException(status_code=502, detail=f"Failed to deliver contact message: {exc}")
 

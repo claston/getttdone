@@ -265,6 +265,24 @@ Para desenvolvimento local, continue usando:
 - docs habilitadas por padrao
 - CORS com `localhost:3000` e `127.0.0.1:3000`
 
+### Formulário de contato via Hostinger
+
+O formulário pode usar o SMTP da Hostinger sem alterar o Resend usado pelos e-mails transacionais. Para ativar
+o fluxo em produção, configure no backend:
+
+- `CONTACT_DELIVERY_PROVIDER=hostinger_smtp`
+- `CONTACT_SMTP_HOST=smtp.hostinger.com`
+- `CONTACT_SMTP_PORT=465`
+- `CONTACT_SMTP_USE_SSL=true`
+- `CONTACT_SMTP_USERNAME=contato@ofxsimples.com.br`
+- `CONTACT_SMTP_PASSWORD` com a senha da caixa de e-mail (secret)
+- `CONTACT_SMTP_FROM_EMAIL=contato@ofxsimples.com.br`
+- `CONTACT_TO_EMAIL=contato@ofxsimples.com.br`
+- `CONTACT_SMTP_DRY_RUN=false`
+
+O remetente e o destinatário ficam na Hostinger, enquanto o endereço informado pelo visitante é definido como
+`Reply-To`. Para rollback sem mudança de código, restaure `CONTACT_DELIVERY_PROVIDER=resend`.
+
 ### Verificação de e-mail para contas locais
 
 A verificação permanece desligada por padrão para permitir rollout compatível. Antes de ativá-la em produção,

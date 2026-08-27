@@ -7,7 +7,7 @@ from app.application import (
     ContactProviderNotConfiguredError,
     FileTooLargeError,
 )
-from app.dependencies import get_contact_service
+from app.dependencies import get_contact_form_service
 from app.main import app
 
 
@@ -28,11 +28,11 @@ class FakeContactService:
 
 
 def build_client(fake_service: FakeContactService) -> TestClient:
-    app.dependency_overrides[get_contact_service] = lambda: fake_service
+    app.dependency_overrides[get_contact_form_service] = lambda: fake_service
     return TestClient(app)
 
 
-def test_contact_accepts_form_with_attachment(tmp_path) -> None:
+def test_contact_accepts_form_with_attachment() -> None:
     fake_service = FakeContactService()
     client = build_client(fake_service)
 
@@ -58,7 +58,7 @@ def test_contact_accepts_form_with_attachment(tmp_path) -> None:
     app.dependency_overrides.clear()
 
 
-def test_contact_returns_503_when_provider_not_configured(tmp_path) -> None:
+def test_contact_returns_503_when_provider_not_configured() -> None:
     fake_service = FakeContactService()
     fake_service.fail_with(ContactProviderNotConfiguredError())
     client = build_client(fake_service)
@@ -78,7 +78,7 @@ def test_contact_returns_503_when_provider_not_configured(tmp_path) -> None:
     app.dependency_overrides.clear()
 
 
-def test_contact_returns_502_on_provider_failure(tmp_path) -> None:
+def test_contact_returns_502_on_provider_failure() -> None:
     fake_service = FakeContactService()
     fake_service.fail_with(ContactDeliveryError("gateway timeout"))
     client = build_client(fake_service)
@@ -98,7 +98,7 @@ def test_contact_returns_502_on_provider_failure(tmp_path) -> None:
     app.dependency_overrides.clear()
 
 
-def test_contact_returns_413_on_large_attachment(tmp_path) -> None:
+def test_contact_returns_413_on_large_attachment() -> None:
     fake_service = FakeContactService()
     fake_service.fail_with(FileTooLargeError())
     client = build_client(fake_service)
@@ -119,7 +119,7 @@ def test_contact_returns_413_on_large_attachment(tmp_path) -> None:
     app.dependency_overrides.clear()
 
 
-def test_contact_validates_email(tmp_path) -> None:
+def test_contact_validates_email() -> None:
     fake_service = FakeContactService()
     client = build_client(fake_service)
 

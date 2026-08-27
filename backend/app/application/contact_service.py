@@ -1,6 +1,10 @@
+import asyncio
 import base64
 import os
+import smtplib
+import ssl
 from dataclasses import dataclass
+from email.message import EmailMessage
 
 import httpx
 
@@ -161,7 +165,7 @@ class ContactService:
         return ContactService(
             api_key=os.getenv("RESEND_API_KEY", ""),
             from_email=os.getenv("CONTACT_FROM_EMAIL", "onboarding@resend.dev"),
-            to_email=os.getenv("CONTACT_TO_EMAIL", "suporte@ofxsimples.com"),
+            to_email=os.getenv("CONTACT_TO_EMAIL", "contato@ofxsimples.com.br"),
             dry_run=_read_env_bool("CONTACT_RESEND_DRY_RUN", default=True),
             max_attachment_bytes=int(os.getenv("CONTACT_ATTACHMENT_MAX_BYTES", str(2 * 1024 * 1024))),
         )
@@ -169,10 +173,10 @@ class ContactService:
     @staticmethod
     def _build_text_body(contact: ContactMessage) -> str:
         lines = [
-            "Novo contato enviado pelo formulario do site.",
+            "Novo contato enviado pelo formulário do site.",
             "",
             f"Nome: {contact.name}",
-            f"Email: {contact.email}",
+            f"E-mail: {contact.email}",
             f"Assunto: {contact.subject}",
             "",
             "Mensagem:",
@@ -181,6 +185,130 @@ class ContactService:
         if contact.attachment:
             lines.extend(["", f"Arquivo anexado: {contact.attachment.filename} ({contact.attachment.content_type})"])
         return "\n".join(lines)
+
+
+class SmtpContactService:
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        from_email: str,
+        to_email: str,
+        dry_run: bool = True,
+        use_ssl: bool = True,
+        timeout_seconds: float = 10.0,
+        max_attachment_bytes: int = 2 * 1024 * 1024,
+    ) -> None:
+        self._host = host.strip()
+        self._port = int(port)
+        self._username = username.strip()
+        self._password = password
+        self._from_email = from_email.strip()
+        self._to_email = to_email.strip()
+        self._dry_run = dry_run
+        self._use_ssl = use_ssl
+        self._timeout_seconds = timeout_seconds
+        self._max_attachment_bytes = max_attachment_bytes
+
+    @property
+    def support_email(self) -> str:
+        return self._to_email
+
+    async def deliver(self, contact: ContactMessage) -> ContactDeliveryResult:
+        if contact.attachment and len(contact.attachment.raw_bytes) > self._max_attachment_bytes:
+            raise FileTooLargeError
+
+        if self._dry_run:
+            print(
+                "[contact-smtp-dry-run]",
+                f"name_len={len(contact.name.strip())}",
+                f"email={_mask_email(contact.email)}",
+                f"subject_len={len(contact.subject.strip())}",
+                f"has_attachment={bool(contact.attachment)}",
+            )
+            return ContactDeliveryResult(delivery_mode="dry_run")
+
+        if not all(
+            (
+                self._host,
+                self._port > 0,
+                self._username,
+                self._password,
+                self._from_email,
+                self._to_email,
+            )
+        ):
+            raise ContactProviderNotConfiguredError
+
+        await asyncio.to_thread(self._deliver_sync, contact)
+        return ContactDeliveryResult(delivery_mode="hostinger_smtp")
+
+    def _deliver_sync(self, contact: ContactMessage) -> None:
+        try:
+            message = self._build_email_message(contact)
+            tls_context = ssl.create_default_context()
+            if self._use_ssl:
+                smtp_client = smtplib.SMTP_SSL(
+                    self._host,
+                    self._port,
+                    timeout=self._timeout_seconds,
+                    context=tls_context,
+                )
+            else:
+                smtp_client = smtplib.SMTP(
+                    self._host,
+                    self._port,
+                    timeout=self._timeout_seconds,
+                )
+
+            with smtp_client as client:
+                if not self._use_ssl:
+                    client.starttls(context=tls_context)
+                client.login(self._username, self._password)
+                client.send_message(message)
+        except (OSError, smtplib.SMTPException, ValueError) as exc:
+            raise ContactDeliveryError("Unable to deliver contact message through the SMTP provider.") from exc
+
+    def _build_email_message(self, contact: ContactMessage) -> EmailMessage:
+        message = EmailMessage()
+        message["From"] = self._from_email
+        message["To"] = self._to_email
+        message["Reply-To"] = contact.email
+        message["Subject"] = f"[Contato] {contact.subject}"
+        message.set_content(ContactService._build_text_body(contact))
+
+        if contact.attachment:
+            content_type = contact.attachment.content_type
+            maintype, separator, subtype = content_type.partition("/")
+            if not separator or not maintype or not subtype:
+                maintype, subtype = "application", "octet-stream"
+            message.add_attachment(
+                contact.attachment.raw_bytes,
+                maintype=maintype,
+                subtype=subtype,
+                filename=contact.attachment.filename,
+            )
+        return message
+
+    @staticmethod
+    def from_env() -> "SmtpContactService":
+        use_ssl = _read_env_bool("CONTACT_SMTP_USE_SSL", default=True)
+        username = os.getenv("CONTACT_SMTP_USERNAME", "").strip()
+        return SmtpContactService(
+            host=os.getenv("CONTACT_SMTP_HOST", "smtp.hostinger.com"),
+            port=int(os.getenv("CONTACT_SMTP_PORT", "465" if use_ssl else "587")),
+            username=username,
+            password=os.getenv("CONTACT_SMTP_PASSWORD", ""),
+            from_email=os.getenv("CONTACT_SMTP_FROM_EMAIL", username or "contato@ofxsimples.com.br"),
+            to_email=os.getenv("CONTACT_TO_EMAIL", "contato@ofxsimples.com.br"),
+            dry_run=_read_env_bool("CONTACT_SMTP_DRY_RUN", default=True),
+            use_ssl=use_ssl,
+            timeout_seconds=float(os.getenv("CONTACT_SMTP_TIMEOUT_SECONDS", "10")),
+            max_attachment_bytes=int(os.getenv("CONTACT_ATTACHMENT_MAX_BYTES", str(2 * 1024 * 1024))),
+        )
 
 
 def _read_env_bool(name: str, *, default: bool) -> bool:
