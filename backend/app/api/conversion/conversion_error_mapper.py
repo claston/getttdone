@@ -128,7 +128,7 @@ def _raise_http_convert_error(exc: Exception, *, identity, access_control_servic
     if isinstance(exc, InvalidUserTokenError):
         raise HTTPException(
             status_code=400,
-            detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+            detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
     if isinstance(exc, QuotaExceededError):
         raise HTTPException(

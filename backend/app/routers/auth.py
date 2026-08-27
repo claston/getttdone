@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request
@@ -27,13 +28,17 @@ from app.application.access_control import DEFAULT_MAX_PAGES_PER_FILE, MAX_UPLOA
 from app.application.login_tracking import record_successful_login_safely
 from app.dependencies import get_access_control_service, get_contact_service, get_google_oauth_service
 from app.routers.access_control_common import (
+    ANONYMOUS_IDENTITY_COOKIE_NAME,
     SESSION_ACCESS_COOKIE_NAME,
     SESSION_REFRESH_COOKIE_NAME,
     clear_session_cookies,
     resolve_header_query_or_cookie_token,
+    set_anonymous_identity_cookie,
     set_session_cookies,
 )
 from app.schemas import (
+    AnonymousSessionRequest,
+    AnonymousSessionResponse,
     AuthMeResponse,
     EmailVerificationConfirmRequest,
     EmailVerificationConfirmResponse,
@@ -50,6 +55,46 @@ from app.security_baseline import is_production_env
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_LEGACY_ANONYMOUS_FINGERPRINT_PATTERN = re.compile(r"^anon-\d{10,16}-[0-9a-f]{4,32}$")
+
+
+@router.post("/auth/anonymous-session", response_model=AnonymousSessionResponse)
+def anonymous_session(
+    payload: AnonymousSessionRequest,
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
+    service: AccessControlService = Depends(get_access_control_service),
+) -> JSONResponse:
+    fingerprint: str | None = None
+    migrated_legacy_identity = False
+    cookie_token = str(anonymous_cookie_token or "").strip()
+    if cookie_token:
+        try:
+            fingerprint = service.decode_anonymous_identity_token(token=cookie_token)
+        except InvalidUserTokenError:
+            fingerprint = None
+
+    legacy_fingerprint = str(payload.legacy_fingerprint or "").strip()
+    if (
+        fingerprint is None
+        and _LEGACY_ANONYMOUS_FINGERPRINT_PATTERN.fullmatch(legacy_fingerprint)
+        and service.anonymous_identity_exists(fingerprint=legacy_fingerprint)
+    ):
+        fingerprint = legacy_fingerprint
+        migrated_legacy_identity = True
+
+    if fingerprint is None:
+        fingerprint = service.generate_anonymous_fingerprint()
+
+    if migrated_legacy_identity:
+        logger.info("anonymous_identity_legacy_migrated")
+    response_model = AnonymousSessionResponse()
+    response = JSONResponse(content=response_model.model_dump())
+    response.headers["Cache-Control"] = "no-store"
+    set_anonymous_identity_cookie(
+        response,
+        token=service.issue_anonymous_identity_token(fingerprint=fingerprint),
+    )
+    return response
 
 
 def _is_basic_email_valid(value: str) -> bool:

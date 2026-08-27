@@ -28,6 +28,23 @@ SESSION_REFRESH_TOKEN_TTL_SECONDS = int(os.getenv("SESSION_REFRESH_TOKEN_TTL_SEC
 SESSION_COOKIE_SECURE = read_bool_env("SESSION_COOKIE_SECURE", default=is_production_env())
 
 
+def _default_anonymous_identity_cookie_name() -> str:
+    return "__Host-ofx_anon" if is_production_env() else "ofx_anon"
+
+
+ANONYMOUS_IDENTITY_COOKIE_NAME = (
+    os.getenv("ANONYMOUS_IDENTITY_COOKIE_NAME", _default_anonymous_identity_cookie_name()).strip()
+    or _default_anonymous_identity_cookie_name()
+)
+ANONYMOUS_IDENTITY_COOKIE_TTL_SECONDS = int(
+    os.getenv("ANONYMOUS_IDENTITY_COOKIE_TTL_SECONDS", str(30 * 24 * 60 * 60))
+)
+ANONYMOUS_IDENTITY_COOKIE_SECURE = read_bool_env(
+    "ANONYMOUS_IDENTITY_COOKIE_SECURE",
+    default=is_production_env(),
+)
+
+
 def resolve_header_query_or_cookie_token(
     *,
     authorization: str | None,
@@ -108,6 +125,37 @@ def clear_session_cookies(response: JSONResponse) -> None:
         httponly=True,
         samesite="strict",
     )
+
+
+def set_anonymous_identity_cookie(response: JSONResponse, *, token: str) -> None:
+    ttl_seconds = max(
+        7 * 24 * 60 * 60,
+        min(ANONYMOUS_IDENTITY_COOKIE_TTL_SECONDS, 365 * 24 * 60 * 60),
+    )
+    response.set_cookie(
+        key=ANONYMOUS_IDENTITY_COOKIE_NAME,
+        value=token,
+        max_age=ttl_seconds,
+        httponly=True,
+        secure=ANONYMOUS_IDENTITY_COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+
+
+def resolve_anonymous_fingerprint_with_cookie(
+    *,
+    access_control_service: AccessControlService,
+    anonymous_cookie_token: str | None,
+    legacy_fingerprint: str | None,
+) -> str:
+    cookie_token = str(anonymous_cookie_token or "").strip()
+    if cookie_token:
+        try:
+            return access_control_service.decode_anonymous_identity_token(token=cookie_token)
+        except InvalidUserTokenError:
+            pass
+    return str(legacy_fingerprint or "").strip()
 
 
 def resolve_admin_token(

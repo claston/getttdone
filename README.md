@@ -48,6 +48,19 @@ Proteção de capacidade da conversão inline:
 - Quando todas as vagas estão em uso, os endpoints de conversão retornam `503` com `Retry-After`, sem iniciar a conversão nem consumir cota.
 - O limite é por processo da aplicação. A configuração atual do Render usa um processo Uvicorn, portanto ele também representa o limite da instância.
 
+Identidade anônima por cookie:
+
+  - `POST /auth/anonymous-session` cria um identificador aleatório no servidor e o entrega em cookie `HttpOnly`.
+  - Abrir a página não cria uma linha no banco: a identidade só é persistida no primeiro uso de conversão ou conciliação.
+- O frontend não cria nem persiste novos fingerprints anônimos no `localStorage`.
+- Durante o rollout, um fingerprint legado que já exista no banco pode ser migrado uma vez pelo navegador. A mesma linha de `anonymous_identities` e o mesmo consumo em `usage` são preservados.
+- O backend continua aceitando temporariamente `anonymous_fingerprint` nos contratos antigos para compatibilidade com páginas em cache. A remoção desse fallback deve ocorrer em um PR posterior, após observar a adoção do cookie.
+- `ANONYMOUS_IDENTITY_COOKIE_TTL_SECONDS=2592000` define a validade do cookie; o mínimo aplicado é de sete dias para não reduzir a janela semanal da cota.
+  - `ANONYMOUS_IDENTITY_COOKIE_SECURE=true` deve permanecer ativo em produção. O nome padrão é `__Host-ofx_anon` em produção e `ofx_anon` em desenvolvimento.
+  - Esta etapa não coleta nem usa endereço IP. O identificador é pseudônimo, exclusivo da sessão anônima e assinado com `ACCESS_CONTROL_TOKEN_SECRET`.
+  - Em deploys separados, publique o backend antes do frontend e mantenha `ACCESS_CONTROL_TOKEN_SECRET` estável; a rotação invalida os cookies anônimos existentes.
+  - Depois que o frontend remover o identificador legado, um rollback deve preservar o endpoint e a leitura do cookie. Reverter todo o fluxo para `localStorage` faria esses navegadores receberem uma identidade nova.
+
 Armazenamento compartilhado de documentos de conversão:
 
 - `CONVERSION_DOCUMENT_STORE=filesystem` mantém o comportamento local atual e é o padrão.

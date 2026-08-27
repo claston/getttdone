@@ -350,6 +350,7 @@ class TrackingConvertDocumentUseCase:
         self.filename = ""
         self.scanned_likely = None
         self.estimated_pages_count = None
+        self.anonymous_fingerprint = None
 
     def execute(
         self,
@@ -364,7 +365,6 @@ class TrackingConvertDocumentUseCase:
         estimated_pages_count: int | None = None,
     ) -> ConvertDocumentResult:
         _ = (
-            anonymous_fingerprint,
             user_token,
             authorization,
             access_cookie_token,
@@ -372,6 +372,7 @@ class TrackingConvertDocumentUseCase:
         )
         self.called = True
         self.filename = document.filename
+        self.anonymous_fingerprint = anonymous_fingerprint
         self.scanned_likely = scanned_likely
         self.estimated_pages_count = estimated_pages_count
         payload = FakeAnalyzeService().run(filename=document.filename, raw_bytes=document.raw_bytes).payload
@@ -530,6 +531,35 @@ def test_convert_endpoint_uses_convert_document_use_case(tmp_path) -> None:
     assert tracking_use_case.called is True
     assert tracking_use_case.filename == "sample.pdf"
     app.dependency_overrides.clear()
+
+
+def test_convert_endpoint_uses_signed_anonymous_cookie_without_form_fingerprint(tmp_path) -> None:
+    access_control = AccessControlService(
+        state_file=tmp_path / "access-control-state.json",
+        token_secret="test-secret",
+    )
+    legacy_fingerprint = "anon-1787846400000-c00c1e42"
+    access_control.resolve_identity(anonymous_fingerprint=legacy_fingerprint, user_token=None)
+    tracking_use_case = TrackingConvertDocumentUseCase()
+    app.dependency_overrides[get_access_control_service] = lambda: access_control
+    app.dependency_overrides[get_convert_document_use_case] = lambda: tracking_use_case
+    client = TestClient(app)
+    try:
+        session = client.post(
+            "/auth/anonymous-session",
+            json={"legacy_fingerprint": legacy_fingerprint},
+        )
+        assert session.status_code == 200
+
+        response = client.post(
+            "/convert",
+            files={"file": ("sample.pdf", b"%PDF data", "application/pdf")},
+        )
+
+        assert response.status_code == 200
+        assert tracking_use_case.anonymous_fingerprint == legacy_fingerprint
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_convert_rejects_unsupported_file_type(tmp_path) -> None:

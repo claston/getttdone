@@ -120,6 +120,46 @@ class AccessControlHelpersComponent:
         except (ValueError, UnicodeDecodeError):
             raise InvalidUserTokenError from None
 
+    def encode_anonymous_identity_token(self, fingerprint: str) -> str:
+        normalized = str(fingerprint or "").strip()
+        if not self._is_supported_anonymous_fingerprint(normalized):
+            raise InvalidUserTokenError
+        payload = base64.urlsafe_b64encode(normalized.encode("utf-8")).decode("ascii").rstrip("=")
+        signed_payload = f"anonymous:{payload}"
+        signature = hmac.new(
+            self._service.token_secret,
+            signed_payload.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()[:32]
+        return f"anon1.{payload}.{signature}"
+
+    def decode_anonymous_identity_token(self, token: str) -> str:
+        try:
+            version, payload, signature = str(token or "").strip().split(".", 2)
+            if version != "anon1":
+                raise InvalidUserTokenError
+            signed_payload = f"anonymous:{payload}"
+            expected = hmac.new(
+                self._service.token_secret,
+                signed_payload.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()[:32]
+            if not hmac.compare_digest(expected, signature):
+                raise InvalidUserTokenError
+            padded_payload = payload + "=" * (-len(payload) % 4)
+            fingerprint = base64.urlsafe_b64decode(padded_payload.encode("ascii")).decode("utf-8")
+            if not self._is_supported_anonymous_fingerprint(fingerprint):
+                raise InvalidUserTokenError
+            return fingerprint
+        except (ValueError, UnicodeDecodeError):
+            raise InvalidUserTokenError from None
+
+    @staticmethod
+    def _is_supported_anonymous_fingerprint(value: str) -> bool:
+        if not 2 <= len(value) <= 160:
+            return False
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]+", value))
+
     def append_checkout_intent_event_with_conn(
         self,
         conn,

@@ -1,4 +1,6 @@
 from app.routers import access_control_common
 
 SESSION_ACCESS_COOKIE_NAME = access_control_common.SESSION_ACCESS_COOKIE_NAME
+ANONYMOUS_IDENTITY_COOKIE_NAME = access_control_common.ANONYMOUS_IDENTITY_COOKIE_NAME
 resolve_user_token_with_session = access_control_common.resolve_user_token_with_session
+resolve_anonymous_fingerprint_with_cookie = access_control_common.resolve_anonymous_fingerprint_with_cookie

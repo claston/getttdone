@@ -193,6 +193,23 @@ class AccessControlIdentityComponent:
                 conn.commit()
                 return anon_id
 
+    def anonymous_identity_exists(self, fingerprint: str) -> bool:
+        normalized = str(fingerprint or "").strip()
+        if not normalized:
+            return False
+        with self._service._lock:
+            with self._service._connect() as conn:
+                row = self._service._fetchone(
+                    conn,
+                    "SELECT id FROM anonymous_identities WHERE fingerprint = ?",
+                    (normalized,),
+                )
+        return row is not None
+
+    @staticmethod
+    def generate_anonymous_fingerprint() -> str:
+        return f"afp_{secrets.token_urlsafe(24)}"
+
     def normalize_next_path(self, next_path: str | None) -> str:
         raw = str(next_path or "").strip()
         if not raw.startswith("/"):

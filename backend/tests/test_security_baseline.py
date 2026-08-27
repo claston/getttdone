@@ -23,6 +23,7 @@ def test_validate_baseline_rejects_insecure_production_config(monkeypatch: pytes
     monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
     monkeypatch.setenv("ENABLE_API_DOCS", "true")
     monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "true")
+    monkeypatch.setenv("ANONYMOUS_IDENTITY_COOKIE_SECURE", "false")
 
     with pytest.raises(RuntimeError) as exc:
         validate_production_security_baseline()
@@ -32,6 +33,7 @@ def test_validate_baseline_rejects_insecure_production_config(monkeypatch: pytes
     assert "CORS_ALLOW_ORIGINS must be configured in production." in message
     assert "ENABLE_API_DOCS must be false in production." in message
     assert "UNLIMITED_ANON_QUOTA must be false in production." in message
+    assert "ANONYMOUS_IDENTITY_COOKIE_SECURE must be true in production." in message
 
 
 def test_validate_baseline_accepts_secure_production_config(monkeypatch: pytest.MonkeyPatch) -> None:

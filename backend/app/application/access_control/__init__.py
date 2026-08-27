@@ -193,6 +193,18 @@ class AccessControlService:
             user_token=user_token,
         )
 
+    def issue_anonymous_identity_token(self, *, fingerprint: str) -> str:
+        return self.helpers.encode_anonymous_identity_token(fingerprint)
+
+    def decode_anonymous_identity_token(self, *, token: str) -> str:
+        return self.helpers.decode_anonymous_identity_token(token)
+
+    def anonymous_identity_exists(self, *, fingerprint: str) -> bool:
+        return self.identity.anonymous_identity_exists(fingerprint)
+
+    def generate_anonymous_fingerprint(self) -> str:
+        return self.identity.generate_anonymous_fingerprint()
+
     def register_user(
         self,
         name: str,

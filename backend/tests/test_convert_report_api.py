@@ -41,14 +41,14 @@ def _build_analysis_data(analysis_id: str = "an_convert123") -> AnalysisData:
     )
 
 
-def build_client(tmp_path: Path) -> TestClient:
+def build_client(tmp_path: Path, *, owner_fingerprint: str = "fp-owner") -> TestClient:
     storage = TempAnalysisStorage(root_dir=tmp_path, ttl_seconds=3600)
     storage.save_analysis(_build_analysis_data())
     access_control = AccessControlService(
         state_file=tmp_path / "access-control-state.json",
         token_secret="test-secret",
     )
-    owner = access_control.resolve_identity(anonymous_fingerprint="fp-owner", user_token=None)
+    owner = access_control.resolve_identity(anonymous_fingerprint=owner_fingerprint, user_token=None)
     storage.set_convert_owner(
         analysis_id="an_convert123",
         identity_type=owner.identity_type,
@@ -87,6 +87,24 @@ def test_convert_report_download_happy_path(tmp_path: Path) -> None:
     assert "extrato_nubank.ofx" in response.headers["content-disposition"]
     assert "<STMTTRN>" in response.text
     app.dependency_overrides.clear()
+
+
+def test_convert_report_download_uses_signed_anonymous_cookie(tmp_path: Path) -> None:
+    legacy_fingerprint = "anon-1787846400000-c00c1e43"
+    client = build_client(tmp_path, owner_fingerprint=legacy_fingerprint)
+    try:
+        session = client.post(
+            "/auth/anonymous-session",
+            json={"legacy_fingerprint": legacy_fingerprint},
+        )
+        assert session.status_code == 200
+
+        response = client.get("/convert-report/an_convert123?format=ofx")
+
+        assert response.status_code == 200
+        assert "extrato_nubank.ofx" in response.headers["content-disposition"]
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_convert_report_download_csv_happy_path(tmp_path: Path) -> None:

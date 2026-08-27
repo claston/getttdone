@@ -13,7 +13,12 @@ from app.application import (
     ReportService,
 )
 from app.dependencies import get_access_control_service, get_report_service
-from app.routers.auth_session import SESSION_ACCESS_COOKIE_NAME, resolve_user_token_with_session
+from app.routers.auth_session import (
+    ANONYMOUS_IDENTITY_COOKIE_NAME,
+    SESSION_ACCESS_COOKIE_NAME,
+    resolve_anonymous_fingerprint_with_cookie,
+    resolve_user_token_with_session,
+)
 from app.schemas import ConvertEditsRequest, ConvertEditsResponse
 
 router = APIRouter()
@@ -25,6 +30,7 @@ def get_report(
     authorization: str | None = Header(default=None),
     user_token: str | None = Query(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> FileResponse:
@@ -35,8 +41,13 @@ def get_report(
             explicit_user_token=user_token,
             access_cookie_token=access_cookie_token,
         )
+        resolved_anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+            access_control_service=access_control_service,
+            anonymous_cookie_token=anonymous_cookie_token,
+            legacy_fingerprint=anonymous_fingerprint,
+        )
         identity = access_control_service.resolve_identity(
-            anonymous_fingerprint=anonymous_fingerprint,
+            anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
         service.assert_report_owner(
@@ -53,7 +64,7 @@ def get_report(
     except InvalidUserTokenError:
         raise HTTPException(
             status_code=400,
-            detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+            detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
 
     return FileResponse(
@@ -71,6 +82,7 @@ def get_reconcile_report(
     authorization: str | None = Header(default=None),
     user_token: str | None = Query(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> FileResponse:
@@ -81,8 +93,13 @@ def get_reconcile_report(
             explicit_user_token=user_token,
             access_cookie_token=access_cookie_token,
         )
+        resolved_anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+            access_control_service=access_control_service,
+            anonymous_cookie_token=anonymous_cookie_token,
+            legacy_fingerprint=anonymous_fingerprint,
+        )
         identity = access_control_service.resolve_identity(
-            anonymous_fingerprint=anonymous_fingerprint,
+            anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
         service.assert_reconcile_owner(
@@ -99,7 +116,7 @@ def get_reconcile_report(
     except InvalidUserTokenError:
         raise HTTPException(
             status_code=400,
-            detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+            detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
 
     media_type = (
@@ -123,6 +140,7 @@ def get_convert_report(
     authorization: str | None = Header(default=None),
     user_token: str | None = Query(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> FileResponse:
@@ -133,8 +151,13 @@ def get_convert_report(
             explicit_user_token=user_token,
             access_cookie_token=access_cookie_token,
         )
+        resolved_anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+            access_control_service=access_control_service,
+            anonymous_cookie_token=anonymous_cookie_token,
+            legacy_fingerprint=anonymous_fingerprint,
+        )
         identity = access_control_service.resolve_identity(
-            anonymous_fingerprint=anonymous_fingerprint,
+            anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
         service.assert_convert_owner(
@@ -158,7 +181,7 @@ def get_convert_report(
     except InvalidUserTokenError:
         raise HTTPException(
             status_code=400,
-            detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+            detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
 
     if file_format == "ofx":
@@ -188,6 +211,7 @@ def apply_convert_edits(
     authorization: str | None = Header(default=None),
     user_token: str | None = Query(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConvertEditsResponse:
     try:
@@ -197,8 +221,13 @@ def apply_convert_edits(
             explicit_user_token=user_token,
             access_cookie_token=access_cookie_token,
         )
+        resolved_anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+            access_control_service=access_control_service,
+            anonymous_cookie_token=anonymous_cookie_token,
+            legacy_fingerprint=anonymous_fingerprint,
+        )
         identity = access_control_service.resolve_identity(
-            anonymous_fingerprint=anonymous_fingerprint,
+            anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
         service.assert_convert_owner(
@@ -228,7 +257,7 @@ def apply_convert_edits(
     except InvalidUserTokenError:
         raise HTTPException(
             status_code=400,
-            detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+            detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
 
 
