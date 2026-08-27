@@ -28,6 +28,7 @@ from app.application.access_control.access_control_quota import AccessControlQuo
 from app.application.access_control.access_control_schema import AccessControlSchemaComponent
 from app.application.access_control.access_control_session import AccessControlSessionComponent
 from app.application.access_control.access_control_session_core import AccessControlSessionCoreComponent
+from app.application.errors import InvalidUserTokenError
 
 ANONYMOUS_QUOTA_LIMIT = 3
 REGISTERED_QUOTA_LIMIT = 10
@@ -193,14 +194,40 @@ class AccessControlService:
             user_token=user_token,
         )
 
-    def issue_anonymous_identity_token(self, *, fingerprint: str) -> str:
-        return self.helpers.encode_anonymous_identity_token(fingerprint)
+    def issue_anonymous_identity_token(
+        self,
+        *,
+        fingerprint: str | None = None,
+        identity_id: str | None = None,
+    ) -> str:
+        has_fingerprint = bool(str(fingerprint or "").strip())
+        has_identity_id = bool(str(identity_id or "").strip())
+        if has_fingerprint == has_identity_id:
+            raise InvalidUserTokenError
+        if has_identity_id:
+            return self.helpers.encode_anonymous_identity_token(
+                subject_kind="i",
+                subject_value=str(identity_id),
+            )
+        return self.helpers.encode_anonymous_identity_token(
+            subject_kind="f",
+            subject_value=str(fingerprint),
+        )
 
     def decode_anonymous_identity_token(self, *, token: str) -> str:
-        return self.helpers.decode_anonymous_identity_token(token)
+        subject_kind, subject_value = self.helpers.decode_anonymous_identity_token(token)
+        if subject_kind == "f":
+            return subject_value
+        fingerprint = self.identity.get_anonymous_fingerprint(subject_value)
+        if fingerprint is None:
+            raise InvalidUserTokenError
+        return fingerprint
 
     def anonymous_identity_exists(self, *, fingerprint: str) -> bool:
         return self.identity.anonymous_identity_exists(fingerprint)
+
+    def get_anonymous_identity_id(self, *, fingerprint: str) -> str | None:
+        return self.identity.get_anonymous_identity_id(fingerprint)
 
     def generate_anonymous_fingerprint(self) -> str:
         return self.identity.generate_anonymous_fingerprint()

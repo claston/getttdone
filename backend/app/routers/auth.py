@@ -64,35 +64,35 @@ def anonymous_session(
     anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     service: AccessControlService = Depends(get_access_control_service),
 ) -> JSONResponse:
-    fingerprint: str | None = None
-    migrated_legacy_identity = False
     cookie_token = str(anonymous_cookie_token or "").strip()
     if cookie_token:
         try:
-            fingerprint = service.decode_anonymous_identity_token(token=cookie_token)
+            service.decode_anonymous_identity_token(token=cookie_token)
         except InvalidUserTokenError:
-            fingerprint = None
+            pass
+        else:
+            response_model = AnonymousSessionResponse()
+            response = JSONResponse(content=response_model.model_dump())
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
     legacy_fingerprint = str(payload.legacy_fingerprint or "").strip()
-    if (
-        fingerprint is None
-        and _LEGACY_ANONYMOUS_FINGERPRINT_PATTERN.fullmatch(legacy_fingerprint)
-        and service.anonymous_identity_exists(fingerprint=legacy_fingerprint)
-    ):
-        fingerprint = legacy_fingerprint
-        migrated_legacy_identity = True
+    legacy_identity_id = None
+    if _LEGACY_ANONYMOUS_FINGERPRINT_PATTERN.fullmatch(legacy_fingerprint):
+        legacy_identity_id = service.get_anonymous_identity_id(fingerprint=legacy_fingerprint)
 
-    if fingerprint is None:
-        fingerprint = service.generate_anonymous_fingerprint()
-
-    if migrated_legacy_identity:
+    if legacy_identity_id is not None:
+        anonymous_token = service.issue_anonymous_identity_token(identity_id=legacy_identity_id)
         logger.info("anonymous_identity_legacy_migrated")
+    else:
+        fingerprint = service.generate_anonymous_fingerprint()
+        anonymous_token = service.issue_anonymous_identity_token(fingerprint=fingerprint)
     response_model = AnonymousSessionResponse()
     response = JSONResponse(content=response_model.model_dump())
     response.headers["Cache-Control"] = "no-store"
     set_anonymous_identity_cookie(
         response,
-        token=service.issue_anonymous_identity_token(fingerprint=fingerprint),
+        token=anonymous_token,
     )
     return response
 

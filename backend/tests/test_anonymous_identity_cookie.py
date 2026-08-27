@@ -52,6 +52,7 @@ def test_anonymous_identity_cookie_token_is_signed_and_rejects_tampering(tmp_pat
 
     token = service.issue_anonymous_identity_token(fingerprint=fingerprint)
 
+    assert token.startswith("anon2.f.")
     assert service.decode_anonymous_identity_token(token=token) == fingerprint
     with pytest.raises(InvalidUserTokenError):
         service.decode_anonymous_identity_token(token=f"{token[:-1]}x")
@@ -78,14 +79,14 @@ def test_anonymous_session_migrates_existing_identity_and_preserves_quota() -> N
         assert response.headers["cache-control"] == "no-store"
         cookie_token = response.cookies.get(ANONYMOUS_IDENTITY_COOKIE_NAME)
         assert cookie_token
+        assert cookie_token.startswith("anon2.i.")
         assert service.decode_anonymous_identity_token(token=cookie_token) == legacy_fingerprint
         assert "HttpOnly" in response.headers["set-cookie"]
 
         resumed = client.post("/auth/anonymous-session", json={})
         assert resumed.status_code == 200
-        resumed_cookie_token = resumed.cookies.get(ANONYMOUS_IDENTITY_COOKIE_NAME)
-        assert resumed_cookie_token
-        resumed_fingerprint = service.decode_anonymous_identity_token(token=resumed_cookie_token)
+        assert "set-cookie" not in resumed.headers
+        resumed_fingerprint = service.decode_anonymous_identity_token(token=cookie_token)
         resumed_identity = service.resolve_identity(
             anonymous_fingerprint=resumed_fingerprint,
             user_token=None,
@@ -112,6 +113,7 @@ def test_anonymous_session_does_not_trust_unknown_legacy_fingerprint() -> None:
         assert response.json() == {"status": "ready"}
         cookie_token = response.cookies.get(ANONYMOUS_IDENTITY_COOKIE_NAME)
         assert cookie_token
+        assert cookie_token.startswith("anon2.f.")
         server_fingerprint = service.decode_anonymous_identity_token(token=cookie_token)
         assert server_fingerprint.startswith("afp_")
         assert server_fingerprint != unknown_legacy_fingerprint
