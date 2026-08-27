@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request
@@ -51,7 +50,18 @@ from app.security_baseline import is_production_env
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-_BASIC_EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _is_basic_email_valid(value: str) -> bool:
+    if not value or len(value) > 320 or any(character.isspace() for character in value):
+        return False
+
+    local_part, separator, domain = value.partition("@")
+    if not local_part or not separator or not domain or "@" in domain:
+        return False
+
+    domain_name, dot, top_level_domain = domain.rpartition(".")
+    return bool(domain_name and dot and top_level_domain)
 
 
 def _email_verification_frontend_url() -> str:
@@ -144,7 +154,7 @@ async def register(
         )
 
     normalized_email = payload.email.strip().lower()
-    if not _BASIC_EMAIL_PATTERN.fullmatch(normalized_email) or len(normalized_email) > 320:
+    if not _is_basic_email_valid(normalized_email):
         raise HTTPException(status_code=400, detail="Informe um endereço de e-mail válido.")
     if not payload.name.strip() or len(payload.name.strip()) > 120:
         raise HTTPException(status_code=400, detail="Informe um nome válido.")
