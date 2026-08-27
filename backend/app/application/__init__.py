@@ -5,7 +5,13 @@ from app.application.analysis_response_builder import (
     persist_and_build_analyze_response,
     persist_conversion_result,
 )
-from app.application.contact_service import ContactAttachment, ContactDeliveryResult, ContactMessage, ContactService
+from app.application.contact_service import (
+    ContactAttachment,
+    ContactDeliveryResult,
+    ContactMessage,
+    ContactService,
+    SmtpContactService,
+)
 from app.application.conversion.conversion_capacity import ConversionCapacityController, ConversionCapacityLease
 from app.application.conversion.conversion_document_store import (
     ConversionDocumentReference,
@@ -99,6 +105,7 @@ __all__ = [
     "ContactMessage",
     "ContactProviderNotConfiguredError",
     "ContactService",
+    "SmtpContactService",
     "EmailVerificationRateLimitedError",
     "EmailVerificationRequiredError",
     "ConversionDocumentReference",

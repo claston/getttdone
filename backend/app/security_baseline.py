@@ -77,6 +77,16 @@ def validate_production_security_baseline() -> None:
     if read_bool_env("UNLIMITED_ANON_QUOTA", default=False):
         issues.append("UNLIMITED_ANON_QUOTA must be false in production.")
 
+    contact_provider = os.getenv("CONTACT_DELIVERY_PROVIDER", "resend").strip().lower()
+    if contact_provider not in {"resend", "smtp", "hostinger_smtp"}:
+        issues.append("CONTACT_DELIVERY_PROVIDER must be 'resend' or 'hostinger_smtp'.")
+    elif contact_provider in {"smtp", "hostinger_smtp"}:
+        for variable_name in ("CONTACT_SMTP_USERNAME", "CONTACT_SMTP_PASSWORD", "CONTACT_TO_EMAIL"):
+            if not os.getenv(variable_name, "").strip():
+                issues.append(f"{variable_name} must be configured for Hostinger SMTP contact delivery.")
+        if read_bool_env("CONTACT_SMTP_DRY_RUN", default=True):
+            issues.append("CONTACT_SMTP_DRY_RUN must be false for Hostinger SMTP contact delivery.")
+
     if read_bool_env("AUTH_EMAIL_VERIFICATION_REQUIRED", default=False):
         if not os.getenv("RESEND_API_KEY", "").strip():
             issues.append("RESEND_API_KEY must be configured when email verification is enabled in production.")

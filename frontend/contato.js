@@ -134,11 +134,11 @@
       const response = await fetch(`${apiBase}/contact`, { method: "POST", body: formData });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setFeedback(String(payload.detail || "Nao foi possivel enviar a mensagem agora."), "error");
+        setFeedback(String(payload.detail || "Não foi possível enviar a mensagem agora."), "error");
         return;
       }
       if (payload.delivery_mode === "dry_run") {
-        setFeedback("Mensagem registrada em modo teste. Ative o Resend para envio real por e-mail.", "success");
+        setFeedback("Mensagem registrada em modo de teste. Configure o provedor de e-mail para o envio real.", "success");
       } else {
         setFeedback("Mensagem enviada com sucesso. Nossa equipe vai responder no seu e-mail.", "success");
       }
