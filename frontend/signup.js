@@ -9,6 +9,8 @@
   const USER_TOKEN_KEY = "ofxsimples_user_token";
   const USER_TOKEN_COOKIE = "ofxsimples_user_token";
   const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
+  const PENDING_EMAIL_KEY = "ofxsimples_pending_verification_email";
+  const PENDING_DELIVERY_KEY = "ofxsimples_pending_verification_delivery";
 
   function isIpv4Host(hostname) {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
@@ -294,6 +296,12 @@
           accepted_terms: acceptedTerms.checked,
           product_updates_opt_in: productUpdatesOptIn.checked,
         });
+        if (payload.verification_required) {
+          sessionStorage.setItem(PENDING_EMAIL_KEY, String(payload.email || email.value).trim());
+          sessionStorage.setItem(PENDING_DELIVERY_KEY, String(payload.email_delivery_status || ""));
+          window.location.href = "./verificar-email.html?pending=1";
+          return;
+        }
         storeUserToken(String(payload.user_token || ""));
         setStatus("Conta criada com sucesso.", "success");
         window.location.href = getNextPath();

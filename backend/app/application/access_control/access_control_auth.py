@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.application.errors import (
+    EmailVerificationRequiredError,
     GoogleOAuthAccountNotFoundError,
     GoogleOAuthExchangeError,
     InvalidCredentialsError,
@@ -37,6 +38,8 @@ class AccessControlAuthComponent:
         user_id = f"usr_{uuid4().hex[:12]}"
         salt = secrets.token_hex(8)
         password_hash = self._service._hash_password(password=password, salt=salt)
+        email_verification_status = "pending" if self._service.email_verification_required else "verified"
+        email_verified_at = None if email_verification_status == "pending" else now
         with self._service._lock:
             with self._service._connect() as conn:
                 existing = self._service._fetchone(conn, "SELECT id FROM users WHERE email = ?", (normalized_email,))
@@ -59,10 +62,12 @@ class AccessControlAuthComponent:
                         privacy_accepted_at,
                         product_updates_opt_in,
                         product_updates_opted_in_at,
+                        email_verification_status,
+                        email_verified_at,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         user_id,
@@ -78,6 +83,8 @@ class AccessControlAuthComponent:
                         privacy_accepted_at,
                         self._service._true_value() if product_updates_opt_in else self._service._false_value(),
                         product_updates_opted_in_at,
+                        email_verification_status,
+                        email_verified_at,
                         now,
                         now,
                     ),
@@ -90,6 +97,8 @@ class AccessControlAuthComponent:
             token=self._service._encode_token(user_id),
             is_admin=is_admin,
             is_active=True,
+            email_verification_status=email_verification_status,
+            email_verified_at=email_verified_at,
         )
 
     def authenticate_user(self, email: str, password: str) -> RegisteredUser:
@@ -98,7 +107,12 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active, password_hash, password_salt FROM users WHERE email = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active, password_hash, password_salt,
+                           email_verification_status, email_verified_at
+                    FROM users
+                    WHERE email = ?
+                    """,
                     (normalized_email,),
                 )
                 if user is None:
@@ -111,6 +125,8 @@ class AccessControlAuthComponent:
                     raise InvalidCredentialsError
                 if not self._service._row_is_active(user):
                     raise InvalidCredentialsError
+                if not self._service.email_verification.row_is_verified(user):
+                    raise EmailVerificationRequiredError
                 return self._service._registered_user_factory(
                     user_id=str(user["id"]),
                     email=str(user["email"]),
@@ -118,6 +134,8 @@ class AccessControlAuthComponent:
                     token=self._service._encode_token(str(user["id"])),
                     is_admin=self._service._row_is_admin(user),
                     is_active=True,
+                    email_verification_status=str(user["email_verification_status"] or "verified"),
+                    email_verified_at=str(user["email_verified_at"] or "") or None,
                 )
 
     def get_user_by_token(self, user_token: str) -> RegisteredUser:
@@ -126,10 +144,18 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active FROM users WHERE id = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active,
+                           email_verification_status, email_verified_at
+                    FROM users WHERE id = ?
+                    """,
                     (user_id,),
                 )
-                if user is None or not self._service._row_is_active(user):
+                if (
+                    user is None
+                    or not self._service._row_is_active(user)
+                    or not self._service.email_verification.row_is_verified(user)
+                ):
                     raise InvalidUserTokenError
                 return self._service._registered_user_factory(
                     user_id=str(user["id"]),
@@ -138,6 +164,8 @@ class AccessControlAuthComponent:
                     token=user_token,
                     is_admin=self._service._row_is_admin(user),
                     is_active=True,
+                    email_verification_status=str(user["email_verification_status"] or "verified"),
+                    email_verified_at=str(user["email_verified_at"] or "") or None,
                 )
 
     def get_user_by_email(self, email: str) -> RegisteredUser:
@@ -146,10 +174,18 @@ class AccessControlAuthComponent:
             with self._service._connect() as conn:
                 user = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active FROM users WHERE lower(email) = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active,
+                           email_verification_status, email_verified_at
+                    FROM users WHERE lower(email) = ?
+                    """,
                     (normalized_email,),
                 )
-                if user is None or not self._service._row_is_active(user):
+                if (
+                    user is None
+                    or not self._service._row_is_active(user)
+                    or not self._service.email_verification.row_is_verified(user)
+                ):
                     raise InvalidUserTokenError
                 user_id = str(user["id"])
                 return self._service._registered_user_factory(
@@ -159,6 +195,8 @@ class AccessControlAuthComponent:
                     token=self._service._encode_token(user_id),
                     is_admin=self._service._row_is_admin(user),
                     is_active=True,
+                    email_verification_status=str(user["email_verification_status"] or "verified"),
+                    email_verified_at=str(user["email_verified_at"] or "") or None,
                 )
 
     def register_or_authenticate_google_user(
@@ -184,7 +222,8 @@ class AccessControlAuthComponent:
                 row = self._service._fetchone(
                     conn,
                     """
-                    SELECT id, name, email, is_admin, is_active
+                    SELECT id, name, email, is_admin, is_active,
+                           email_verification_status, email_verified_at
                     FROM users
                     WHERE auth_provider = 'google' AND provider_user_id = ?
                     """,
@@ -201,6 +240,8 @@ class AccessControlAuthComponent:
                         SET
                             name = ?,
                             email = ?,
+                            email_verification_status = 'verified',
+                            email_verified_at = COALESCE(email_verified_at, ?),
                             terms_accepted_at = COALESCE(?, terms_accepted_at),
                             privacy_accepted_at = COALESCE(?, privacy_accepted_at),
                             product_updates_opt_in = CASE
@@ -214,6 +255,7 @@ class AccessControlAuthComponent:
                         (
                             display_name,
                             normalized_email,
+                            now,
                             terms_accepted_at,
                             privacy_accepted_at,
                             product_updates_opt_in,
@@ -231,11 +273,17 @@ class AccessControlAuthComponent:
                         token=self._service._encode_token(user_id),
                         is_admin=self._service._row_is_admin(row),
                         is_active=True,
+                        email_verification_status="verified",
+                        email_verified_at=str(row["email_verified_at"] or "") or now,
                     )
 
                 existing_by_email = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active FROM users WHERE email = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active,
+                           email_verification_status, email_verified_at
+                    FROM users WHERE email = ?
+                    """,
                     (normalized_email,),
                 )
                 if existing_by_email is not None:
@@ -250,6 +298,8 @@ class AccessControlAuthComponent:
                             name = ?,
                             auth_provider = 'google',
                             provider_user_id = ?,
+                            email_verification_status = 'verified',
+                            email_verified_at = COALESCE(email_verified_at, ?),
                             terms_accepted_at = COALESCE(?, terms_accepted_at),
                             privacy_accepted_at = COALESCE(?, privacy_accepted_at),
                             product_updates_opt_in = CASE
@@ -263,6 +313,7 @@ class AccessControlAuthComponent:
                         (
                             display_name,
                             provider_user_id,
+                            now,
                             terms_accepted_at,
                             privacy_accepted_at,
                             product_updates_opt_in,
@@ -280,6 +331,8 @@ class AccessControlAuthComponent:
                         token=self._service._encode_token(user_id),
                         is_admin=self._service._row_is_admin(existing_by_email),
                         is_active=True,
+                        email_verification_status="verified",
+                        email_verified_at=str(existing_by_email["email_verified_at"] or "") or now,
                     )
 
                 if not allow_create:
@@ -304,10 +357,12 @@ class AccessControlAuthComponent:
                         privacy_accepted_at,
                         product_updates_opt_in,
                         product_updates_opted_in_at,
+                        email_verification_status,
+                        email_verified_at,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         user_id,
@@ -323,6 +378,8 @@ class AccessControlAuthComponent:
                         privacy_accepted_at,
                         true_value if product_updates_opt_in else self._service._false_value(),
                         product_updates_opted_in_at,
+                        "verified",
+                        now,
                         now,
                         now,
                     ),
@@ -335,4 +392,6 @@ class AccessControlAuthComponent:
                     token=self._service._encode_token(user_id),
                     is_admin=is_admin,
                     is_active=True,
+                    email_verification_status="verified",
+                    email_verified_at=now,
                 )

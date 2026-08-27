@@ -1,4 +1,5 @@
 import logging
+import os
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request
@@ -6,18 +7,25 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.application import (
     AccessControlService,
+    ContactDeliveryError,
+    ContactProviderNotConfiguredError,
+    ContactService,
+    EmailVerificationRateLimitedError,
+    EmailVerificationRequiredError,
     GoogleOAuthExchangeError,
     GoogleOAuthNotConfiguredError,
     GoogleOAuthService,
     GoogleOAuthStateError,
     InvalidCredentialsError,
+    InvalidEmailVerificationTokenError,
     InvalidSessionTokenError,
     InvalidUserTokenError,
     ReusedSessionTokenError,
     UserAlreadyExistsError,
 )
+from app.application.access_control import DEFAULT_MAX_PAGES_PER_FILE, MAX_UPLOAD_SIZE_BYTES
 from app.application.login_tracking import record_successful_login_safely
-from app.dependencies import get_access_control_service, get_google_oauth_service
+from app.dependencies import get_access_control_service, get_contact_service, get_google_oauth_service
 from app.routers.access_control_common import (
     SESSION_ACCESS_COOKIE_NAME,
     SESSION_REFRESH_COOKIE_NAME,
@@ -27,6 +35,10 @@ from app.routers.access_control_common import (
 )
 from app.schemas import (
     AuthMeResponse,
+    EmailVerificationConfirmRequest,
+    EmailVerificationConfirmResponse,
+    EmailVerificationResendRequest,
+    EmailVerificationResendResponse,
     LoginRequest,
     LoginResponse,
     RegisterRequest,
@@ -38,6 +50,78 @@ from app.security_baseline import is_production_env
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _is_basic_email_valid(value: str) -> bool:
+    if not value or len(value) > 320 or any(character.isspace() for character in value):
+        return False
+
+    local_part, separator, domain = value.partition("@")
+    if not local_part or not separator or not domain or "@" in domain:
+        return False
+
+    domain_name, dot, top_level_domain = domain.rpartition(".")
+    return bool(domain_name and dot and top_level_domain)
+
+
+def _email_verification_frontend_url() -> str:
+    configured = os.getenv("AUTH_EMAIL_VERIFICATION_FRONTEND_URL", "").strip()
+    return configured or "https://www.ofxsimples.com.br/verificar-email.html"
+
+
+def _build_verification_email_text(*, name: str, token: str, expires_at: str) -> str:
+    confirmation_url = f"{_email_verification_frontend_url()}#token={token}"
+    display_name = str(name or "").strip() or "Olá"
+    return "\n".join(
+        [
+            f"{display_name},",
+            "",
+            "Confirme seu e-mail para liberar sua conta no OFX Simples.",
+            f"Confirme seu e-mail: {confirmation_url}",
+            "",
+            f"Este link expira em: {expires_at}.",
+            "Se você não solicitou este cadastro, ignore esta mensagem.",
+        ]
+    )
+
+
+async def _deliver_verification_email(
+    *,
+    service: AccessControlService,
+    contact_service: ContactService,
+    issued_token,
+) -> str:
+    try:
+        delivery = await contact_service.send_text_email(
+            to_email=issued_token.email,
+            subject="Confirme seu e-mail no OFX Simples",
+            text=_build_verification_email_text(
+                name=issued_token.name,
+                token=issued_token.token,
+                expires_at=issued_token.expires_at,
+            ),
+        )
+    except (ContactProviderNotConfiguredError, ContactDeliveryError):
+        service.mark_email_verification_delivery(token_id=issued_token.token_id, status="failed")
+        logger.exception(
+            "email_verification_delivery_failed user_id=%s token_id=%s",
+            issued_token.user_id,
+            issued_token.token_id,
+        )
+        return "failed"
+
+    service.mark_email_verification_delivery(
+        token_id=issued_token.token_id,
+        status="sent",
+        provider_message_id=delivery.provider_message_id,
+    )
+    logger.info(
+        "email_verification_delivery_succeeded user_id=%s token_id=%s mode=%s",
+        issued_token.user_id,
+        issued_token.token_id,
+        delivery.delivery_mode,
+    )
+    return "sent"
 
 
 def _auth_me_payload(*, service: AccessControlService, user_token: str, response_model=AuthMeResponse):
@@ -58,9 +142,10 @@ def _auth_me_payload(*, service: AccessControlService, user_token: str, response
 
 
 @router.post("/auth/register", response_model=RegisterResponse)
-def register(
+async def register(
     payload: RegisterRequest,
     service: AccessControlService = Depends(get_access_control_service),
+    contact_service: ContactService = Depends(get_contact_service),
 ) -> RegisterResponse:
     if not payload.accepted_terms:
         raise HTTPException(
@@ -68,12 +153,20 @@ def register(
             detail="Você precisa aceitar os Termos de Uso e a Política de Privacidade para criar a conta.",
         )
 
+    normalized_email = payload.email.strip().lower()
+    if not _is_basic_email_valid(normalized_email):
+        raise HTTPException(status_code=400, detail="Informe um endereço de e-mail válido.")
+    if not payload.name.strip() or len(payload.name.strip()) > 120:
+        raise HTTPException(status_code=400, detail="Informe um nome válido.")
+    if len(payload.password) < 8 or len(payload.password) > 256:
+        raise HTTPException(status_code=400, detail="A senha deve ter entre 8 e 256 caracteres.")
+
     accepted_at = service.now_provider().isoformat()
     product_updates_opted_in_at = accepted_at if payload.product_updates_opt_in else None
     try:
         user = service.register_user(
             name=payload.name,
-            email=payload.email,
+            email=normalized_email,
             password=payload.password,
             terms_accepted_at=accepted_at,
             privacy_accepted_at=accepted_at,
@@ -83,11 +176,29 @@ def register(
     except UserAlreadyExistsError:
         raise HTTPException(status_code=409, detail="Email already registered.")
 
-    record_successful_login_safely(
-        service,
-        user_id=user.user_id,
-        auth_method="local_password",
-    )
+    if user.email_verification_status == "pending":
+        issued_token = service.issue_email_verification_token(user_id=user.user_id)
+        delivery_status = await _deliver_verification_email(
+            service=service,
+            contact_service=contact_service,
+            issued_token=issued_token,
+        )
+        return RegisterResponse(
+            user_id=user.user_id,
+            name=user.name,
+            email=user.email,
+            user_token=None,
+            quota_remaining=0,
+            quota_limit=service.registered_quota_limit,
+            quota_mode="conversion",
+            max_upload_size_bytes=MAX_UPLOAD_SIZE_BYTES,
+            max_pages_per_file=DEFAULT_MAX_PAGES_PER_FILE,
+            verification_required=True,
+            verification_status="pending",
+            email_delivery_status=delivery_status,
+        )
+
+    record_successful_login_safely(service, user_id=user.user_id, auth_method="local_password")
 
     identity = service.resolve_identity(anonymous_fingerprint=None, user_token=user.token)
     return RegisterResponse(
@@ -102,6 +213,51 @@ def register(
         plan_name=identity.plan_name,
         max_upload_size_bytes=identity.max_upload_size_bytes,
         max_pages_per_file=identity.max_pages_per_file,
+        verification_required=False,
+        verification_status="verified",
+    )
+
+
+@router.post("/auth/email-verification/confirm", response_model=EmailVerificationConfirmResponse)
+def confirm_email_verification(
+    payload: EmailVerificationConfirmRequest,
+    service: AccessControlService = Depends(get_access_control_service),
+) -> EmailVerificationConfirmResponse:
+    try:
+        service.confirm_email_verification_token(token=payload.token)
+    except InvalidEmailVerificationTokenError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_or_expired_email_verification_token",
+                "message": "O link de confirmação é inválido, expirou ou já foi utilizado.",
+            },
+        )
+    return EmailVerificationConfirmResponse()
+
+
+@router.post(
+    "/auth/email-verification/resend",
+    response_model=EmailVerificationResendResponse,
+    status_code=202,
+)
+async def resend_email_verification(
+    payload: EmailVerificationResendRequest,
+    service: AccessControlService = Depends(get_access_control_service),
+    contact_service: ContactService = Depends(get_contact_service),
+) -> EmailVerificationResendResponse:
+    try:
+        issued_token = service.issue_email_verification_token_for_email(email=payload.email)
+    except EmailVerificationRateLimitedError:
+        issued_token = None
+    if issued_token is not None:
+        await _deliver_verification_email(
+            service=service,
+            contact_service=contact_service,
+            issued_token=issued_token,
+        )
+    return EmailVerificationResendResponse(
+        message="Se existir uma conta pendente para este e-mail, enviaremos uma nova mensagem.",
     )
 
 
@@ -112,6 +268,14 @@ def login(
 ) -> LoginResponse:
     try:
         user = service.authenticate_user(email=payload.email, password=payload.password)
+    except EmailVerificationRequiredError:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "email_verification_required",
+                "message": "Confirme seu e-mail para acessar sua conta.",
+            },
+        )
     except InvalidCredentialsError:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
@@ -184,6 +348,14 @@ def session_login(
 ) -> JSONResponse:
     try:
         user = service.authenticate_user(email=payload.email, password=payload.password)
+    except EmailVerificationRequiredError:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "email_verification_required",
+                "message": "Confirme seu e-mail para acessar sua conta.",
+            },
+        )
     except InvalidCredentialsError:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     session_bundle = service.create_user_session(

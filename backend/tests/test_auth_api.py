@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.application.access_control import AccessControlService
 from app.dependencies import get_access_control_service
 from app.main import app
+from app.routers.auth import _is_basic_email_valid
 
 
 class _InMemoryConnCtx:
@@ -38,6 +39,18 @@ def build_client(state_dir: Path) -> tuple[TestClient, AccessControlService]:
     )
     app.dependency_overrides[get_access_control_service] = lambda: access_control
     return TestClient(app), access_control
+
+
+def test_basic_email_validation_uses_bounded_structural_checks() -> None:
+    crafted_valid_email = "!@" + "!." * 150 + "example"
+
+    assert _is_basic_email_valid(crafted_valid_email)
+    assert _is_basic_email_valid("erica+financeiro@example.com.br")
+    assert not _is_basic_email_valid("erica.example.com")
+    assert not _is_basic_email_valid("erica@@example.com")
+    assert not _is_basic_email_valid("erica@example")
+    assert not _is_basic_email_valid("erica @example.com")
+    assert not _is_basic_email_valid("e@" + "x" * 316 + ".com")
 
 
 def test_register_records_initial_user_access() -> None:

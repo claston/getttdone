@@ -20,6 +20,7 @@ from app.application.access_control.access_control_admin import AccessControlAdm
 from app.application.access_control.access_control_auth import AccessControlAuthComponent
 from app.application.access_control.access_control_checkout import AccessControlCheckoutComponent
 from app.application.access_control.access_control_db import AccessControlDbComponent
+from app.application.access_control.access_control_email_verification import AccessControlEmailVerificationComponent
 from app.application.access_control.access_control_helpers import AccessControlHelpersComponent
 from app.application.access_control.access_control_identity import AccessControlIdentityComponent
 from app.application.access_control.access_control_login_events import AccessControlLoginEventsComponent
@@ -65,6 +66,18 @@ class RegisteredUser:
     token: str
     is_admin: bool = False
     is_active: bool = True
+    email_verification_status: str = "verified"
+    email_verified_at: str | None = None
+
+
+@dataclass(frozen=True)
+class EmailVerificationToken:
+    token_id: str
+    user_id: str
+    email: str
+    name: str
+    token: str
+    expires_at: str
 
 
 @dataclass(frozen=True)
@@ -95,6 +108,10 @@ class AccessControlService:
         db_pool_min_size: int = DEFAULT_DB_POOL_MIN_SIZE,
         db_pool_max_size: int = DEFAULT_DB_POOL_MAX_SIZE,
         db_pool_timeout_seconds: float = DEFAULT_DB_POOL_TIMEOUT_SECONDS,
+        email_verification_required: bool = False,
+        email_verification_ttl_seconds: int = 3600,
+        email_verification_resend_cooldown_seconds: int = 60,
+        email_verification_daily_limit: int = 5,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.state_file = state_file
@@ -117,10 +134,17 @@ class AccessControlService:
         self.db_pool_min_size = max(1, int(db_pool_min_size))
         self.db_pool_max_size = max(self.db_pool_min_size, int(db_pool_max_size))
         self.db_pool_timeout_seconds = max(1.0, float(db_pool_timeout_seconds))
+        self.email_verification_required = bool(email_verification_required)
+        self.email_verification_ttl_seconds = max(300, int(email_verification_ttl_seconds))
+        self.email_verification_resend_cooldown_seconds = max(
+            1, int(email_verification_resend_cooldown_seconds)
+        )
+        self.email_verification_daily_limit = max(1, int(email_verification_daily_limit))
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
         self._lock = RLock()
         self._identity_context_factory = IdentityContext
         self._registered_user_factory = RegisteredUser
+        self._email_verification_token_factory = EmailVerificationToken
         self._session_token_bundle_factory = SessionTokenBundle
         self._active_plan_cache: dict[str, tuple[float, dict[str, str | int] | None]] = {}
         self._postgres_pool = None
@@ -142,6 +166,7 @@ class AccessControlService:
         self.db = AccessControlDbComponent(self)
         self.helpers = AccessControlHelpersComponent(self)
         self.auth = AccessControlAuthComponent(self)
+        self.email_verification = AccessControlEmailVerificationComponent(self)
         self.schema = AccessControlSchemaComponent(self)
         self.session_core = AccessControlSessionCoreComponent(self)
         self.identity = AccessControlIdentityComponent(self)
@@ -191,6 +216,36 @@ class AccessControlService:
 
     def authenticate_user(self, email: str, password: str) -> RegisteredUser:
         return self.auth.authenticate_user(email=email, password=password)
+
+    def issue_email_verification_token(
+        self,
+        *,
+        user_id: str,
+        enforce_resend_limits: bool = False,
+    ) -> EmailVerificationToken:
+        return self.email_verification.issue_token(
+            user_id=user_id,
+            enforce_resend_limits=enforce_resend_limits,
+        )
+
+    def issue_email_verification_token_for_email(self, *, email: str) -> EmailVerificationToken | None:
+        return self.email_verification.issue_token_for_email(email=email)
+
+    def mark_email_verification_delivery(
+        self,
+        *,
+        token_id: str,
+        status: str,
+        provider_message_id: str | None = None,
+    ) -> None:
+        self.email_verification.mark_delivery(
+            token_id=token_id,
+            status=status,
+            provider_message_id=provider_message_id,
+        )
+
+    def confirm_email_verification_token(self, *, token: str) -> RegisteredUser:
+        return self.email_verification.confirm_token(token=token)
 
     def record_successful_login(self, *, user_id: str, auth_method: str) -> str:
         return self.login_events.record_successful_login(
@@ -707,8 +762,16 @@ class AccessControlService:
     def _user_exists(self, user_id: str) -> bool:
         with self._lock:
             with self._connect() as conn:
-                row = self._fetchone(conn, "SELECT id, is_active FROM users WHERE id = ?", (user_id,))
-                return row is not None and self._row_is_active(row)
+                row = self._fetchone(
+                    conn,
+                    "SELECT id, is_active, email_verification_status FROM users WHERE id = ?",
+                    (user_id,),
+                )
+                return (
+                    row is not None
+                    and self._row_is_active(row)
+                    and self.email_verification.row_is_verified(row)
+                )
 
     def _connect(self):
         return self.db.connect()

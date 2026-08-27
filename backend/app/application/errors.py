@@ -56,6 +56,18 @@ class InvalidCredentialsError(Exception):
     """Raised when user login credentials are invalid."""
 
 
+class EmailVerificationRequiredError(Exception):
+    """Raised when a local account must verify its email before authentication."""
+
+
+class InvalidEmailVerificationTokenError(Exception):
+    """Raised when an email verification token is missing, expired, or already used."""
+
+
+class EmailVerificationRateLimitedError(Exception):
+    """Raised when verification email resend limits are exceeded."""
+
+
 class AnalysisAccessDeniedError(Exception):
     """Raised when an identity attempts to access another identity's analysis."""
 

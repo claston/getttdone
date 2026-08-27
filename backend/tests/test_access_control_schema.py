@@ -44,7 +44,11 @@ def test_postgres_schema_missing_objects_raises_actionable_error(monkeypatch) ->
     monkeypatch.setattr(
         schema,
         "_postgres_table_exists",
-        lambda conn, table_name: table_name not in {"user_sessions", "user_login_events"},
+        lambda conn, table_name: table_name not in {
+            "email_verification_tokens",
+            "user_sessions",
+            "user_login_events",
+        },
     )
     monkeypatch.setattr(
         schema,
@@ -52,6 +56,7 @@ def test_postgres_schema_missing_objects_raises_actionable_error(monkeypatch) ->
         lambda conn, table_name, column_name: not (
             (table_name == "checkout_intents" and column_name == "released_at")
             or (table_name == "users" and column_name == "is_active")
+            or (table_name == "users" and column_name == "email_verification_status")
         ),
     )
 
@@ -62,8 +67,11 @@ def test_postgres_schema_missing_objects_raises_actionable_error(monkeypatch) ->
         message = str(exc)
         assert "alembic upgrade head" in message
         assert "alembic stamp 20260508_01" in message
-        assert "missing tables: user_login_events, user_sessions" in message
-        assert "missing columns: checkout_intents.released_at, users.is_active" in message
+        assert "missing tables: email_verification_tokens, user_login_events, user_sessions" in message
+        assert (
+            "missing columns: checkout_intents.released_at, users.email_verification_status, users.is_active"
+            in message
+        )
 
 
 def test_sqlite_init_delegates_to_legacy_bootstrap(monkeypatch) -> None:

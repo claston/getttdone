@@ -129,10 +129,18 @@ class AccessControlSessionCoreComponent:
     def get_registered_user_by_id_with_conn(self, *, conn, user_id: str):
         row = self._service._fetchone(
             conn,
-            "SELECT id, name, email, is_admin, is_active FROM users WHERE id = ?",
+            """
+            SELECT id, name, email, is_admin, is_active,
+                   email_verification_status, email_verified_at
+            FROM users WHERE id = ?
+            """,
             (user_id,),
         )
-        if row is None or not self._service._row_is_active(row):
+        if (
+            row is None
+            or not self._service._row_is_active(row)
+            or not self._service.email_verification.row_is_verified(row)
+        ):
             raise InvalidSessionTokenError
         return self._service._registered_user_factory(
             user_id=str(row["id"]),
@@ -141,6 +149,8 @@ class AccessControlSessionCoreComponent:
             token=self._service._encode_token(str(row["id"])),
             is_admin=self._service._row_is_admin(row),
             is_active=True,
+            email_verification_status=str(row["email_verification_status"] or "verified"),
+            email_verified_at=str(row["email_verified_at"] or "") or None,
         )
 
     def hash_refresh_token(self, refresh_token: str) -> str:

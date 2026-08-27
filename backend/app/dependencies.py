@@ -149,6 +149,12 @@ def get_access_control_service() -> AccessControlService:
             db_pool_min_size=int(os.getenv("DB_POOL_MIN_SIZE", "1")),
             db_pool_max_size=int(os.getenv("DB_POOL_MAX_SIZE", "3")),
             db_pool_timeout_seconds=float(os.getenv("DB_POOL_TIMEOUT_SECONDS", "5")),
+            email_verification_required=read_bool_env("AUTH_EMAIL_VERIFICATION_REQUIRED", default=False),
+            email_verification_ttl_seconds=int(os.getenv("AUTH_EMAIL_VERIFICATION_TTL_SECONDS", "3600")),
+            email_verification_resend_cooldown_seconds=int(
+                os.getenv("AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", "60")
+            ),
+            email_verification_daily_limit=int(os.getenv("AUTH_EMAIL_VERIFICATION_DAILY_LIMIT", "5")),
         )
     return _access_control_service
 

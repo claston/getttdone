@@ -240,7 +240,7 @@ class RegisterResponse(BaseModel):
     user_id: str
     name: str
     email: str
-    user_token: str
+    user_token: str | None
     quota_remaining: int
     quota_limit: int
     quota_mode: str = "conversion"
@@ -248,6 +248,27 @@ class RegisterResponse(BaseModel):
     plan_name: str | None = None
     max_upload_size_bytes: int
     max_pages_per_file: int
+    verification_required: bool = False
+    verification_status: str = "verified"
+    email_delivery_status: str | None = None
+
+
+class EmailVerificationConfirmRequest(BaseModel):
+    token: str
+
+
+class EmailVerificationConfirmResponse(BaseModel):
+    status: str = "verified"
+    verification_status: str = "verified"
+
+
+class EmailVerificationResendRequest(BaseModel):
+    email: str
+
+
+class EmailVerificationResendResponse(BaseModel):
+    status: str = "accepted"
+    message: str
 
 
 class LoginRequest(BaseModel):
@@ -457,6 +478,8 @@ class AdminUserItem(BaseModel):
     email: str
     is_admin: bool
     is_active: bool
+    email_verification_status: str = "verified"
+    email_verified_at: str | None = None
     created_at: str
     updated_at: str
     login_count: int = 0

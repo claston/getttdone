@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <link rel="icon" type="image/png" href="/assets/favicon.png" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OFX Simples | Confirmar e-mail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./auth.css?v=4" />
+  <link rel="stylesheet" href="./topbar-unified.css?v=1" />
+  <script src="/privacy-consent.js" defer></script>
+</head>
+<body>
+  <nav class="top-nav-shell glass-header" aria-label="Navegação principal">
+    <div class="top-nav-inner">
+      <a class="top-brand" href="./index.html">OFX Simples</a>
+      <div class="top-nav-links">
+        <a href="./index.html#como-funciona">Como funciona</a>
+        <a href="./index.html#faq">FAQ</a>
+        <a href="./planos.html">Planos</a>
+        <a href="./contato.html">Contato</a>
+      </div>
+      <div class="top-auth-actions">
+        <a class="top-auth-link" href="./login.html?next=%2Fofx-convert.html">Entrar</a>
+        <a class="top-auth-btn primary-gradient-cta" href="./ofx-convert.html">Converter agora</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="auth-page">
+    <section class="auth-shell">
+      <article class="card">
+        <div class="card-head">
+          <h2>Confirme seu e-mail</h2>
+          <p id="verification-description">Estamos verificando seu link.</p>
+        </div>
+
+        <p id="status-msg" class="status" aria-live="polite"></p>
+
+        <form id="resend-form" class="form hidden">
+          <label for="email">E-mail da conta</label>
+          <input id="email" type="email" autocomplete="email" required />
+          <button id="resend-btn" type="submit" class="btn btn-primary">Reenviar confirmação</button>
+        </form>
+
+        <p class="footnote"><a id="login-link" href="./login.html">Voltar para o login</a></p>
+      </article>
+    </section>
+  </main>
+
+  <script src="./verificar-email.js?v=1"></script>
+</body>
+</html>

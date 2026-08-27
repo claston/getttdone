@@ -77,6 +77,15 @@ def validate_production_security_baseline() -> None:
     if read_bool_env("UNLIMITED_ANON_QUOTA", default=False):
         issues.append("UNLIMITED_ANON_QUOTA must be false in production.")
 
+    if read_bool_env("AUTH_EMAIL_VERIFICATION_REQUIRED", default=False):
+        if not os.getenv("RESEND_API_KEY", "").strip():
+            issues.append("RESEND_API_KEY must be configured when email verification is enabled in production.")
+        if read_bool_env("CONTACT_RESEND_DRY_RUN", default=True):
+            issues.append("CONTACT_RESEND_DRY_RUN must be false when email verification is enabled in production.")
+        verification_url = os.getenv("AUTH_EMAIL_VERIFICATION_FRONTEND_URL", "").strip()
+        if not verification_url.lower().startswith("https://"):
+            issues.append("AUTH_EMAIL_VERIFICATION_FRONTEND_URL must use HTTPS in production.")
+
     if issues:
         details = "\n- ".join(issues)
         raise RuntimeError(f"Production security baseline validation failed:\n- {details}")

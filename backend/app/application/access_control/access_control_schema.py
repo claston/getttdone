@@ -45,6 +45,7 @@ class AccessControlSchemaComponent:
             "checkout_intent_events",
             "admin_user_role_events",
             "user_login_events",
+            "email_verification_tokens",
         )
         missing_tables = [table for table in required_tables if not self._postgres_table_exists(conn, table)]
 
@@ -58,6 +59,8 @@ class AccessControlSchemaComponent:
                 "privacy_accepted_at",
                 "product_updates_opt_in",
                 "product_updates_opted_in_at",
+                "email_verification_status",
+                "email_verified_at",
             ),
             "usage": ("window_started_at",),
             "user_conversions": (
@@ -101,6 +104,16 @@ class AccessControlSchemaComponent:
             "plan_versions": ("max_pages_per_file_ocr",),
             "checkout_intents": ("user_id", "payment_link", "payment_link_sent_at", "released_at"),
             "user_login_events": ("user_id", "auth_method", "created_at"),
+            "email_verification_tokens": (
+                "user_id",
+                "token_hash",
+                "expires_at",
+                "consumed_at",
+                "invalidated_at",
+                "delivery_status",
+                "sent_at",
+                "provider_message_id",
+            ),
         }
         missing_columns: list[str] = []
         for table_name, columns in required_columns.items():
