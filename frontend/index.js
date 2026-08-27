@@ -175,14 +175,31 @@ function bindDropzone(config) {
         return token || null;
     }
 
-    function getAnonymousFingerprint() {
-        const existing = String(localStorage.getItem(ANON_FINGERPRINT_KEY) || "").trim();
-        if (existing) {
-            return existing;
+    let anonymousSessionPromise = null;
+
+    async function ensureAnonymousSession() {
+        if (anonymousSessionPromise) {
+            return anonymousSessionPromise;
         }
-        const generated = `anon-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-        localStorage.setItem(ANON_FINGERPRINT_KEY, generated);
-        return generated;
+        anonymousSessionPromise = (async function () {
+            const legacyFingerprint = String(localStorage.getItem(ANON_FINGERPRINT_KEY) || "").trim();
+            const response = await fetch(`${getApiBase()}/auth/anonymous-session`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ legacy_fingerprint: legacyFingerprint || null })
+            });
+            if (!response.ok) {
+                throw new Error("Não foi possível iniciar a sessão anônima.");
+            }
+            localStorage.removeItem(ANON_FINGERPRINT_KEY);
+        })();
+        try {
+            await anonymousSessionPromise;
+        } catch (error) {
+            anonymousSessionPromise = null;
+            throw error;
+        }
     }
 
     function syncTopCtaBySession() {
@@ -952,14 +969,13 @@ ${meta.percent}
         if (metricMissingInBank) metricMissingInBank.textContent = String(Number(payload.sheet_unmatched_count || 0)).padStart(2, "0");
     }
 
-    function setDownloadActions(apiBase, analysisId, anonymousFingerprint) {
+    function setDownloadActions(apiBase, analysisId) {
         if (!analysisId) {
             return;
         }
 
-        const safeFingerprint = encodeURIComponent(String(anonymousFingerprint || "").trim());
-        const xlsxUrl = `${apiBase}/reconcile-report/${analysisId}?format=xlsx&anonymous_fingerprint=${safeFingerprint}`;
-        const csvUrl = `${apiBase}/reconcile-report/${analysisId}?format=csv&anonymous_fingerprint=${safeFingerprint}`;
+        const xlsxUrl = `${apiBase}/reconcile-report/${analysisId}?format=xlsx`;
+        const csvUrl = `${apiBase}/reconcile-report/${analysisId}?format=csv`;
 
         if (reconcileDownloadXlsx) {
             reconcileDownloadXlsx.dataset.url = xlsxUrl;
@@ -995,11 +1011,10 @@ ${meta.percent}
         }
 
         const apiBase = getApiBase();
-        const anonymousFingerprint = getAnonymousFingerprint();
+        await ensureAnonymousSession();
         const formData = new FormData();
         formData.append("bank_file", bankFileInput.files[0]);
         formData.append("sheet_file", sheetFileInput.files[0]);
-        formData.append("anonymous_fingerprint", anonymousFingerprint);
 
         const originalLabel = showReportBtn.innerHTML;
         isSubmitting = true;
@@ -1011,6 +1026,7 @@ ${meta.percent}
         try {
             const response = await fetch(`${apiBase}/reconcile`, {
                 method: "POST",
+                credentials: "include",
                 body: formData
             });
             const payload = await parseJsonSafe(response);
@@ -1036,7 +1052,7 @@ ${meta.percent}
             renderReconcileTotals(payload);
             renderProblemHighlights(payload);
             setReconcileRows(payload.reconciliation_rows || []);
-            setDownloadActions(apiBase, payload.analysis_id, anonymousFingerprint);
+            setDownloadActions(apiBase, payload.analysis_id);
             reconcileReportPreview.classList.remove("hidden");
             reportFocusMode = true;
             setTopNavHidden(isReportInViewport());
@@ -1158,4 +1174,7 @@ ${meta.percent}
         });
     }
 
+    void ensureAnonymousSession().catch(function () {
+        // A ação de envio tentará novamente e exibirá o erro ao usuário.
+    });
     syncTopCtaBySession();

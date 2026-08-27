@@ -236,6 +236,14 @@ class RegisterRequest(BaseModel):
     product_updates_opt_in: bool = False
 
 
+class AnonymousSessionRequest(BaseModel):
+    legacy_fingerprint: str | None = None
+
+
+class AnonymousSessionResponse(BaseModel):
+    status: str = "ready"
+
+
 class RegisterResponse(BaseModel):
     user_id: str
     name: str

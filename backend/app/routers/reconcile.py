@@ -17,7 +17,12 @@ from app.application.document_classifier import classify_document
 from app.application.models import NormalizedTransaction
 from app.application.normalization.transaction_normalizer import normalize_transactions
 from app.dependencies import get_access_control_service, get_report_service
-from app.routers.auth_session import SESSION_ACCESS_COOKIE_NAME, resolve_user_token_with_session
+from app.routers.auth_session import (
+    ANONYMOUS_IDENTITY_COOKIE_NAME,
+    SESSION_ACCESS_COOKIE_NAME,
+    resolve_anonymous_fingerprint_with_cookie,
+    resolve_user_token_with_session,
+)
 from app.schemas import ReconcileIntakeResponse
 
 router = APIRouter()
@@ -40,6 +45,7 @@ async def reconcile(
     user_token: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     report_service: ReportService = Depends(get_report_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ReconcileIntakeResponse:
@@ -179,17 +185,22 @@ async def reconcile(
         explicit_user_token=user_token,
         access_cookie_token=access_cookie_token,
     )
-    has_identity_hint = bool((anonymous_fingerprint or "").strip() or resolved_user_token)
+    resolved_anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+        access_control_service=access_control_service,
+        anonymous_cookie_token=anonymous_cookie_token,
+        legacy_fingerprint=anonymous_fingerprint,
+    )
+    has_identity_hint = bool(resolved_anonymous_fingerprint or resolved_user_token)
     if has_identity_hint:
         try:
             identity = access_control_service.resolve_identity(
-                anonymous_fingerprint=anonymous_fingerprint,
+                anonymous_fingerprint=resolved_anonymous_fingerprint,
                 user_token=resolved_user_token,
             )
         except InvalidUserTokenError:
             raise HTTPException(
                 status_code=400,
-                detail="Missing or invalid identity context. Send anonymous_fingerprint or a valid user_token.",
+                detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
             )
         report_service.set_reconcile_owner(
             analysis_id=analysis_id,

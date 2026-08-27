@@ -270,14 +270,31 @@
     }
   }
 
-  function getAnonymousFingerprint() {
-    const existing = String(localStorage.getItem(ANON_FINGERPRINT_KEY) || "").trim();
-    if (existing) {
-      return existing;
+  let anonymousSessionPromise = null;
+
+  async function ensureAnonymousSession() {
+    if (anonymousSessionPromise) {
+      return anonymousSessionPromise;
     }
-    const generated = `anon-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-    localStorage.setItem(ANON_FINGERPRINT_KEY, generated);
-    return generated;
+    anonymousSessionPromise = (async function () {
+      const legacyFingerprint = String(localStorage.getItem(ANON_FINGERPRINT_KEY) || "").trim();
+      const response = await fetch(`${apiBase}/auth/anonymous-session`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ legacy_fingerprint: legacyFingerprint || null }),
+      });
+      if (!response.ok) {
+        throw new Error("Não foi possível iniciar a sessão anônima.");
+      }
+      localStorage.removeItem(ANON_FINGERPRINT_KEY);
+    })();
+    try {
+      await anonymousSessionPromise;
+    } catch (error) {
+      anonymousSessionPromise = null;
+      throw error;
+    }
   }
 
   function getUserToken() {
@@ -486,9 +503,7 @@
   }
 
   function buildIdentityQueryParams() {
-    const params = new URLSearchParams();
-    params.set("anonymous_fingerprint", getAnonymousFingerprint());
-    return params;
+    return new URLSearchParams();
   }
 
   function formatCurrency(value) {
@@ -2289,8 +2304,11 @@
   }
 
   async function postConvertEdit(processingId, editPatch) {
-    const query = buildIdentityQueryParams().toString();
     const token = getUserToken();
+    if (!token) {
+      await ensureAnonymousSession();
+    }
+    const query = buildIdentityQueryParams().toString();
     const optionalHeaders = buildOptionalAuthHeaders(token);
     const response = await fetch(`${apiBase}/convert-edits/${processingId}?${query}`, {
       method: "POST",
@@ -2350,7 +2368,7 @@
           return;
         }
       } else {
-        formData.append("anonymous_fingerprint", getAnonymousFingerprint());
+        await ensureAnonymousSession();
       }
 
       const payload = await postConvert(formData, {
@@ -2505,8 +2523,11 @@
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    const query = buildIdentityQueryParams();
     const token = getUserToken();
+    if (!token) {
+      await ensureAnonymousSession();
+    }
+    const query = buildIdentityQueryParams();
     const headers = buildOptionalAuthHeaders(token);
 
     try {
@@ -2825,6 +2846,14 @@
     const didForceLogout = consumeLogoutQueryFlag();
     if (!(await enforceAuthenticatedAccess())) {
       return;
+    }
+    if (!getUserToken()) {
+      try {
+        await ensureAnonymousSession();
+      } catch (_error) {
+        setStatus("Não foi possível iniciar o modo anônimo. Tente novamente.", "error");
+        return;
+      }
     }
     syncHeroAuthLinks();
     void hydrateTopAccountEmail();

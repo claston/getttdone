@@ -38,7 +38,11 @@ from app.dependencies import (
     get_conversion_capacity_controller,
     get_convert_document_use_case,
 )
-from app.routers.auth_session import SESSION_ACCESS_COOKIE_NAME
+from app.routers.auth_session import (
+    ANONYMOUS_IDENTITY_COOKIE_NAME,
+    SESSION_ACCESS_COOKIE_NAME,
+    resolve_anonymous_fingerprint_with_cookie,
+)
 from app.schemas import ConvertResponse
 
 router = APIRouter()
@@ -196,10 +200,16 @@ async def convert(
     user_token: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     use_case: ConvertDocumentUseCase = Depends(get_convert_document_use_case),
     access_control_service: AccessControlService = Depends(get_access_control_service),
     capacity_controller: ConversionCapacityController = Depends(get_conversion_capacity_controller),
 ) -> ConvertResponse:
+    anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+        access_control_service=access_control_service,
+        anonymous_cookie_token=anonymous_cookie_token,
+        legacy_fingerprint=anonymous_fingerprint,
+    )
     capacity_lease = _acquire_conversion_capacity_or_raise(capacity_controller, source="/convert")
     identity = None
     staged_upload: _StagedUpload | None = None
@@ -241,10 +251,16 @@ async def conversion_upload_stream(
     authorization: str | None = Header(default=None),
     accept: str | None = Header(default=None),
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
+    anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     use_case: ConvertDocumentUseCase = Depends(get_convert_document_use_case),
     access_control_service: AccessControlService = Depends(get_access_control_service),
     capacity_controller: ConversionCapacityController = Depends(get_conversion_capacity_controller),
 ):
+    anonymous_fingerprint = resolve_anonymous_fingerprint_with_cookie(
+        access_control_service=access_control_service,
+        anonymous_cookie_token=anonymous_cookie_token,
+        legacy_fingerprint=anonymous_fingerprint,
+    )
     logger.info("conversion_upload_received filename=%s accept=%s", file.filename or "", accept or "")
     wants_sse = _is_sse_request(accept)
     capacity_lease = _acquire_conversion_capacity_or_raise(

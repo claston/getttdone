@@ -120,6 +120,61 @@ class AccessControlHelpersComponent:
         except (ValueError, UnicodeDecodeError):
             raise InvalidUserTokenError from None
 
+    def encode_anonymous_identity_token(self, *, subject_kind: str, subject_value: str) -> str:
+        normalized_kind = str(subject_kind or "").strip()
+        normalized_value = str(subject_value or "").strip()
+        if normalized_kind == "f":
+            is_supported = self._is_supported_anonymous_fingerprint(normalized_value)
+        elif normalized_kind == "i":
+            is_supported = self._is_supported_anonymous_identity_id(normalized_value)
+        else:
+            is_supported = False
+        if not is_supported:
+            raise InvalidUserTokenError
+        payload = base64.urlsafe_b64encode(normalized_value.encode("utf-8")).decode("ascii").rstrip("=")
+        signed_payload = f"anonymous:v2:{normalized_kind}:{payload}"
+        signature = hmac.new(
+            self._service.token_secret,
+            signed_payload.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()[:32]
+        return f"anon2.{normalized_kind}.{payload}.{signature}"
+
+    def decode_anonymous_identity_token(self, token: str) -> tuple[str, str]:
+        try:
+            version, subject_kind, payload, signature = str(token or "").strip().split(".", 3)
+            if version != "anon2" or subject_kind not in {"f", "i"}:
+                raise InvalidUserTokenError
+            signed_payload = f"anonymous:v2:{subject_kind}:{payload}"
+            expected = hmac.new(
+                self._service.token_secret,
+                signed_payload.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()[:32]
+            if not hmac.compare_digest(expected, signature):
+                raise InvalidUserTokenError
+            padded_payload = payload + "=" * (-len(payload) % 4)
+            subject_value = base64.urlsafe_b64decode(padded_payload.encode("ascii")).decode("utf-8")
+            if subject_kind == "f":
+                is_supported = self._is_supported_anonymous_fingerprint(subject_value)
+            else:
+                is_supported = self._is_supported_anonymous_identity_id(subject_value)
+            if not is_supported:
+                raise InvalidUserTokenError
+            return subject_kind, subject_value
+        except (ValueError, UnicodeDecodeError):
+            raise InvalidUserTokenError from None
+
+    @staticmethod
+    def _is_supported_anonymous_fingerprint(value: str) -> bool:
+        if not 2 <= len(value) <= 160:
+            return False
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]+", value))
+
+    @staticmethod
+    def _is_supported_anonymous_identity_id(value: str) -> bool:
+        return bool(re.fullmatch(r"anon_[0-9a-f]{12}", value))
+
     def append_checkout_intent_event_with_conn(
         self,
         conn,
