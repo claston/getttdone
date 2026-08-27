@@ -125,6 +125,8 @@ class AccessControlAdminComponent:
                         users.email,
                         users.is_admin,
                         users.is_active,
+                        users.email_verification_status,
+                        users.email_verified_at,
                         users.created_at,
                         users.updated_at
                     {base}
@@ -171,6 +173,10 @@ class AccessControlAdminComponent:
                             "email": str(row["email"] or ""),
                             "is_admin": self.row_is_admin(row),
                             "is_active": self.row_is_active(row),
+                            "email_verification_status": str(
+                                row["email_verification_status"] or "verified"
+                            ),
+                            "email_verified_at": str(row["email_verified_at"] or "") or None,
                             "created_at": str(row["created_at"] or ""),
                             "updated_at": str(row["updated_at"] or ""),
                             "login_count": int(login_stats.get("login_count") or 0),
@@ -204,7 +210,11 @@ class AccessControlAdminComponent:
             with self._service._connect() as conn:
                 row = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active, created_at, updated_at FROM users WHERE id = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active, email_verification_status,
+                           email_verified_at, created_at, updated_at
+                    FROM users WHERE id = ?
+                    """,
                     (normalized_user_id,),
                 )
                 if row is None:
@@ -261,6 +271,8 @@ class AccessControlAdminComponent:
                     "email": str(row["email"] or ""),
                     "is_admin": bool(is_admin),
                     "is_active": self.row_is_active(row),
+                    "email_verification_status": str(row["email_verification_status"] or "verified"),
+                    "email_verified_at": str(row["email_verified_at"] or "") or None,
                     "created_at": str(row["created_at"] or ""),
                     "updated_at": now_iso,
                 }
@@ -288,7 +300,11 @@ class AccessControlAdminComponent:
             with self._service._connect() as conn:
                 row = self._service._fetchone(
                     conn,
-                    "SELECT id, name, email, is_admin, is_active, created_at, updated_at FROM users WHERE id = ?",
+                    """
+                    SELECT id, name, email, is_admin, is_active, email_verification_status,
+                           email_verified_at, created_at, updated_at
+                    FROM users WHERE id = ?
+                    """,
                     (normalized_user_id,),
                 )
                 if row is None:
@@ -327,6 +343,8 @@ class AccessControlAdminComponent:
                     "email": str(row["email"] or ""),
                     "is_admin": self.row_is_admin(row),
                     "is_active": bool(is_active),
+                    "email_verification_status": str(row["email_verification_status"] or "verified"),
+                    "email_verified_at": str(row["email_verified_at"] or "") or None,
                     "created_at": str(row["created_at"] or ""),
                     "updated_at": now_iso,
                 }

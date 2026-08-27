@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app.application import AccessControlService, InvalidCredentialsError, InvalidUserTokenError
+from app.application import (
+    AccessControlService,
+    EmailVerificationRequiredError,
+    InvalidCredentialsError,
+    InvalidUserTokenError,
+)
 from app.dependencies import get_access_control_service
 from app.routers.access_control_common import (
     SESSION_ACCESS_COOKIE_NAME,
@@ -33,6 +38,8 @@ def admin_login(
 ) -> JSONResponse:
     try:
         user = access_control_service.authenticate_user(email=payload.email, password=payload.password)
+    except EmailVerificationRequiredError:
+        raise HTTPException(status_code=403, detail="Confirme seu e-mail antes de acessar o painel.")
     except InvalidCredentialsError:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 

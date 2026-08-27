@@ -7,12 +7,149 @@ from app.application.access_control import (
     AccessControlService,
 )
 from app.application.errors import (
+    EmailVerificationRateLimitedError,
+    EmailVerificationRequiredError,
     FileTooLargeError,
     GoogleOAuthAccountNotFoundError,
     GoogleOAuthExchangeError,
+    InvalidEmailVerificationTokenError,
     InvalidUserTokenError,
     QuotaExceededError,
 )
+
+
+def test_local_user_requires_email_verification_when_enabled(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+    )
+
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+
+    assert registered.email_verification_status == "pending"
+    assert registered.email_verified_at is None
+    try:
+        service.authenticate_user(email="erica@example.com", password="strong-pass")
+        assert False, "Expected EmailVerificationRequiredError"
+    except EmailVerificationRequiredError:
+        assert True
+    try:
+        service.resolve_identity(anonymous_fingerprint=None, user_token=registered.token)
+        assert False, "Expected InvalidUserTokenError"
+    except InvalidUserTokenError:
+        assert True
+
+
+def test_email_verification_token_is_hashed_single_use_and_verifies_user(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+    )
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+
+    issued = service.issue_email_verification_token(user_id=registered.user_id)
+
+    with service._connect() as conn:
+        row = service._fetchone(
+            conn,
+            "SELECT token_hash, delivery_status FROM email_verification_tokens WHERE id = ?",
+            (issued.token_id,),
+        )
+    assert row is not None
+    assert row["token_hash"] != issued.token
+    assert issued.token not in str(row["token_hash"])
+    assert row["delivery_status"] == "pending"
+
+    verified = service.confirm_email_verification_token(token=issued.token)
+    assert verified.email_verification_status == "verified"
+    assert verified.email_verified_at
+    assert service.authenticate_user(email="erica@example.com", password="strong-pass").user_id == registered.user_id
+
+    try:
+        service.confirm_email_verification_token(token=issued.token)
+        assert False, "Expected InvalidEmailVerificationTokenError"
+    except InvalidEmailVerificationTokenError:
+        assert True
+
+
+def test_email_verification_resend_enforces_cooldown(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+        email_verification_resend_cooldown_seconds=60,
+    )
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+    first = service.issue_email_verification_token(user_id=registered.user_id)
+    service.mark_email_verification_delivery(token_id=first.token_id, status="sent", provider_message_id="msg_1")
+
+    try:
+        service.issue_email_verification_token(user_id=registered.user_id, enforce_resend_limits=True)
+        assert False, "Expected EmailVerificationRateLimitedError"
+    except EmailVerificationRateLimitedError:
+        assert True
+
+
+def test_email_verification_resend_enforces_daily_limit_and_invalidates_previous_tokens(tmp_path) -> None:
+    now_box = [datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)]
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+        email_verification_resend_cooldown_seconds=60,
+        email_verification_daily_limit=5,
+        now_provider=lambda: now_box[0],
+    )
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+    tokens = []
+    for index in range(5):
+        issued = service.issue_email_verification_token(
+            user_id=registered.user_id,
+            enforce_resend_limits=index > 0,
+        )
+        tokens.append(issued)
+        service.mark_email_verification_delivery(
+            token_id=issued.token_id,
+            status="sent",
+            provider_message_id=f"msg_{index}",
+        )
+        now_box[0] = now_box[0] + timedelta(seconds=61)
+
+    try:
+        service.confirm_email_verification_token(token=tokens[0].token)
+        assert False, "Expected InvalidEmailVerificationTokenError for invalidated token"
+    except InvalidEmailVerificationTokenError:
+        assert True
+
+    try:
+        service.issue_email_verification_token(
+            user_id=registered.user_id,
+            enforce_resend_limits=True,
+        )
+        assert False, "Expected EmailVerificationRateLimitedError"
+    except EmailVerificationRateLimitedError:
+        assert True
+
+
+def test_google_login_verifies_pending_local_account(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+    )
+    pending = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+
+    google_user = service.register_or_authenticate_google_user(
+        provider_user_id="google-sub-verified",
+        email="erica@example.com",
+        name="Erica",
+    )
+
+    assert google_user.user_id == pending.user_id
+    assert google_user.email_verification_status == "verified"
+    assert google_user.email_verified_at
 
 
 def test_anonymous_quota_blocks_4th_attempt(tmp_path) -> None:
@@ -92,7 +229,7 @@ def test_inactive_user_cannot_authenticate_with_google_identity(tmp_path) -> Non
         assert True
 
 
-def test_sqlite_legacy_database_adds_active_status_and_keeps_existing_user_active(tmp_path) -> None:
+def test_sqlite_legacy_database_adds_user_statuses_and_keeps_existing_user_active(tmp_path) -> None:
     state_file = tmp_path / "legacy-state.json"
     db_file = state_file.with_suffix(".db")
     with sqlite3.connect(db_file) as conn:
@@ -143,12 +280,43 @@ def test_sqlite_legacy_database_adds_active_status_and_keeps_existing_user_activ
     with service._connect() as conn:
         row = service._fetchone(
             conn,
-            "SELECT is_active FROM users WHERE id = ?",
+            """
+            SELECT is_active, email_verification_status, email_verified_at
+            FROM users WHERE id = ?
+            """,
             ("usr_legacy123456",),
         )
 
     assert row is not None
     assert bool(row["is_active"]) is True
+    assert row["email_verification_status"] == "verified"
+    assert row["email_verified_at"] == "2026-08-01T00:00:00+00:00"
+    with service._connect() as conn:
+        token_table = service._fetchone(
+            conn,
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'email_verification_tokens'",
+        )
+    assert token_table is not None
+
+
+def test_expired_email_verification_token_is_rejected(tmp_path) -> None:
+    now_box = [datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)]
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+        email_verification_required=True,
+        email_verification_ttl_seconds=300,
+        now_provider=lambda: now_box[0],
+    )
+    registered = service.register_user(name="Erica", email="erica@example.com", password="strong-pass")
+    issued = service.issue_email_verification_token(user_id=registered.user_id)
+    now_box[0] = now_box[0] + timedelta(minutes=6)
+
+    try:
+        service.confirm_email_verification_token(token=issued.token)
+        assert False, "Expected InvalidEmailVerificationTokenError"
+    except InvalidEmailVerificationTokenError:
+        assert True
 
 
 def test_upload_larger_than_5mb_is_rejected(tmp_path) -> None:

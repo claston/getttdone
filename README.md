@@ -265,6 +265,24 @@ Para desenvolvimento local, continue usando:
 - docs habilitadas por padrao
 - CORS com `localhost:3000` e `127.0.0.1:3000`
 
+### Verificação de e-mail para contas locais
+
+A verificação permanece desligada por padrão para permitir rollout compatível. Antes de ativá-la em produção,
+configure o Resend e valide o envio para um endereço controlado:
+
+- `AUTH_EMAIL_VERIFICATION_REQUIRED=false` durante o primeiro deploy; altere para `true` após o smoke test
+- `AUTH_EMAIL_VERIFICATION_TTL_SECONDS=3600`
+- `AUTH_EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=60`
+- `AUTH_EMAIL_VERIFICATION_DAILY_LIMIT=5`
+- `AUTH_EMAIL_VERIFICATION_FRONTEND_URL=https://www.ofxsimples.com.br/verificar-email.html`
+- `RESEND_API_KEY` com uma chave válida
+- `CONTACT_FROM_EMAIL` usando um remetente verificado
+- `CONTACT_RESEND_DRY_RUN=false`
+
+Com a flag ativa, novos cadastros por senha ficam pendentes até a confirmação. Usuários existentes e identidades
+Google verificadas permanecem liberados. Para rollback imediato, defina `AUTH_EMAIL_VERIFICATION_REQUIRED=false`;
+a migração é aditiva e não precisa ser revertida.
+
 Secrets/vars recomendados no GitHub (environment `staging`):
 
 - `RENDER_API_KEY` (secret)

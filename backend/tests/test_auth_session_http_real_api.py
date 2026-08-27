@@ -44,11 +44,16 @@ def _find_free_port() -> int:
 
 
 @contextmanager
-def _run_http_server(*, admin_emails: set[str] | None = None):
+def _run_http_server(
+    *,
+    admin_emails: set[str] | None = None,
+    email_verification_required: bool = False,
+):
     access_control = _AccessControlServiceInMemory(
         state_file=Path("access-control-state.json"),
         token_secret="test-secret",
         admin_emails=admin_emails,
+        email_verification_required=email_verification_required,
     )
     app.dependency_overrides[get_access_control_service] = lambda: access_control
 
@@ -113,6 +118,50 @@ def test_http_auth_session_login_sets_cookies_and_me_works_without_bearer() -> N
     assert me.json()["email"] == "erica@example.com"
     assert len(events) == 2
     assert events[0]["auth_method"] == "local_password"
+
+
+def test_http_local_account_is_blocked_until_email_confirmation() -> None:
+    with _run_http_server(email_verification_required=True) as (base_url, access_control):
+        with httpx.Client(timeout=5.0) as client:
+            register = client.post(
+                f"{base_url}/auth/register",
+                json={
+                    "name": "Erica",
+                    "email": "verify-http@example.com",
+                    "password": "strong-pass",
+                    "accepted_terms": True,
+                },
+            )
+            assert register.status_code == 200
+            assert register.json()["verification_status"] == "pending"
+            assert register.json()["user_token"] is None
+
+            blocked = client.post(
+                f"{base_url}/auth/session/login",
+                json={"email": "verify-http@example.com", "password": "strong-pass"},
+            )
+            assert blocked.status_code == 403
+            assert blocked.json()["detail"]["code"] == "email_verification_required"
+
+            issued = access_control.issue_email_verification_token(user_id=register.json()["user_id"])
+            confirmed = client.post(
+                f"{base_url}/auth/email-verification/confirm",
+                json={"token": issued.token},
+            )
+            assert confirmed.status_code == 200
+
+            login = client.post(
+                f"{base_url}/auth/session/login",
+                json={"email": "verify-http@example.com", "password": "strong-pass"},
+            )
+            assert login.status_code == 200
+            assert client.cookies.get(SESSION_ACCESS_COOKIE_NAME)
+
+            reused = client.post(
+                f"{base_url}/auth/email-verification/confirm",
+                json={"token": issued.token},
+            )
+            assert reused.status_code == 400
 
 
 def test_http_auth_session_refresh_rotates_cookie_and_detects_reuse() -> None:

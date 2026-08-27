@@ -83,3 +83,25 @@ def test_validate_baseline_rejects_non_http_cors_origin_in_production(
         validate_production_security_baseline()
 
     assert "must use http:// or https://" in str(exc.value)
+
+
+def test_validate_baseline_requires_real_email_provider_when_verification_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://www.ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("AUTH_EMAIL_VERIFICATION_REQUIRED", "true")
+    monkeypatch.setenv("CONTACT_RESEND_DRY_RUN", "true")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("AUTH_EMAIL_VERIFICATION_FRONTEND_URL", "http://localhost/verificar-email.html")
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_security_baseline()
+
+    message = str(exc.value)
+    assert "RESEND_API_KEY must be configured" in message
+    assert "CONTACT_RESEND_DRY_RUN must be false" in message
+    assert "AUTH_EMAIL_VERIFICATION_FRONTEND_URL must use HTTPS" in message

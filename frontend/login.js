@@ -6,6 +6,7 @@
   const USER_TOKEN_KEY = "ofxsimples_user_token";
   const USER_TOKEN_COOKIE = "ofxsimples_user_token";
   const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
+  const PENDING_EMAIL_KEY = "ofxsimples_pending_verification_email";
 
   function isIpv4Host(hostname) {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
@@ -200,7 +201,14 @@
       body: JSON.stringify(payload),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || "Falha no login.");
+    if (!response.ok) {
+      const detail = data && data.detail;
+      const error = new Error(
+        detail && typeof detail === "object" ? detail.message : detail || "Falha no login.",
+      );
+      error.code = detail && typeof detail === "object" ? String(detail.code || "") : "";
+      throw error;
+    }
     return data;
   }
 
@@ -221,6 +229,11 @@
         setStatus("Login realizado com sucesso.", "success");
         window.location.href = getNextPath();
       } catch (error) {
+        if (error instanceof Error && error.code === "email_verification_required") {
+          sessionStorage.setItem(PENDING_EMAIL_KEY, email.value.trim());
+          window.location.href = "./verificar-email.html?pending=1";
+          return;
+        }
         setStatus(error instanceof Error ? error.message : "Falha no login.", "error");
       }
     });

@@ -32,6 +32,8 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
             privacy_accepted_at TEXT,
             product_updates_opt_in INTEGER NOT NULL DEFAULT 0,
             product_updates_opted_in_at TEXT,
+            email_verification_status TEXT NOT NULL DEFAULT 'verified',
+            email_verified_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -52,6 +54,23 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
             window_started_at TEXT,
             PRIMARY KEY (identity_type, identity_id)
         );
+
+        CREATE TABLE IF NOT EXISTS email_verification_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT,
+            invalidated_at TEXT,
+            delivery_status TEXT NOT NULL DEFAULT 'pending',
+            sent_at TEXT,
+            provider_message_id TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_created_at
+        ON email_verification_tokens(user_id, created_at DESC);
 
         CREATE TABLE IF NOT EXISTS user_conversions (
             analysis_id TEXT PRIMARY KEY,
@@ -249,6 +268,18 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
         conn.execute("ALTER TABLE users ADD COLUMN product_updates_opt_in INTEGER NOT NULL DEFAULT 0")
     if "product_updates_opted_in_at" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN product_updates_opted_in_at TEXT")
+    if "email_verification_status" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verification_status TEXT NOT NULL DEFAULT 'verified'")
+    if "email_verified_at" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
+    conn.execute(
+        """
+        UPDATE users
+        SET email_verified_at = created_at
+        WHERE email_verification_status = 'verified'
+          AND (email_verified_at IS NULL OR email_verified_at = '')
+        """
+    )
     conn.execute(
         """
         UPDATE users

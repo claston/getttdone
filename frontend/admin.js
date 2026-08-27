@@ -267,6 +267,7 @@
     items.forEach(function (user) {
       const isAdmin = !!user.is_admin;
       const isActive = user.is_active !== false;
+      const isEmailVerified = String(user.email_verification_status || "verified") === "verified";
       const card = document.createElement("article");
       card.className = "order-card";
       card.innerHTML = [
@@ -278,6 +279,7 @@
         `  <div class="pill-row">`,
         `    <span class="badge ${isActive ? "released" : "awaiting"}">${isActive ? "Ativo" : "Inativo"}</span>`,
         `    <span class="badge ${isAdmin ? "released" : ""}">${isAdmin ? "Admin" : "Usuário"}</span>`,
+        `    <span class="badge ${isEmailVerified ? "released" : "awaiting"}">${isEmailVerified ? "E-mail confirmado" : "E-mail pendente"}</span>`,
         `  </div>`,
         `</div>`,
         `<div class="grid">`,
