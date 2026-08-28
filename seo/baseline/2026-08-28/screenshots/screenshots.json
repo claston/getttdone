@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-08-28T10:15:54+00:00",
+  "base_url": "https://www.ofxsimples.com.br",
+  "captures": [
+    {
+      "path": "/converter-pdf-para-ofx.html",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-ofx.html",
+      "title": "Converter PDF para OFX | OFX Simples",
+      "file": "converter-pdf-para-ofx.html--desktop.jpg"
+    },
+    {
+      "path": "/convert.html",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/convert.html",
+      "title": "OFX Simples | Converter PDF Online",
+      "file": "convert.html--desktop.jpg"
+    },
+    {
+      "path": "/",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/",
+      "title": "OFX Simples | Converter PDF para OFX e Excel",
+      "file": "home--desktop.jpg"
+    },
+    {
+      "path": "/ofx-convert.html",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/ofx-convert.html",
+      "title": "OFX Simples | Área de Conversão",
+      "file": "ofx-convert.html--desktop.jpg"
+    },
+    {
+      "path": "/planos.html",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/planos.html",
+      "title": "OFX Simples | Planos",
+      "file": "planos.html--desktop.jpg"
+    },
+    {
+      "path": "/converter-pdf-para-excel.html",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-excel.html",
+      "title": "Converter PDF para Excel | OFX Simples",
+      "file": "converter-pdf-para-excel.html--desktop.jpg"
+    },
+    {
+      "path": "/converter-pdf-para-ofx.html",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-ofx.html",
+      "title": "Converter PDF para OFX | OFX Simples",
+      "file": "converter-pdf-para-ofx.html--mobile.jpg"
+    },
+    {
+      "path": "/convert.html",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/convert.html",
+      "title": "OFX Simples | Converter PDF Online",
+      "file": "convert.html--mobile.jpg"
+    },
+    {
+      "path": "/",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/",
+      "title": "OFX Simples | Converter PDF para OFX e Excel",
+      "file": "home--mobile.jpg"
+    },
+    {
+      "path": "/ofx-convert.html",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/ofx-convert.html",
+      "title": "OFX Simples | Área de Conversão",
+      "file": "ofx-convert.html--mobile.jpg"
+    },
+    {
+      "path": "/planos.html",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/planos.html",
+      "title": "OFX Simples | Planos",
+      "file": "planos.html--mobile.jpg"
+    },
+    {
+      "path": "/converter-pdf-para-excel.html",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-excel.html",
+      "title": "Converter PDF para Excel | OFX Simples",
+      "file": "converter-pdf-para-excel.html--mobile.jpg"
+    }
+  ]
+}
