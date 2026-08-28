@@ -184,6 +184,45 @@ Gate de saída:
 - contrato executável no CI;
 - nenhuma URL protegida depende de memória manual para validação.
 
+#### Registro de execução da Fase 0 — 28/08/2026
+
+Status: implementação técnica concluída; gate operacional aguardando o export privado do Google Search Console.
+
+Implementado:
+
+- manifesto versionado das 13 URLs em `seo/protected-routes.json`;
+- parser semântico de HTML em `backend/seo_contract.py`;
+- testes de contrato em `backend/tests/test_protected_seo_contract.py`;
+- testes da captura HTTP em `backend/tests/test_seo_baseline_capture.py`;
+- captura reproduzível em `scripts/capture_seo_baseline.py`;
+- captura visual em `scripts/capture_seo_screenshots.py`;
+- baseline técnico de produção em `seo/baseline/2026-08-28/technical-production.json`;
+- screenshots desktop e mobile de seis jornadas críticas em `seo/baseline/2026-08-28/screenshots/`;
+- runbook de nova captura, segurança dos dados, flags previstas e rollback em `doc/runbook-seo-baseline.md`.
+
+Evidência observada:
+
+- 13 de 13 URLs responderam `200`;
+- nenhuma URL apresentou redirect;
+- nenhum title, description, canonical, robots, H1, JSON-LD ou marcador principal divergiu do manifesto;
+- 12 de 12 screenshots foram capturados com status `200`.
+
+Validação local da entrega:
+
+- Ruff: aprovado;
+- lint de UTF-8/mojibake do frontend: aprovado;
+- lint de navegação do frontend: aprovado;
+- smoke Playwright de navegação: aprovado;
+- pytest completo: `828 passed, 1 skipped, 2 xfailed`.
+
+Pendente por depender de acesso do proprietário:
+
+- exportar do Search Console os últimos 28 dias completos e uma janela de 90 dias com a mesma data final;
+- arquivar páginas, consultas, dispositivos, países, datas e filtros em armazenamento privado;
+- produzir a comparação de marca e não marca e registrar o resumo sem consultas sensíveis.
+
+Não considerar o gate operacional encerrado até que essas três pendências do Search Console estejam registradas. Os arquivos brutos não devem ser adicionados ao repositório público sem aprovação explícita.
+
 ### Fase 1 — Fundação do Next.js e deploy escuro (semana 2)
 
 Entregas:

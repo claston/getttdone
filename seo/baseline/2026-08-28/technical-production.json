@@ -1,0 +1,476 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-08-28T10:07:09+00:00",
+  "base_url": "https://www.ofxsimples.com.br",
+  "manifest": "seo/protected-routes.json",
+  "indexed_routes_reported_at": "2026-08-27",
+  "contract_ok": true,
+  "routes": [
+    {
+      "path": "/blog/o-que-e-ofx-e-como-usar/",
+      "request_url": "https://www.ofxsimples.com.br/blog/o-que-e-ofx-e-como-usar/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/blog/o-que-e-ofx-e-como-usar/",
+      "redirect_chain": [],
+      "response_ms": 433.27,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 8966,
+      "html_sha256": "98ab26cd65b5f490d13c45f21180e386b1d53295453e4c2ee0624cc5a005c6be",
+      "title": "O que é OFX, para que serve e como usar no dia a dia financeiro",
+      "description": "Entenda o que é OFX, por que esse formato existe e como usar para importar extratos com menos erro e menos retrabalho.",
+      "canonical": "https://www.ofxsimples.com.br/blog/o-que-e-ofx-e-como-usar/",
+      "robots": null,
+      "h1": [
+        "O que é OFX, para que serve e como usar no dia a dia financeiro"
+      ],
+      "json_ld_types": [
+        "BlogPosting",
+        "Organization",
+        "ImageObject"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/blog/o-que-e-ofx-e-como-usar/",
+        "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+        "/blog/7-erros-comuns-na-conciliacao-bancaria/",
+        "/blog/checklist-fechamento-financeiro-com-ofx/",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/converter-pdf-para-ofx.html",
+      "request_url": "https://www.ofxsimples.com.br/converter-pdf-para-ofx.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-ofx.html",
+      "redirect_chain": [],
+      "response_ms": 470.81,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 7326,
+      "html_sha256": "8a4dd5a52efdce412c13e53e630485e3ec78e9658c4f179786b2960a366fa7ad",
+      "title": "Converter PDF para OFX | OFX Simples",
+      "description": "Converta extrato em PDF para OFX em poucos passos: upload, revisão das transações e download do arquivo OFX pronto para importar.",
+      "canonical": "https://www.ofxsimples.com.br/converter-pdf-para-ofx.html",
+      "robots": null,
+      "h1": [
+        "Converter PDF para OFX"
+      ],
+      "json_ld_types": [
+        "WebPage"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fconverter-pdf-para-ofx.html",
+        "/convert.html",
+        "/signup.html?next=%2Fclient-area.html&reason=quota",
+        "/login.html?next=%2Fclient-area.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/contato.html",
+      "request_url": "https://www.ofxsimples.com.br/contato.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/contato.html",
+      "redirect_chain": [],
+      "response_ms": 316.84,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 3718,
+      "html_sha256": "f266fc504306a401da761bc50cc98833f853c9ee116dfa8b4e4f0fdb327728b2",
+      "title": "OFX Simples | Contato",
+      "description": "Fale com o suporte do OFX Simples quando tiver dúvidas ou dificuldade para converter seu arquivo.",
+      "canonical": "https://www.ofxsimples.com.br/contato.html",
+      "robots": null,
+      "h1": [
+        "Teve dúvida ou erro na conversão? Fale com a gente"
+      ],
+      "json_ld_types": [],
+      "internal_links": [
+        "/index.html",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/blog/",
+      "request_url": "https://www.ofxsimples.com.br/blog/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/blog/",
+      "redirect_chain": [],
+      "response_ms": 209.14,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 4683,
+      "html_sha256": "a7a36c6460851863a8a751c759c152b2e3e5315b473c7bbc139be77db119f060",
+      "title": "Blog OFX Simples | Guias práticos de OFX e conciliação",
+      "description": "Artigos práticos sobre OFX, importação, conciliação bancária e fechamento financeiro para equipes contábeis e financeiras.",
+      "canonical": "https://www.ofxsimples.com.br/blog/",
+      "robots": null,
+      "h1": [
+        "Conteúdo prático para quem precisa fechar o financeiro com mais confiança"
+      ],
+      "json_ld_types": [
+        "Blog"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/blog/o-que-e-ofx-e-como-usar/",
+        "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+        "/blog/7-erros-comuns-na-conciliacao-bancaria/",
+        "/blog/checklist-fechamento-financeiro-com-ofx/",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/convert.html",
+      "request_url": "https://www.ofxsimples.com.br/convert.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/convert.html",
+      "redirect_chain": [],
+      "response_ms": 332.1,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 4020,
+      "html_sha256": "d68a214e6d3b632589abf1a3be8eb794012866135867cd1b79cd4da13ba51de7",
+      "title": "OFX Simples | Converter PDF Online",
+      "description": "Escolha o tipo de conversão de extrato em PDF: PDF para OFX ou PDF para Excel. Fluxo simples, revisão e download em poucos cliques.",
+      "canonical": "https://www.ofxsimples.com.br/convert.html",
+      "robots": null,
+      "h1": [
+        "Escolha o formato de saída"
+      ],
+      "json_ld_types": [
+        "WebPage"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fconvert.html",
+        "/convert.html",
+        "/converter-pdf-para-ofx.html",
+        "/converter-pdf-para-excel.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/",
+      "request_url": "https://www.ofxsimples.com.br/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/",
+      "redirect_chain": [],
+      "response_ms": 1780.81,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 11152,
+      "html_sha256": "6a0a0a5f5585689c633c5c0a7c27b8a9dc4ee79c4a60f909d16a76d2d7d5d1a5",
+      "title": "OFX Simples | Converter PDF para OFX e Excel",
+      "description": "Converta extratos bancários em PDF para OFX ou Excel. Faça upload, revise os lançamentos e baixe no formato ideal para seu fluxo.",
+      "canonical": "https://www.ofxsimples.com.br/",
+      "robots": null,
+      "h1": [
+        "Converta seu Extrato Bancário em PDF para OFX ou Excel de forma Online e Fácil."
+      ],
+      "json_ld_types": [
+        "WebSite"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fconvert.html",
+        "/convert.html",
+        "/converter-pdf-para-ofx.html",
+        "/converter-pdf-para-excel.html",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/ofx-convert.html",
+      "request_url": "https://www.ofxsimples.com.br/ofx-convert.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/ofx-convert.html",
+      "redirect_chain": [],
+      "response_ms": 322.72,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 6238,
+      "html_sha256": "ae87c1e1fbd91822844ffd609fbc90d66a0332c3d9aa8f59cf63ed7790dd99a7",
+      "title": "OFX Simples | Área de Conversão",
+      "description": null,
+      "canonical": null,
+      "robots": "noindex,follow",
+      "h1": [
+        "Área de Conversão"
+      ],
+      "json_ld_types": [],
+      "internal_links": [
+        "/index.html",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/client-area.html",
+        "/signup.html?next=%2Fclient-area.html&reason=quota",
+        "/login.html?next=%2Fclient-area.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/blog/checklist-fechamento-financeiro-com-ofx/",
+      "request_url": "https://www.ofxsimples.com.br/blog/checklist-fechamento-financeiro-com-ofx/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/blog/checklist-fechamento-financeiro-com-ofx/",
+      "redirect_chain": [],
+      "response_ms": 205.57,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 7753,
+      "html_sha256": "3ee5fdbd098ea9ac5c567068dcd42a49bf86c4951af0ee84136f4b8611f6ac4f",
+      "title": "Checklist de fechamento financeiro com OFX",
+      "description": "Checklist semanal e mensal de fechamento financeiro com OFX para reduzir pendências, divergências e retrabalho.",
+      "canonical": "https://www.ofxsimples.com.br/blog/checklist-fechamento-financeiro-com-ofx/",
+      "robots": null,
+      "h1": [
+        "Checklist de fechamento financeiro com OFX"
+      ],
+      "json_ld_types": [
+        "BlogPosting",
+        "Organization",
+        "ImageObject"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/blog/checklist-fechamento-financeiro-com-ofx/",
+        "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+        "/blog/7-erros-comuns-na-conciliacao-bancaria/",
+        "/blog/o-que-e-ofx-e-como-usar/",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/planos.html",
+      "request_url": "https://www.ofxsimples.com.br/planos.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/planos.html",
+      "redirect_chain": [],
+      "response_ms": 314.76,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 5253,
+      "html_sha256": "02509d5f8dc3698a6c3bae5005d9e33ff12598fcc74135a2a2a8a53842f3d6e6",
+      "title": "OFX Simples | Planos",
+      "description": "Escolha o plano ideal do OFX Simples para converter PDF em OFX: 150, 300 ou 500 páginas por mês.",
+      "canonical": "https://www.ofxsimples.com.br/planos.html",
+      "robots": null,
+      "h1": [
+        "Planos simples para converter seus PDFs em OFX"
+      ],
+      "json_ld_types": [],
+      "internal_links": [
+        "/index.html",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/checkout.html",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/converter-pdf-para-excel.html",
+      "request_url": "https://www.ofxsimples.com.br/converter-pdf-para-excel.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/converter-pdf-para-excel.html",
+      "redirect_chain": [],
+      "response_ms": 312.57,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 7380,
+      "html_sha256": "cbb215d4b69369431cf94d8fb2c478b99702a49809106d758b771be6d2d03bd6",
+      "title": "Converter PDF para Excel | OFX Simples",
+      "description": "Converta extrato em PDF para Excel com revisão antes do download. Ideal para conferência e análise em planilha.",
+      "canonical": "https://www.ofxsimples.com.br/converter-pdf-para-excel.html",
+      "robots": null,
+      "h1": [
+        "Converter PDF para Excel"
+      ],
+      "json_ld_types": [
+        "WebPage"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fconverter-pdf-para-excel.html",
+        "/convert.html",
+        "/signup.html?next=%2Fclient-area.html&reason=quota",
+        "/login.html?next=%2Fclient-area.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/politica-de-privacidade.html",
+      "request_url": "https://www.ofxsimples.com.br/politica-de-privacidade.html",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/politica-de-privacidade.html",
+      "redirect_chain": [],
+      "response_ms": 193.14,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 6176,
+      "html_sha256": "cab1c2a74580c3de6dde5b8f644c2a27687648219063969fbf8c216643f6c240",
+      "title": "Política de Privacidade | OFX Simples",
+      "description": "Leia a Política de Privacidade do OFX Simples: quais dados tratamos, por quanto tempo e como protegemos suas informações.",
+      "canonical": "https://www.ofxsimples.com.br/politica-de-privacidade.html",
+      "robots": null,
+      "h1": [
+        "Política de Privacidade"
+      ],
+      "json_ld_types": [],
+      "internal_links": [
+        "/index.html",
+        "/contato.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/blog/7-erros-comuns-na-conciliacao-bancaria/",
+      "request_url": "https://www.ofxsimples.com.br/blog/7-erros-comuns-na-conciliacao-bancaria/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/blog/7-erros-comuns-na-conciliacao-bancaria/",
+      "redirect_chain": [],
+      "response_ms": 196.09,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 7862,
+      "html_sha256": "3d5d0d40eb25d99d94f70f81e8c5c8e84241d51e775806bd835e79c76bb5314e",
+      "title": "7 erros comuns na conciliação bancária (e como corrigir)",
+      "description": "Veja os erros mais comuns na conciliação bancária e um plano simples de correção para reduzir divergências e retrabalho.",
+      "canonical": "https://www.ofxsimples.com.br/blog/7-erros-comuns-na-conciliacao-bancaria/",
+      "robots": null,
+      "h1": [
+        "7 erros comuns na conciliação bancária (e como corrigir)"
+      ],
+      "json_ld_types": [
+        "BlogPosting",
+        "Organization",
+        "ImageObject"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/blog/checklist-fechamento-financeiro-com-ofx/",
+        "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+        "/blog/o-que-e-ofx-e-como-usar/",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    },
+    {
+      "path": "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+      "request_url": "https://www.ofxsimples.com.br/blog/como-validar-ofx-antes-de-importar-no-erp/",
+      "status": 200,
+      "final_url": "https://www.ofxsimples.com.br/blog/como-validar-ofx-antes-de-importar-no-erp/",
+      "redirect_chain": [],
+      "response_ms": 192.38,
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": null,
+      "x_robots_tag": null,
+      "html_bytes": 8322,
+      "html_sha256": "fcb1ba0d7f015ff50b3339c88646dc68db3b145838cf391929e78c88e7f74481",
+      "title": "Como validar um OFX antes de importar no ERP",
+      "description": "Checklist técnico para validar OFX antes da importação: saldo, período, sinal de valor, duplicidade e consistência de lançamentos.",
+      "canonical": "https://www.ofxsimples.com.br/blog/como-validar-ofx-antes-de-importar-no-erp/",
+      "robots": null,
+      "h1": [
+        "Como validar um OFX antes de importar no ERP"
+      ],
+      "json_ld_types": [
+        "BlogPosting",
+        "Organization",
+        "ImageObject"
+      ],
+      "internal_links": [
+        "/index.html",
+        "/blog/",
+        "/planos.html",
+        "/contato.html",
+        "/login.html?next=%2Fofx-convert.html",
+        "/ofx-convert.html",
+        "/blog/como-validar-ofx-antes-de-importar-no-erp/",
+        "/blog/7-erros-comuns-na-conciliacao-bancaria/",
+        "/blog/o-que-e-ofx-e-como-usar/",
+        "/blog/checklist-fechamento-financeiro-com-ofx/",
+        "/politica-de-privacidade.html",
+        "/termos-de-uso.html"
+      ],
+      "contract_ok": true,
+      "contract_drift": []
+    }
+  ]
+}
