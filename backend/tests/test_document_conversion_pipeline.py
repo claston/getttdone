@@ -44,8 +44,9 @@ class FakeAccessControlService:
         assert identity is self.identity
         assert required_units == 1
 
-    def consume_quota(self, identity, *, consumed_units: int = 1) -> int:
+    def consume_quota(self, identity, *, consumed_units: int = 1, idempotency_key: str | None = None) -> int:
         assert identity is self.identity
+        assert idempotency_key is not None
         self.consumed_units.append(consumed_units)
         return 9
 

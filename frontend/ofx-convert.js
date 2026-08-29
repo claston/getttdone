@@ -10,6 +10,11 @@
   const statusMsg = document.getElementById("status-msg");
   const processingProgress = document.getElementById("processing-progress");
   const processingProgressFill = document.getElementById("processing-progress-fill");
+  const batchResultsPanel = document.createElement("div");
+  batchResultsPanel.id = "batch-results-panel";
+  batchResultsPanel.className = "batch-results-panel hidden";
+  batchResultsPanel.setAttribute("aria-live", "polite");
+  processingProgress.insertAdjacentElement("afterend", batchResultsPanel);
   const topAuthLoginLink = document.getElementById("top-auth-login-link");
   const topAuthPrimaryLink = document.getElementById("top-auth-primary-link");
   const menuToggle = document.getElementById("menu-toggle");
@@ -83,6 +88,12 @@
     quotaLockVariant: null,
     capacityRetryUntil: 0,
     capacityRetryTimer: null,
+    conversionRuntime: {
+      directBatchEnabled: false,
+      batchMaxFiles: 1,
+    },
+    batchResults: [],
+    activeBatchFilename: null,
   };
   let bankCodeOptions = [{ code: "", label: "Selecione o banco", name: "", short_name: "", aliases: [] }];
 
@@ -174,6 +185,36 @@
   const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
   const QUOTA_LOCK_VARIANT_ANONYMOUS = "anonymous-free-limit";
   const QUOTA_LOCK_VARIANT_REGISTERED = "registered-free-limit";
+
+  async function syncConversionRuntime() {
+    try {
+      const response = await fetch(`${apiBase}/api/conversion-runtime`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => ({}));
+      const directBatchEnabled = Boolean(payload.direct_batch_enabled);
+      const configuredLimit = Number(payload.batch_max_files || 1);
+      state.conversionRuntime = {
+        directBatchEnabled,
+        batchMaxFiles: directBatchEnabled && Number.isFinite(configuredLimit)
+          ? Math.max(1, Math.min(12, Math.trunc(configuredLimit)))
+          : 1,
+      };
+      input.multiple = directBatchEnabled;
+      const emptyHint = dropzoneEmpty ? dropzoneEmpty.querySelector("strong") : null;
+      if (emptyHint) {
+        emptyHint.textContent = directBatchEnabled
+          ? `Arraste até ${state.conversionRuntime.batchMaxFiles} PDFs aqui`
+          : "Arraste o arquivo aqui";
+      }
+      setSelectedFileLabel();
+    } catch (_error) {
+      state.conversionRuntime = { directBatchEnabled: false, batchMaxFiles: 1 };
+      input.multiple = false;
+    }
+  }
 
   function isIpv4Host(hostname) {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
@@ -970,6 +1011,15 @@
 
   function getCurrentFileMeta() {
     const file = input.files && input.files[0];
+    if (state.activeBatchFilename) {
+      const activeFile = input.files
+        ? Array.from(input.files).find((item) => item.name === state.activeBatchFilename)
+        : null;
+      return {
+        file_name: state.activeBatchFilename,
+        file_size: activeFile ? Number(activeFile.size || 0) : null,
+      };
+    }
     if (file) {
       return {
         file_name: file.name || null,
@@ -1075,11 +1125,15 @@
   }
 
   function setSelectedFileLabel() {
-    const file = input.files && input.files[0];
+    const files = input.files ? Array.from(input.files) : [];
+    const file = files[0];
+    const filesCount = files.length;
     const restoredMeta = state.restoredFileMeta;
     const hasRestoredMeta = !file && restoredMeta && restoredMeta.name;
-    selectedFile.textContent = file
-      ? `${file.name} (${formatFileSize(file.size)})`
+    selectedFile.textContent = filesCount > 1
+      ? `${filesCount} arquivos selecionados`
+      : file
+        ? `${file.name} (${formatFileSize(file.size)})`
       : hasRestoredMeta
         ? `${restoredMeta.name} (${formatFileSize(restoredMeta.size)})`
         : "Nenhum arquivo selecionado";
@@ -1090,7 +1144,9 @@
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
         dropzoneLoaded.classList.remove("hidden");
-        dropzoneFileMeta.textContent = `${file.name} - ${formatFileSize(file.size)}`;
+        dropzoneFileMeta.textContent = filesCount > 1
+          ? `${filesCount} PDFs prontos para conversão`
+          : `${file.name} - ${formatFileSize(file.size)}`;
       } else if (hasRestoredMeta) {
         dropzone.classList.add("is-filled");
         dropzoneEmpty.classList.add("hidden");
@@ -1131,6 +1187,10 @@
     state.bankBranchOverride = "";
     state.accountNumberOverride = "";
     state.bankCodeOverride = "";
+    state.batchResults = [];
+    state.activeBatchFilename = null;
+    batchResultsPanel.innerHTML = "";
+    batchResultsPanel.classList.add("hidden");
     markChangedRow(null);
     if (addRowBtn) addRowBtn.disabled = true;
     setDownloadButtonsDisabled(true);
@@ -2329,7 +2389,42 @@
     return payload;
   }
 
-  async function runConvert() {
+  function applyConversionPayload(payload) {
+    state.quotaMode = normalizeQuotaMode(payload.quota_mode);
+    const analysis = payload.analysis;
+    state.analysisId = analysis.analysis_id;
+    state.processingId = payload.processing_id || analysis.analysis_id;
+    state.analysisSnapshot = { ...analysis };
+    state.openingBalanceManuallyEdited = false;
+    state.openingBalanceOverride = Number(analysis.opening_balance != null ? analysis.opening_balance : 0);
+    state.closingBalanceManuallyEdited = false;
+    state.closingBalanceOverride = Number(
+      analysis.closing_balance != null ? analysis.closing_balance : analysis.net_total || 0
+    );
+    state.bankBranchOverride = normalizeBankBranchDisplay(analysis.bank_branch || "");
+    state.accountNumberOverride = normalizeAccountDisplay(analysis.account_number || "");
+    state.bankCodeOverride = resolveInitialBankCode(analysis, state.bankCodeOverride);
+    markChangedRow(null);
+    if (addRowBtn) addRowBtn.disabled = false;
+
+    setPreviewRows(analysis.preview_transactions || []);
+    setOriginalRows(analysis.preview_transactions || []);
+    renderKpis(analysis);
+    renderRows();
+
+    if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
+    if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
+    state.quotaRemaining = Number(payload.quota_remaining);
+    state.quotaLimit = Number(payload.quota_limit);
+    updateQuotaRemainingValue(state.quotaRemaining, state.quotaLimit);
+
+    reviewSection.classList.remove("hidden");
+    downloadSection.classList.remove("hidden");
+    setDownloadButtonsDisabled(!state.analysisId);
+    persistCurrentViewState();
+  }
+
+  async function runLegacyConvert(fileOverride) {
     if (isQuotaLocked()) {
       setStatus("Limite semanal atingido. Crie sua conta para continuar.", "error");
       return;
@@ -2338,7 +2433,7 @@
       syncConvertButton();
       return;
     }
-    const file = input.files && input.files[0];
+    const file = fileOverride || (input.files && input.files[0]);
     if (!file) {
       setStatus("Selecione um arquivo antes de converter.", "error");
       return;
@@ -2391,41 +2486,7 @@
           setStatusSmooth(message, null);
         },
       });
-      state.quotaMode = normalizeQuotaMode(payload.quota_mode);
-
-      const analysis = payload.analysis;
-      state.analysisId = analysis.analysis_id;
-      state.processingId = payload.processing_id || analysis.analysis_id;
-      state.analysisSnapshot = { ...analysis };
-      state.openingBalanceManuallyEdited = false;
-      state.openingBalanceOverride = Number(analysis.opening_balance != null ? analysis.opening_balance : 0);
-      state.closingBalanceManuallyEdited = false;
-      state.closingBalanceOverride = Number(
-        analysis.closing_balance != null ? analysis.closing_balance : analysis.net_total || 0
-      );
-      state.bankBranchOverride = normalizeBankBranchDisplay(analysis.bank_branch || "");
-      state.accountNumberOverride = normalizeAccountDisplay(analysis.account_number || "");
-      state.bankCodeOverride = resolveInitialBankCode(analysis, state.bankCodeOverride);
-      markChangedRow(null);
-      if (addRowBtn) addRowBtn.disabled = false;
-
-      setPreviewRows(analysis.preview_transactions || []);
-      setOriginalRows(analysis.preview_transactions || []);
-      renderKpis(analysis);
-      renderRows();
-
-      if (analysisIdNode) analysisIdNode.textContent = analysis.analysis_id || "-";
-      if (processingIdNode) processingIdNode.textContent = state.processingId || "-";
-      state.quotaRemaining = Number(payload.quota_remaining);
-      state.quotaLimit = Number(payload.quota_limit);
-      updateQuotaRemainingValue(state.quotaRemaining, state.quotaLimit);
-
-      reviewSection.classList.remove("hidden");
-      downloadSection.classList.remove("hidden");
-      const canDownload = Boolean(state.analysisId);
-      setDownloadButtonsDisabled(!canDownload);
-
-      persistCurrentViewState();
+      applyConversionPayload(payload);
 
       setStatus("Conversão concluída. Revise os dados e baixe o relatório.", "success");
       setProgressTarget(100);
@@ -2489,6 +2550,238 @@
     } finally {
       setLoading(false);
     }
+  }
+
+  async function sha256File(file) {
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error("Seu navegador não oferece o recurso seguro necessário para o upload direto.");
+    }
+    const digest = await window.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest))
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  async function fetchBatchJson(path, options) {
+    const response = await fetch(`${apiBase}${path}`, {
+      credentials: "include",
+      ...options,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw buildApiError(response.status, payload.detail || "Falha no processamento do lote.");
+    }
+    return payload;
+  }
+
+  async function uploadPreparedBatchFiles(files, uploads) {
+    if (!Array.isArray(uploads) || uploads.length !== files.length) {
+      throw new Error("O servidor não retornou instruções de upload para todos os arquivos.");
+    }
+    let nextIndex = 0;
+    let uploadedCount = 0;
+    const concurrency = Math.min(3, files.length);
+    const workers = Array.from({ length: concurrency }, async function () {
+      while (nextIndex < files.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const file = files[index];
+        const upload = uploads[index];
+        const body = new FormData();
+        Object.entries(upload.fields || {}).forEach(function ([key, value]) {
+          body.append(key, String(value));
+        });
+        body.append("file", file);
+        const response = await fetch(upload.url, { method: "POST", body });
+        if (!response.ok) {
+          throw new Error(`Não foi possível enviar ${file.name} para o armazenamento seguro.`);
+        }
+        uploadedCount += 1;
+        setProgressTarget(Math.max(20, Math.round((uploadedCount / files.length) * 45)));
+        setStatus(`Enviando arquivos diretamente: ${uploadedCount} de ${files.length}...`, null);
+      }
+    });
+    await Promise.all(workers);
+  }
+
+  function renderBatchResults(jobs) {
+    state.batchResults = Array.isArray(jobs) ? jobs : [];
+    batchResultsPanel.innerHTML = "";
+    if (!state.batchResults.length) {
+      batchResultsPanel.classList.add("hidden");
+      return;
+    }
+    const title = document.createElement("strong");
+    title.textContent = "Resultados do lote";
+    batchResultsPanel.appendChild(title);
+    const list = document.createElement("div");
+    list.className = "batch-results-list";
+    state.batchResults.forEach(function (job) {
+      const row = document.createElement("div");
+      row.className = `batch-result-row batch-result-${String(job.status || "unknown")}`;
+      const label = document.createElement("span");
+      const statusLabel = job.status === "completed"
+        ? "Concluído"
+        : job.status === "failed" || job.status === "expired"
+          ? "Falhou"
+          : "Processando";
+      label.textContent = `${job.filename}: ${statusLabel}`;
+      row.appendChild(label);
+      if (job.result && job.result.analysis) {
+        const reviewButton = document.createElement("button");
+        reviewButton.type = "button";
+        reviewButton.className = "btn btn-inline btn-ghost";
+        reviewButton.textContent = "Revisar";
+        reviewButton.addEventListener("click", function () {
+          state.activeBatchFilename = job.filename;
+          applyConversionPayload(job.result);
+          setStatus(`Exibindo o resultado de ${job.filename}.`, "success");
+          reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+        row.appendChild(reviewButton);
+      }
+      list.appendChild(row);
+    });
+    batchResultsPanel.appendChild(list);
+    batchResultsPanel.classList.remove("hidden");
+  }
+
+  async function pollConversionBatch(batchId, authHeaders) {
+    const deadline = Date.now() + 15 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const payload = await fetchBatchJson(`/api/conversion-batches/${encodeURIComponent(batchId)}`, {
+        method: "GET",
+        headers: authHeaders,
+      });
+      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+      const terminalCount = jobs.filter(function (job) {
+        return ["completed", "failed", "expired"].includes(String(job.status || ""));
+      }).length;
+      setStatus(`Processando lote: ${terminalCount} de ${jobs.length} concluídos...`, null);
+      if (jobs.length) {
+        setProgressTarget(50 + Math.round((terminalCount / jobs.length) * 50));
+      }
+      if (["completed", "completed_with_errors", "failed"].includes(String(payload.status || ""))) {
+        return payload;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    }
+    throw new Error("O lote continua em processamento. Tente consultar novamente em alguns minutos.");
+  }
+
+  async function runAsyncBatchConvert(files) {
+    setLoading(true);
+    setStatus(`Preparando ${files.length} arquivo(s)...`, null);
+    showProgressBar();
+    setProgressTarget(3);
+    startProgressDrift();
+    try {
+      const token = getUserToken();
+      if (token) {
+        const sessionState = await getSessionValidationState();
+        if (sessionState === "invalid") {
+          clearUserToken();
+          syncHeroAuthLinks();
+          setStatus("Sua sessão expirou. Faça login novamente para continuar.", "error");
+          return;
+        }
+      } else {
+        await ensureAnonymousSession();
+      }
+      const authHeaders = buildOptionalAuthHeaders(token) || {};
+      const fileContracts = [];
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setStatus(`Validando arquivos: ${index + 1} de ${files.length}...`, null);
+        fileContracts.push({
+          filename: file.name,
+          content_type: file.type || "application/pdf",
+          size_bytes: file.size,
+          sha256_hex: await sha256File(file),
+        });
+      }
+      const idempotencyKey = window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `batch-${Array.from(window.crypto.getRandomValues(new Uint32Array(4)))
+          .map((value) => value.toString(16).padStart(8, "0"))
+          .join("")}`;
+      const created = await fetchBatchJson("/api/conversion-batches", {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({ files: fileContracts }),
+      });
+      await uploadPreparedBatchFiles(files, created.uploads || []);
+      setStatus("Uploads concluídos. Enviando o lote para processamento...", null);
+      setProgressTarget(48);
+      await fetchBatchJson(`/api/conversion-batches/${encodeURIComponent(created.batch_id)}/submit`, {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const completed = await pollConversionBatch(created.batch_id, authHeaders);
+      renderBatchResults(completed.jobs);
+      const successfulJobs = completed.jobs.filter(function (job) {
+        return job.status === "completed" && job.result && job.result.analysis;
+      });
+      if (!successfulJobs.length) {
+        const firstFailure = completed.jobs.find((job) => job.error_message);
+        throw new Error(firstFailure ? firstFailure.error_message : "Nenhum arquivo do lote pôde ser convertido.");
+      }
+      state.activeBatchFilename = successfulJobs[0].filename;
+      applyConversionPayload(successfulJobs[0].result);
+      setProgressTarget(100);
+      const failedCount = completed.jobs.length - successfulJobs.length;
+      setStatus(
+        failedCount > 0
+          ? `${successfulJobs.length} arquivo(s) concluído(s) e ${failedCount} com falha. Escolha um resultado para revisar.`
+          : `${successfulJobs.length} arquivo(s) convertido(s). Escolha o resultado que deseja revisar.`,
+        failedCount > 0 ? null : "success",
+      );
+      reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      if (Number(error && error.status) === 409 && String(error && error.code) === "async_conversion_disabled") {
+        state.conversionRuntime = { directBatchEnabled: false, batchMaxFiles: 1 };
+        input.multiple = false;
+        setLoading(false);
+        setStatus("O processamento assíncrono foi desativado. Usando o modo de compatibilidade.", null);
+        return runLegacyConvert(files[0]);
+      }
+      setStatus(error instanceof Error ? error.message : "Falha ao processar o lote.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runConvert() {
+    if (isQuotaLocked()) {
+      setStatus("Limite semanal atingido. Crie sua conta para continuar.", "error");
+      return;
+    }
+    if (getCapacityRetrySeconds() > 0) {
+      syncConvertButton();
+      return;
+    }
+    const files = input.files ? Array.from(input.files) : [];
+    if (!files.length) {
+      setStatus("Selecione pelo menos um arquivo antes de converter.", "error");
+      return;
+    }
+    if (files.some((file) => !isPdfFile(file))) {
+      setStatus("Este conversor aceita somente arquivos PDF.", "error");
+      return;
+    }
+    if (files.length > state.conversionRuntime.batchMaxFiles) {
+      setStatus(`Selecione no máximo ${state.conversionRuntime.batchMaxFiles} arquivos por lote.`, "error");
+      return;
+    }
+    if (state.conversionRuntime.directBatchEnabled) {
+      return runAsyncBatchConvert(files);
+    }
+    return runLegacyConvert(files[0]);
   }
 
   function resolveDownloadConfig(fileFormat) {
@@ -2620,12 +2913,16 @@
       if (!event.dataTransfer || !event.dataTransfer.files || event.dataTransfer.files.length === 0) {
         return;
       }
-      if (!isPdfFile(event.dataTransfer.files[0])) {
+      const droppedFiles = Array.from(event.dataTransfer.files);
+      if (droppedFiles.some((file) => !isPdfFile(file))) {
         setStatus("Este conversor aceita somente arquivos PDF.", "error");
         return;
       }
+      const acceptedFiles = state.conversionRuntime.directBatchEnabled
+        ? droppedFiles.slice(0, state.conversionRuntime.batchMaxFiles)
+        : droppedFiles.slice(0, 1);
       const transfer = new DataTransfer();
-      transfer.items.add(event.dataTransfer.files[0]);
+      acceptedFiles.forEach((file) => transfer.items.add(file));
       input.files = transfer.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
@@ -2639,11 +2936,17 @@
   }
 
   input.addEventListener("change", () => {
-    const file = input.files && input.files[0];
-    if (file && !isPdfFile(file)) {
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.some((file) => !isPdfFile(file))) {
       input.value = "";
       setSelectedFileLabel();
       setStatus("Este conversor aceita somente arquivos PDF.", "error");
+      return;
+    }
+    if (files.length > state.conversionRuntime.batchMaxFiles) {
+      input.value = "";
+      setSelectedFileLabel();
+      setStatus(`Selecione no máximo ${state.conversionRuntime.batchMaxFiles} arquivos por lote.`, "error");
       return;
     }
     setSelectedFileLabel();
@@ -2855,6 +3158,7 @@
         return;
       }
     }
+    await syncConversionRuntime();
     syncHeroAuthLinks();
     void hydrateTopAccountEmail();
     void loadBankOptions();

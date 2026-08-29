@@ -55,6 +55,15 @@ def apply_sqlite_legacy_schema_bootstrap(service: AccessControlService, conn) ->
             PRIMARY KEY (identity_type, identity_id)
         );
 
+        CREATE TABLE IF NOT EXISTS conversion_quota_consumptions (
+            identity_type TEXT NOT NULL,
+            identity_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            consumed_units INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (identity_type, identity_id, idempotency_key)
+        );
+
         CREATE TABLE IF NOT EXISTS email_verification_tokens (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,

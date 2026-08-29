@@ -14,12 +14,25 @@ class QuotaValidatorService:
     def ensure_conversion_quota_available(self, *, identity) -> None:
         self.access_control_service.ensure_quota_available(identity, required_units=1)
 
-    def consume_quota_for_conversion(self, *, identity, analysis) -> QuotaConsumptionResult:
+    def consume_quota_for_conversion(
+        self,
+        *,
+        identity,
+        analysis,
+        idempotency_key: str | None = None,
+    ) -> QuotaConsumptionResult:
         consumed_units = self.resolve_consumed_units(identity=identity, analysis=analysis)
-        quota_remaining = self.access_control_service.consume_quota(
-            identity,
-            consumed_units=consumed_units,
-        )
+        if idempotency_key:
+            quota_remaining = self.access_control_service.consume_quota(
+                identity,
+                consumed_units=consumed_units,
+                idempotency_key=idempotency_key,
+            )
+        else:
+            quota_remaining = self.access_control_service.consume_quota(
+                identity,
+                consumed_units=consumed_units,
+            )
         return QuotaConsumptionResult(
             consumed_units=consumed_units,
             quota_remaining=quota_remaining,

@@ -91,6 +91,7 @@ from app.application.reconcile_problem_engine import generate_reconciliation_pro
 from app.application.reconcile_status_engine import classify_reconciliation_rows
 from app.application.report_service import ReportService
 from app.application.repositories import AnalysisRepository, ReportRepository
+from app.application.s3_analysis_storage import S3AnalysisStorage
 from app.application.storage_service import TempAnalysisStorage
 
 __all__ = [
@@ -168,6 +169,7 @@ __all__ = [
     "ReportService",
     "ReportRepository",
     "S3ConversionDocumentStore",
+    "S3AnalysisStorage",
     "StatementParser",
     "UploadedDocument",
     "UploadedDocumentStage",

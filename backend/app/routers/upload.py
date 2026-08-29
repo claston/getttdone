@@ -261,7 +261,7 @@ async def conversion_upload_stream(
         anonymous_cookie_token=anonymous_cookie_token,
         legacy_fingerprint=anonymous_fingerprint,
     )
-    logger.info("conversion_upload_received filename=%s accept=%s", file.filename or "", accept or "")
+    logger.info("conversion_upload_received accept=%s", accept or "")
     wants_sse = _is_sse_request(accept)
     capacity_lease = _acquire_conversion_capacity_or_raise(
         capacity_controller,
@@ -270,8 +270,7 @@ async def conversion_upload_stream(
     try:
         staged_upload = await _stage_upload_to_temp_file(file)
         logger.info(
-            "conversion_upload_read_complete filename=%s size_bytes=%s",
-            file.filename or "",
+            "conversion_upload_read_complete size_bytes=%s",
             staged_upload.size_bytes,
         )
     except Exception as exc:
@@ -303,8 +302,7 @@ async def conversion_upload_stream(
         _cleanup_staged_upload(staged_upload)
         return _build_failed_upload_streaming_response(exc)
     logger.info(
-        "conversion_pdf_inspection_complete filename=%s scanned_likely=%s estimated_pages_count=%s",
-        file.filename or "",
+        "conversion_pdf_inspection_complete scanned_likely=%s estimated_pages_count=%s",
         scanned_likely,
         total_pages,
     )

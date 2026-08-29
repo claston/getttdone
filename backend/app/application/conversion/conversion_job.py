@@ -25,6 +25,7 @@ class ConversionJob:
     document: ConversionDocumentReference
     identity: IdentityContext
     preflight_result: DocumentPreflightResult
+    batch_id: str | None = None
 
     @classmethod
     def create(
@@ -36,6 +37,7 @@ class ConversionJob:
         estimated_pages_count: int | None = None,
         job_id: str | None = None,
         idempotency_key: str | None = None,
+        batch_id: str | None = None,
     ) -> ConversionJob:
         resolved_job_id = (job_id or "").strip() or f"job_{uuid4().hex[:24]}"
         return cls(
@@ -47,6 +49,7 @@ class ConversionJob:
                 scanned_likely=None if scanned_likely is None else bool(scanned_likely),
                 estimated_pages_count=estimated_pages_count,
             ),
+            batch_id=(batch_id or "").strip() or None,
         )
 
 
