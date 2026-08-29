@@ -1,0 +1,66 @@
+layout_profile:
+  schema_version: 2
+  profile_name: cresol_extrato_consolidado_conta_corrente_valor_cd_v1
+  bank: Cresol
+  layout_family: cresol_conta_corrente_consolidado_cd
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "CRESOL"
+      - "Extrato Consolidado de Conta Corrente"
+      - "Data Movimento"
+      - "Lançamento"
+      - "Identificação"
+      - "Valor"
+    optional_keywords:
+      - "Período"
+      - "Data/Hora"
+      - "Conta Integração"
+      - "Segundo Titular"
+      - "Saldo Anterior"
+    negative_keywords:
+      - "Extrato de RDC"
+      - "Saldo do dia"
+    min_score_hint: 0.72
+  table_detection:
+    header_keywords:
+      - "Data Movimento"
+      - "Lançamento"
+      - "Identificação"
+      - "Valor"
+    expected_column_order:
+      - date
+      - description
+      - identification
+      - amount
+    column_aliases:
+      date:
+        - "Data Movimento"
+      description:
+        - "Lançamento"
+      document:
+        - "Identificação"
+      amount:
+        - "Valor"
+  parsing:
+    date_formats:
+      - "dd/MM/yyyy"
+    amount_locale: pt-BR
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "{amount} D"
+    positive_patterns:
+      - "{amount} C"
+    ignore_rows:
+      - "Saldo Anterior"
+    opening_balance_rows:
+      - "Saldo Anterior"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - document

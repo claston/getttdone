@@ -223,3 +223,69 @@ Quando houver mudanca em logica de conciliacao, repetir validacoes exigidas em `
 - Primeiro corte funcional: 7 a 9 dias uteis
 - Corte com hardening e observabilidade: 9 a 11 dias uteis
 
+---
+
+## Implementação intermediária — layouts Cresol (2026-08-28)
+
+Status: implementada na branch `feat/cresol-statement-layouts`.
+
+Esta fatia adiciona reconhecimento e extração específicos para cinco variações de extrato Cresol identificadas visualmente. Ela não altera API, banco de dados, infraestrutura, frontend ou rotas protegidas por SEO.
+
+### Layouts registrados
+
+| Documento visual | Perfil executável |
+| --- | --- |
+| Conta corrente legada, tabela `Data / Histórico / Valor`, sinal `+` ou `-` após o valor | `cresol_extrato_conta_corrente_legado_sinal_sufixo_v1` |
+| Extrato consolidado de conta corrente, com valor terminado em `C` ou `D` | `cresol_extrato_consolidado_conta_corrente_valor_cd_v1` |
+| Lista agrupada por dia, cards `Saldo em Conta / Limite / Saldo` e transferências | `cresol_extrato_lancamentos_saldo_dia_pix_credito_v1` |
+| Extrato de RDC (renda fixa), tabela `Data / Histórico / Valor` | `cresol_extrato_rdc_renda_fixa_v1` |
+| Conta corrente moderna, cards de resumo e lançamentos PIX agrupados por dia | `cresol_extrato_conta_corrente_moderno_pix_v1` |
+
+### Comportamento implementado
+
+- classifica os documentos pelos textos estruturais e pela marca `CRESOL`;
+- interpreta valores brasileiros com sinal explícito `+`, `-`, `C` (crédito) e `D` (débito), com ou sem espaço antes de `C/D`;
+- ignora `Saldo Anterior`, `Saldo Inicial`, `Saldo Final`, `Saldo em Conta` e `Saldo do dia` como transações;
+- propaga a data do agrupamento para as movimentações sem data própria nos layouts modernos;
+- preserva descrição, página e linha de origem na transação canônica;
+- entrega os valores normalizados ao gerador OFX pelo pipeline já existente.
+
+Arquivos centrais:
+
+- `backend/app/application/parsers/pdf/layout_specific/cresol.py`;
+- `backend/app/application/layout_profiles/profiles/cresol_*.yaml`;
+- `backend/tests/test_pdf_parser_cresol_examples.py`.
+
+### Limite consciente desta fase
+
+Os testes foram construídos com texto sintético e dados fictícios derivados apenas da estrutura visível nas imagens. Portanto, a implementação é segura para integração intermediária, mas ainda precisa ser calibrada com ao menos um PDF real e anonimizado de cada família para confirmar:
+
+- ordem e quebra das linhas produzidas pela camada textual do PDF;
+- descrições que ocupam mais de uma linha;
+- repetição de cabeçalhos e grupos entre páginas;
+- comportamento de arquivos escaneados/OCR;
+- eventuais variações de sinal que não estejam visíveis nas imagens.
+
+Até essa calibração, o parser exige sinal monetário explícito nas linhas Cresol. Isso reduz o risco de transformar cards, totais ou saldos em movimentações.
+
+### Evidência de validação
+
+```powershell
+backend\venv\Scripts\python.exe -m pytest backend/tests/test_pdf_layout_parser_registry.py backend/tests/test_pdf_parser_cresol_examples.py backend/tests/test_pdf_layout_inference.py -q
+backend\venv\Scripts\python.exe -m pytest backend/tests -q
+backend\venv\Scripts\python.exe -m ruff check backend/app backend/tests
+```
+
+Resultados finais:
+
+- testes focados: `48 passed`;
+- suíte completa: `833 passed, 1 skipped, 2 xfailed`;
+- lint: `All checks passed!`.
+
+### Próxima fatia recomendada
+
+1. Obter um PDF real anonimizado de cada um dos cinco layouts.
+2. Comparar manualmente a quantidade, a data e o sinal das transações esperadas com a saída do parser.
+3. Adicionar fixtures sanitizadas para paginação, descrições quebradas e pelo menos um débito e um crédito por layout.
+4. Validar um `POST /analyze` real e o download do OFX antes de considerar cada perfil endurecido para produção.
+

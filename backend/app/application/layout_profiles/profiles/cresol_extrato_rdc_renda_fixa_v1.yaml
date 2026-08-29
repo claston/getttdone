@@ -1,0 +1,57 @@
+layout_profile:
+  schema_version: 2
+  profile_name: cresol_extrato_rdc_renda_fixa_v1
+  bank: Cresol
+  layout_family: cresol_rdc_renda_fixa_tabular
+  statement_type: investimento_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "CRESOL"
+      - "Extrato de RDC"
+      - "Renda Fixa"
+      - "Consulta Posição Consolidada"
+      - "Previsão de Correção Provisória"
+      - "A Creditar"
+    optional_keywords:
+      - "Instituição Financeira"
+      - "Data Histórico Valor"
+      - "+ R$"
+    negative_keywords:
+      - "Extrato Consolidado de Conta Corrente"
+      - "Saldo do dia"
+    min_score_hint: 0.72
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Histórico"
+      - "Valor"
+    expected_column_order:
+      - date
+      - description
+      - amount
+    column_aliases:
+      date:
+        - "Data"
+      description:
+        - "Histórico"
+      amount:
+        - "Valor"
+  parsing:
+    date_formats:
+      - "dd/MM/yyyy"
+    amount_locale: pt-BR
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "- R$ {amount}"
+    positive_patterns:
+      - "+ R$ {amount}"
+    ignore_rows: []
+    opening_balance_rows: []
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []
