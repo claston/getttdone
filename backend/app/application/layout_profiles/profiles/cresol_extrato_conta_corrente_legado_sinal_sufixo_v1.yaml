@@ -1,0 +1,62 @@
+layout_profile:
+  schema_version: 2
+  profile_name: cresol_extrato_conta_corrente_legado_sinal_sufixo_v1
+  bank: Cresol
+  layout_family: cresol_conta_corrente_tabular_legacy
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "CRESOL"
+      - "Extrato de Conta Corrente"
+      - "Instituição Financeira"
+      - "Período de"
+      - "Data Histórico Valor"
+    optional_keywords:
+      - "Agência"
+      - "Conta"
+      - "Saldo Anterior"
+      - "R$"
+    negative_keywords:
+      - "Extrato Consolidado"
+      - "Extrato de RDC"
+      - "Saldo do dia"
+    min_score_hint: 0.72
+  table_detection:
+    header_keywords:
+      - "Data"
+      - "Histórico"
+      - "Valor"
+    expected_column_order:
+      - date
+      - description
+      - amount
+    column_aliases:
+      date:
+        - "Data"
+      description:
+        - "Histórico"
+      amount:
+        - "Valor"
+  parsing:
+    date_formats:
+      - "dd/MM/yyyy"
+    amount_locale: pt-BR
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "R$ {amount} -"
+      - "{amount} -"
+    positive_patterns:
+      - "R$ {amount} +"
+      - "{amount} +"
+    ignore_rows:
+      - "Saldo Anterior"
+    opening_balance_rows:
+      - "Saldo Anterior"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields: []

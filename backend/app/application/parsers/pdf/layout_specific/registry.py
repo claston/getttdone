@@ -10,6 +10,7 @@ from app.application.parsers.pdf.layout_specific.contract import (
     LayoutSpecificParseResult,
     PdfLayoutParser,
 )
+from app.application.parsers.pdf.layout_specific.cresol import CresolLayoutParser
 from app.application.parsers.pdf.layout_specific.inter import InterLayoutParser
 from app.application.parsers.pdf.layout_specific.itau import ItauLayoutParser
 from app.application.parsers.pdf.layout_specific.pagbank import PagBankLayoutParser
@@ -57,6 +58,7 @@ DEFAULT_PDF_LAYOUT_PARSER_REGISTRY = PdfLayoutParserRegistry(
         BanrisulLayoutParser(),
         ItauLayoutParser(),
         InterLayoutParser(),
+        CresolLayoutParser(),
         SicoobLayoutParser(),
         PagBankLayoutParser(),
     )

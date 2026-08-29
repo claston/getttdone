@@ -1,0 +1,66 @@
+layout_profile:
+  schema_version: 2
+  profile_name: cresol_extrato_conta_corrente_moderno_pix_v1
+  bank: Cresol
+  layout_family: cresol_conta_corrente_moderno_pix
+  statement_type: conta_corrente_extrato
+  confidence: high
+  classifier:
+    required_keywords:
+      - "CRESOL"
+      - "Extrato de conta corrente"
+      - "Conta Corrente"
+      - "Limite de crédito"
+      - "Disponível"
+      - "Lançamentos"
+      - "Saldo do dia"
+    optional_keywords:
+      - "PIX CRÉDITO DE"
+      - "PIX DÉBITO PARA"
+      - "+ R$"
+      - "- R$"
+      - "Consulta posição consolidada"
+    negative_keywords:
+      - "Extrato Consolidado de Conta Corrente"
+      - "Extrato de RDC"
+      - "Saldo em Conta"
+    min_score_hint: 0.75
+  table_detection:
+    header_keywords: []
+    expected_column_order:
+      - date_group
+      - description
+      - amount
+    column_aliases:
+      date:
+        - "Data do grupo"
+      description:
+        - "Lançamentos"
+      amount:
+        - "+ R$"
+        - "- R$"
+  parsing:
+    date_formats:
+      - "dd/MM/yyyy"
+    amount_locale: pt-BR
+    decimal_separator: ","
+    thousands_separator: "."
+    negative_patterns:
+      - "- R$ {amount}"
+    positive_patterns:
+      - "+ R$ {amount}"
+    ignore_rows:
+      - "Saldo do dia"
+      - "Conta Corrente"
+      - "Limite de crédito"
+      - "Disponível"
+    opening_balance_rows:
+      - "Saldo do dia"
+      - "Conta Corrente"
+    opening_balance_policy: skip
+    required_transaction_fields:
+      - date
+      - description
+      - amount
+    optional_transaction_fields:
+      - complement

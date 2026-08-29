@@ -157,6 +157,7 @@ meta_model:
       - "Se os cards de saldo do topo são sempre emitidos com o extrato."
 
 layout_profile:
+  schema_version: 2
   profile_name: cresol_extrato_lancamentos_saldo_dia_pix_credito_v1
   bank: Cresol
   layout_family: cresol_extrato_lancamentos_grouped_list
@@ -165,18 +166,19 @@ layout_profile:
   classifier:
     required_keywords:
       - "CRESOL"
-      - "Agência"
-      - "Conta"
       - "Saldo em Conta"
-      - "Limite de Crédito"
-      - "Saldo Disponível"
+      - "Limite de"
       - "Lançamentos"
       - "Saldo do Dia"
     optional_keywords:
+      - "Agência"
+      - "Conta"
+      - "Saldo Disponível"
       - "PIX CREDITO DE"
+      - "DIFERENTE-D"
+      - "Transferência"
       - "+ R$"
       - "- R$"
-      - "01 de Junho de 2024 a 01 de Julho de 2024"
     negative_keywords:
       - "Santander"
       - "Banco do Brasil"
@@ -201,7 +203,7 @@ layout_profile:
       - "contasimples"
       - "Fatura"
       - "Comprovante"
-    min_score_hint: 0.85
+    min_score_hint: 0.75
   table_detection:
     header_keywords: []
     expected_column_order:
@@ -234,7 +236,8 @@ layout_profile:
       - "Lançamentos"
     row_separator_hint: "date group line shows dd/MM/yyyy and 'Saldo do Dia'; transaction rows below have icon, date, description and amount"
   parsing:
-    date_format: "dd/MM/yyyy"
+    date_formats:
+      - "dd/MM/yyyy"
     amount_locale: "pt-BR"
     decimal_separator: ","
     thousands_separator: "."
@@ -266,6 +269,7 @@ layout_profile:
       - "Saldo Disponível"
       - "SALDO ANTERIOR"
       - "SALDO INICIAL"
+    opening_balance_policy: skip
     required_transaction_fields:
       - date
       - description
