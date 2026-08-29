@@ -177,4 +177,5 @@ Problemas técnicos objetivos, como `noindex`, canonical incorreto, soft 404 ou 
 - Seis jornadas críticas possuem screenshots desktop e mobile.
 - `/ofx-convert.html` continua com `noindex,follow`, sem canonical, fora do sitemap e bloqueada no `robots.txt`.
 - O conflito de indexação de `/ofx-convert.html` continua deliberadamente fora desta fase.
-- O export privado do Search Console ainda é necessário para fechar o gate operacional da Fase 0.
+- Os exports privados de 28 dias e 90 dias foram verificados com data final comum em 26/08/2026.
+- O gate operacional da Fase 0 foi encerrado em 28/08/2026.

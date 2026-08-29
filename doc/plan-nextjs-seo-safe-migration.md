@@ -186,7 +186,7 @@ Gate de saída:
 
 #### Registro de execução da Fase 0 — 28/08/2026
 
-Status: implementação técnica concluída; gate operacional aguardando o export privado do Google Search Console.
+Status: concluída.
 
 Implementado:
 
@@ -215,13 +215,16 @@ Validação local da entrega:
 - smoke Playwright de navegação: aprovado;
 - pytest completo: `828 passed, 1 skipped, 2 xfailed`.
 
-Pendente por depender de acesso do proprietário:
+Baseline privado do Search Console verificado:
 
-- exportar do Search Console os últimos 28 dias completos e uma janela de 90 dias com a mesma data final;
-- arquivar páginas, consultas, dispositivos, países, datas e filtros em armazenamento privado;
-- produzir a comparação de marca e não marca e registrar o resumo sem consultas sensíveis.
+- janela de 28 dias: 30/07/2026 a 26/08/2026;
+- janela de 90 dias: 29/05/2026 a 26/08/2026;
+- export complementar de três meses: 27/05/2026 a 26/08/2026;
+- dimensões de páginas, consultas, dispositivos, países, datas, aspecto da pesquisa e filtros presentes;
+- arquivos guardados em `local/seo-baseline/2026-08-28/search-console/`, fora do Git;
+- agregados de marca e não marca conferidos sem expor consultas individuais.
 
-Não considerar o gate operacional encerrado até que essas três pendências do Search Console estejam registradas. Os arquivos brutos não devem ser adicionados ao repositório público sem aprovação explícita.
+O gate operacional da Fase 0 foi encerrado em 28/08/2026. Os arquivos brutos não devem ser adicionados ao repositório público sem aprovação explícita.
 
 ### Fase 1 — Fundação do Next.js e deploy escuro (semana 2)
 
