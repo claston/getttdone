@@ -7,6 +7,27 @@ from app.application.models import AnalysisData
 from app.application.storage_service import TempAnalysisStorage
 
 
+def _approved_analysis_artifact_path(analysis_dir: Path, relative: str) -> Path:
+    """Map an untrusted S3 key suffix to a path built only from literals."""
+    if relative == "analysis.json":
+        return analysis_dir / "analysis.json"
+    if relative == "report.xlsx":
+        return analysis_dir / "report.xlsx"
+    if relative == "converted.csv":
+        return analysis_dir / "converted.csv"
+    if relative == "converted.ofx":
+        return analysis_dir / "converted.ofx"
+    if relative == "converted.xlsx":
+        return analysis_dir / "converted.xlsx"
+    if relative == "reconcile.json":
+        return analysis_dir / "reconcile.json"
+    if relative == "reconcile_report.csv":
+        return analysis_dir / "reconcile_report.csv"
+    if relative == "reconcile_report.xlsx":
+        return analysis_dir / "reconcile_report.xlsx"
+    raise ValueError("S3 object is not an approved analysis artifact.")
+
+
 class S3AnalysisStorage(TempAnalysisStorage):
     """S3-backed analysis artifacts with a local working cache.
 
@@ -163,8 +184,9 @@ class S3AnalysisStorage(TempAnalysisStorage):
                 relative = key[len(remote_prefix) :]
                 if not relative:
                     continue
-                target = (analysis_dir / relative).resolve()
-                if analysis_dir.resolve() not in target.parents:
+                target = _approved_analysis_artifact_path(analysis_dir, relative).resolve()
+                safe_analysis_dir = analysis_dir.resolve()
+                if safe_analysis_dir not in target.parents:
                     raise ValueError("S3 analysis object escapes the local analysis directory.")
                 body = self._client().get_object(Bucket=self.bucket, Key=key)["Body"]
                 try:
@@ -173,7 +195,7 @@ class S3AnalysisStorage(TempAnalysisStorage):
                     close = getattr(body, "close", None)
                     if callable(close):
                         close()
-                target.parent.mkdir(parents=True, exist_ok=True)
+                safe_analysis_dir.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(raw_bytes)
             if not response.get("IsTruncated"):
                 break

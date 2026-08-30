@@ -1,6 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from app.application.models import AnalysisData, TransactionRow
 from app.application.s3_analysis_storage import S3AnalysisStorage
 
@@ -75,3 +77,31 @@ def test_s3_analysis_storage_shares_lambda_results_with_api_process(tmp_path: Pa
     assert report_path.read_text(encoding="utf-8").startswith("OFXHEADER:100")
     assert any(key.endswith("/analysis.json") for _bucket, key in client.objects)
     assert any(key.endswith("/converted.ofx") for _bucket, key in client.objects)
+
+
+@pytest.mark.parametrize(
+    "relative_key",
+    [
+        "../escaped.json",
+        "nested/report.xlsx",
+        "/absolute.json",
+        "unexpected.json",
+    ],
+)
+def test_s3_analysis_storage_rejects_unapproved_object_paths(
+    tmp_path: Path,
+    relative_key: str,
+) -> None:
+    client = FakeS3Client()
+    client.objects[("private-conversions", f"results/an_shared123/{relative_key}")] = b"untrusted"
+    storage = S3AnalysisStorage(
+        root_dir=tmp_path / "render",
+        bucket="private-conversions",
+        prefix="results",
+        s3_client=client,
+    )
+
+    with pytest.raises(ValueError, match="approved analysis artifact"):
+        storage.get_convert_report_path("an_shared123", "ofx")
+
+    assert not (tmp_path / "escaped.json").exists()
