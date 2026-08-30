@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
+from app.application.errors import AnalysisNotFoundError
 from app.application.models import AnalysisData
 from app.application.storage_service import TempAnalysisStorage
 
@@ -58,6 +60,15 @@ class S3AnalysisStorage(TempAnalysisStorage):
         if self.kms_key_id and self.server_side_encryption != "aws:kms":
             raise ValueError("An S3 KMS key requires server-side encryption set to aws:kms.")
         self._s3_client = s3_client
+
+    def _resolve_analysis_dir(self, analysis_id: str) -> Path:
+        candidate = super()._resolve_analysis_dir(analysis_id)
+        safe_root = os.path.realpath(self.root_dir)
+        normalized_candidate = os.path.realpath(candidate)
+        safe_prefix = f"{safe_root.rstrip(os.sep)}{os.sep}"
+        if not normalized_candidate.startswith(safe_prefix):
+            raise AnalysisNotFoundError
+        return Path(normalized_candidate)
 
     def save_analysis(self, data: AnalysisData) -> str:
         expires_at = super().save_analysis(data)
@@ -184,9 +195,8 @@ class S3AnalysisStorage(TempAnalysisStorage):
                 relative = key[len(remote_prefix) :]
                 if not relative:
                     continue
-                target = _approved_analysis_artifact_path(analysis_dir, relative).resolve()
-                safe_analysis_dir = analysis_dir.resolve()
-                if safe_analysis_dir not in target.parents:
+                target = _approved_analysis_artifact_path(analysis_dir, relative)
+                if target.parent != analysis_dir:
                     raise ValueError("S3 analysis object escapes the local analysis directory.")
                 body = self._client().get_object(Bucket=self.bucket, Key=key)["Body"]
                 try:
@@ -195,7 +205,7 @@ class S3AnalysisStorage(TempAnalysisStorage):
                     close = getattr(body, "close", None)
                     if callable(close):
                         close()
-                safe_analysis_dir.mkdir(parents=True, exist_ok=True)
+                analysis_dir.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(raw_bytes)
             if not response.get("IsTruncated"):
                 break

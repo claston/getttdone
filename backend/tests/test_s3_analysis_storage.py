@@ -1,8 +1,11 @@
+import os
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 
+from app.application import s3_analysis_storage as s3_analysis_storage_module
+from app.application.errors import AnalysisNotFoundError
 from app.application.models import AnalysisData, TransactionRow
 from app.application.s3_analysis_storage import S3AnalysisStorage
 
@@ -105,3 +108,24 @@ def test_s3_analysis_storage_rejects_unapproved_object_paths(
         storage.get_convert_report_path("an_shared123", "ofx")
 
     assert not (tmp_path / "escaped.json").exists()
+
+
+def test_s3_analysis_storage_rejects_local_cache_path_outside_root(tmp_path: Path, monkeypatch) -> None:
+    root_dir = tmp_path / "render"
+    storage = S3AnalysisStorage(
+        root_dir=root_dir,
+        bucket="private-conversions",
+        prefix="results",
+        s3_client=FakeS3Client(),
+    )
+    original_realpath = os.path.realpath
+
+    def resolve_outside_root(path) -> str:
+        if Path(path).name == "an_shared123":
+            return str(tmp_path / "outside")
+        return original_realpath(path)
+
+    monkeypatch.setattr(s3_analysis_storage_module.os.path, "realpath", resolve_outside_root)
+
+    with pytest.raises(AnalysisNotFoundError):
+        storage._resolve_analysis_dir("an_shared123")
