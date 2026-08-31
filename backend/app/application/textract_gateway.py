@@ -4,7 +4,6 @@ import hashlib
 import os
 import time
 from io import BytesIO
-from uuid import uuid4
 
 from app.application.errors import InvalidFileContentError
 
@@ -45,6 +44,11 @@ class TextractGateway:
         boto3 = _load_boto3()
         file_hash = hashlib.sha256(raw_bytes).hexdigest()
         s3_key = _build_s3_key(prefix=self.prefix, file_hash=file_hash)
+        client_request_token = _build_client_request_token(
+            file_hash=file_hash,
+            mode=self.mode,
+            feature_types=self.feature_types,
+        )
         session = boto3.session.Session(region_name=self.region)
         s3_client = session.client("s3")
         textract_client = session.client("textract")
@@ -63,6 +67,7 @@ class TextractGateway:
                 bucket=self.bucket,
                 s3_key=s3_key,
                 feature_types=self.feature_types,
+                client_request_token=client_request_token,
             )
             job_id = str(start_response.get("JobId") or "").strip()
             if not job_id:
@@ -99,11 +104,13 @@ class TextractGateway:
                     **timings_ms,
                 },
             }
-        except TimeoutError as exc:
-            raise InvalidFileContentError(str(exc)) from exc
+        except TimeoutError:
+            raise
         except InvalidFileContentError:
             raise
         except Exception as exc:  # pragma: no cover - defensive against SDK edge cases
+            if _is_retryable_provider_error(exc):
+                raise ConnectionError("OCR provider is temporarily unavailable.") from exc
             raise InvalidFileContentError("OCR processing failed while reading the scanned PDF.") from exc
         finally:
             try:
@@ -124,10 +131,15 @@ def _load_boto3():
 
 def _build_s3_key(*, prefix: str, file_hash: str) -> str:
     clean_prefix = str(prefix or "").strip().strip("/")
-    file_name = f"{file_hash[:16]}-{uuid4().hex[:10]}.pdf"
+    file_name = f"{file_hash}.pdf"
     if clean_prefix:
         return f"{clean_prefix}/{file_name}"
     return file_name
+
+
+def _build_client_request_token(*, file_hash: str, mode: str, feature_types: tuple[str, ...]) -> str:
+    token_source = "|".join((file_hash, mode, ",".join(feature_types)))
+    return hashlib.sha256(token_source.encode("utf-8")).hexdigest()
 
 
 def _wait_for_job(*, textract_client, job_id: str, poll_interval_seconds: float, timeout_seconds: float, mode: str) -> None:
@@ -169,14 +181,26 @@ def _fetch_textract_result(*, textract_client, job_id: str, mode: str) -> tuple[
     return page_count, blocks, document_metadata
 
 
-def _start_textract_job(*, textract_client, mode: str, bucket: str, s3_key: str, feature_types: tuple[str, ...]):
+def _start_textract_job(
+    *,
+    textract_client,
+    mode: str,
+    bucket: str,
+    s3_key: str,
+    feature_types: tuple[str, ...],
+    client_request_token: str,
+):
     document_location = {"S3Object": {"Bucket": bucket, "Name": s3_key}}
     if mode == TEXTRACT_ANALYSIS_MODE:
         return textract_client.start_document_analysis(
             DocumentLocation=document_location,
             FeatureTypes=list(feature_types),
+            ClientRequestToken=client_request_token,
         )
-    return textract_client.start_document_text_detection(DocumentLocation=document_location)
+    return textract_client.start_document_text_detection(
+        DocumentLocation=document_location,
+        ClientRequestToken=client_request_token,
+    )
 
 
 def _get_textract_job_status(*, textract_client, job_id: str, mode: str) -> dict[str, object]:
@@ -206,6 +230,35 @@ def _resolve_textract_mode(explicit: str | None) -> str:
     if raw == TEXTRACT_ANALYSIS_MODE:
         return TEXTRACT_ANALYSIS_MODE
     return TEXTRACT_TEXT_MODE
+
+
+def _is_retryable_provider_error(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    if type(exc).__name__ in {
+        "ClientConnectionError",
+        "ConnectionClosedError",
+        "EndpointConnectionError",
+        "ReadTimeoutError",
+    }:
+        return True
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error") if isinstance(response.get("Error"), dict) else {}
+    code = str(error.get("Code") or "")
+    return code in {
+        "429",
+        "InternalError",
+        "InternalServerError",
+        "LimitExceededException",
+        "ProvisionedThroughputExceededException",
+        "RequestTimeout",
+        "ServiceUnavailable",
+        "SlowDown",
+        "Throttling",
+        "ThrottlingException",
+    }
 
 
 def _to_float_env(explicit: float | None, key: str, *, default: float, min_value: float) -> float:

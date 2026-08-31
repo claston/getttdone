@@ -25,13 +25,6 @@ ENV APP_RUNTIME_TMP_DIR=/tmp/gettdone
 ARG APP_RELEASE=local
 ENV APP_RELEASE=${APP_RELEASE}
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        tesseract-ocr-eng \
-        tesseract-ocr-por \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /var/task
 COPY --from=build /build/site-packages /var/task
 COPY backend/app /var/task/app

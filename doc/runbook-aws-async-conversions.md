@@ -16,13 +16,15 @@ As variáveis de cada perfil devem ser alteradas juntas e exigem restart do serv
 
 Os nomes completos são `CONVERSION_ARCHITECTURE_MODE`, `CONVERSION_UPLOAD_MODE`, `CONVERSION_EXECUTION_MODE`, `CONVERSION_DOCUMENT_STORE`, `ANALYSIS_STORAGE` e `CONVERSION_BATCH_REPOSITORY`. Combinações diferentes das três acima são rejeitadas pelo backend.
 
+Nos perfis `fallback compartilhado` e `AWS normal`, preserve também o caminho produtivo de documentos escaneados: `TEXTRACT_ENABLED=true`, `TEXTRACT_MODE=text`, `TEXTRACT_FORCE=false`, `TEXTRACT_TEMP_BUCKET` apontando para o bucket compartilhado, `TEXTRACT_S3_PREFIX=textract/tmp` e `PDF_OCR_ENABLED=false`. Essas variáveis não devem ser aplicadas isoladamente antes da atualização das permissões da fundação.
+
 O primeiro rollback deve usar `fallback compartilhado`: novos PDFs voltam a passar pelo Render e são processados inline, enquanto jobs e resultados existentes continuam no S3/PostgreSQL. Se S3 ou PostgreSQL também estiverem indisponíveis, aplicar o perfil `atual/emergência`. O perfil atual não apaga a fila nem jobs assíncronos; eles podem ser retomados depois.
 
 ## Infraestrutura mínima no repositório privado
 
 - Um bucket S3 privado, Block Public Access ativo, SSE-S3 e sem versionamento inicialmente.
 - CORS limitado às origens HTTPS reais, métodos `POST` e `HEAD`, e headers usados pelo presigned POST.
-- Lifecycle: entrada `conversion/jobs/` por 1 dia, resultados `conversion/results/` alinhados a `ANALYSIS_TTL_SECONDS`, e multipart uploads incompletos abortados após 1 dia.
+- Lifecycle: entrada `conversion/jobs/` e staging `textract/tmp/` por 1 dia, resultados `conversion/results/` alinhados a `ANALYSIS_TTL_SECONDS`, e multipart uploads incompletos abortados após 1 dia.
 - SQS Standard e DLQ na mesma região da Lambda.
 - Redrive com `maxReceiveCount=5`.
 - Lambda em imagem Python 3.12 construída por `Dockerfile.lambda`, sem provisioned concurrency.
@@ -35,10 +37,12 @@ Começar a Lambda com reserved concurrency `2`. Isso permite progresso paralelo 
 
 O timeout deve ser definido pelo benchmark do maior PDF suportado. A visibility timeout da fila deve ser no mínimo seis vezes o timeout da Lambda, mais qualquer batching window. O lease do job deve ser maior que o p99 observado e nunca menor que o timeout configurado.
 
+O primeiro corte usa o Textract assíncrono em modo `text`, com polling dentro da invocação limitado a 210 segundos e timeout da Lambda de 300 segundos. A chave temporária e o `ClientRequestToken` são determinísticos por conteúdo/configuração para que retries SQS não iniciem uma segunda análise. Migrar o polling para conclusão SNS/SQS só se os benchmarks mostrarem espera longa ou custo relevante.
+
 ## IAM e credenciais
 
-- Role da Lambda: somente leitura/remoção no prefixo de entrada, leitura/escrita no prefixo de resultados, consumo da fila, logs e acesso aos parâmetros estritamente necessários.
-- Identidade da API Render: somente criação de presigned POST/`HeadObject`, escrita/leitura de resultados exigida pelas rotas e `sqs:SendMessage`. Guardar as credenciais somente como secrets do Render e rotacioná-las.
+- Role da Lambda: somente leitura/remoção no prefixo de entrada, leitura/escrita no prefixo de resultados e no staging `textract/tmp/`, `Start/GetDocumentTextDetection`, consumo da fila e logs.
+- Identidade da API Render: somente criação de presigned POST/`HeadObject`, escrita/leitura nos prefixos necessários, `Start/GetDocumentTextDetection` para o fallback inline e `sqs:SendMessage`. Guardar as credenciais somente como secrets do Render e rotacioná-las.
 - Role de deploy: criada por bootstrap local com credenciais temporárias/MFA.
 - GitHub Actions do repositório privado: OIDC com `id-token: write` e `contents: read`; nenhuma `AWS_ACCESS_KEY_ID` ou `AWS_SECRET_ACCESS_KEY` no GitHub.
 - Trust policy restrita ao owner/repository ID imutável quando disponível, ambiente protegido `production` e branch autorizada. Pull requests e forks não recebem permissão de deploy.
@@ -48,7 +52,7 @@ O timeout deve ser definido pelo benchmark do maior PDF suportado. A visibility 
 
 1. Criar o repositório privado e executar o bootstrap IAM localmente.
 2. Criar S3, SQS/DLQ, ECR, Lambda, EventBridge, roles, logs, métricas, alarmes e budget com o trigger SQS desabilitado.
-3. Construir `Dockerfile.lambda`; validar import do handler, Tesseract `por+eng` e arquitetura da imagem compatível com a função.
+3. Construir `Dockerfile.lambda`; validar o import do handler, a disponibilidade do SDK Textract e a arquitetura da imagem compatível com a função.
 4. Executar a migração aditiva `20260829_01` antes do backend novo. O backend antigo ignora as novas tabelas.
 5. Publicar backend e frontend mantendo o perfil `atual/emergência`.
 6. Invocar diretamente a Lambda com jobs sintéticos internos: 1 arquivo, lote de 5 e lote de 12.
@@ -84,7 +88,8 @@ Logs estruturados aceitam apenas `job_id`, `batch_id`, `trace_id`, tentativa, re
 
 ## Evidências obrigatórias antes do corte
 
-- build da imagem Lambda e `tesseract --list-langs` contendo `eng` e `por`;
+- build da imagem Lambda e import do handler/SDK Textract dentro do contêiner;
+- invocação real do Textract em modo escuro com PDF sintético escaneado, sem fallback local;
 - `alembic upgrade head` em banco de teste descartável e SQL de downgrade revisado, sem executar downgrade em produção;
 - testes automatizados e lint verdes;
 - chamadas HTTP reais: conversão feliz, download feliz, formato inválido e consulta de lote por outro proprietário;
