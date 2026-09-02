@@ -131,8 +131,8 @@ class FakeAccessControlService:
     def ensure_quota_available(self, identity, required_units: int = 1) -> None:
         _ = (identity, required_units)
 
-    def consume_quota(self, identity, consumed_units: int = 1) -> int:
-        _ = (identity, consumed_units)
+    def consume_quota(self, identity, consumed_units: int = 1, idempotency_key: str | None = None) -> int:
+        _ = (identity, consumed_units, idempotency_key)
         return 4
 
     def record_user_conversion(self, **kwargs) -> None:

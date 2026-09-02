@@ -175,6 +175,21 @@ def test_anonymous_quota_blocks_4th_attempt(tmp_path) -> None:
         assert True
 
 
+def test_conversion_quota_consumption_is_idempotent_per_job(tmp_path) -> None:
+    service = AccessControlService(
+        state_file=tmp_path / "state.json",
+        token_secret="test-secret",
+    )
+    identity = service.resolve_identity(anonymous_fingerprint="anon-device-idempotent", user_token=None)
+
+    first = service.consume_quota(identity, consumed_units=1, idempotency_key="job_123")
+    replay = service.consume_quota(identity, consumed_units=1, idempotency_key="job_123")
+
+    assert first == 2
+    assert replay == 2
+    assert service.get_remaining_quota(identity) == 2
+
+
 def test_register_user_gets_10_quota_and_valid_token(tmp_path) -> None:
     service = AccessControlService(
         state_file=tmp_path / "state.json",

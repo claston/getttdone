@@ -46,6 +46,10 @@ class AccessControlSchemaComponent:
             "admin_user_role_events",
             "user_login_events",
             "email_verification_tokens",
+            "conversion_batches",
+            "conversion_jobs",
+            "conversion_outbox",
+            "conversion_quota_consumptions",
         )
         missing_tables = [table for table in required_tables if not self._postgres_table_exists(conn, table)]
 

@@ -46,6 +46,48 @@ def test_validate_baseline_accepts_secure_production_config(monkeypatch: pytest.
     validate_production_security_baseline()
 
 
+def test_validate_baseline_rejects_incomplete_async_aws_cutover(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONVERSION_ARCHITECTURE_MODE", "async_aws")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CONVERSION_S3_BUCKET", raising=False)
+    monkeypatch.delenv("CONVERSION_SQS_QUEUE_URL", raising=False)
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_security_baseline()
+
+    message = str(exc.value)
+    assert "DATABASE_URL must be PostgreSQL" in message
+    assert "CONVERSION_DOCUMENT_STORE must be 's3'" in message
+    assert "ANALYSIS_STORAGE must be 's3'" in message
+    assert "CONVERSION_S3_BUCKET must be configured" in message
+    assert "CONVERSION_SQS_QUEUE_URL must be configured" in message
+
+
+def test_validate_baseline_accepts_inline_shared_fallback_without_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONVERSION_ARCHITECTURE_MODE", "async_aws")
+    monkeypatch.setenv("CONVERSION_UPLOAD_MODE", "proxy")
+    monkeypatch.setenv("CONVERSION_EXECUTION_MODE", "inline_shared")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://database.example/gettdone")
+    monkeypatch.setenv("CONVERSION_DOCUMENT_STORE", "s3")
+    monkeypatch.setenv("ANALYSIS_STORAGE", "s3")
+    monkeypatch.setenv("CONVERSION_BATCH_REPOSITORY", "postgres")
+    monkeypatch.setenv("CONVERSION_S3_BUCKET", "private-conversions")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.delenv("CONVERSION_SQS_QUEUE_URL", raising=False)
+
+    validate_production_security_baseline()
+
+
 def test_read_bool_env_falls_back_to_default_for_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECURITY_FLAG", "not-a-bool")
     assert read_bool_env("SECURITY_FLAG", default=False) is False

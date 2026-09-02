@@ -83,11 +83,12 @@ OCR para PDF sem camada de texto:
 Textract para PDF escaneado:
 
 - Ative com `TEXTRACT_ENABLED=true`.
-- O modo padrao agora e `TEXTRACT_MODE=text`, que usa apenas extracao de texto (`StartDocumentTextDetection`) e deixa o OCR local como fallback.
+- O modo padrao agora e `TEXTRACT_MODE=text`, que usa apenas extracao de texto (`StartDocumentTextDetection`).
 - Use `TEXTRACT_MODE=analysis` somente quando quiser habilitar o caminho com tabelas/layout para pacotes futuros.
 - Para o teste local, configure tambem `AWS_REGION` e `TEXTRACT_TEMP_BUCKET`.
 - `TEXTRACT_FEATURE_TYPES` so e usado em `TEXTRACT_MODE=analysis`.
 - Se quiser forcar Textract mesmo quando o PDF tiver texto nativo, use `TEXTRACT_FORCE=true`.
+- A imagem Lambda usa Textract como caminho de OCR e nao inclui o binario Tesseract; o fallback local continua opcional no runtime legado do Render.
 
 ## Rodar frontend
 

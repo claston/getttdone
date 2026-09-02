@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -62,10 +63,14 @@ class DocumentConversionRuntime:
 
     @classmethod
     def from_job(cls, job: ConversionJob) -> "DocumentConversionRuntime":
+        job_digest = hashlib.sha256(job.job_id.encode("utf-8")).hexdigest()
+        is_async_batch = job.batch_id is not None
         return cls(
             started_at=monotonic(),
             file_digest=job.document.sha256_hex or None,
             ocr_engine=os.getenv("PDF_OCR_ENGINE", "").strip().lower() or "tesseract",
+            attempt_processing_id=f"an_{job_digest[:12]}" if is_async_batch else None,
+            attempt_anonymous_event_id=f"anon_evt_{job_digest[:24]}" if is_async_batch else None,
         )
 
     def build_ocr_progress_callback(
@@ -74,11 +79,14 @@ class DocumentConversionRuntime:
         job: ConversionJob,
         hooks: ConversionExecutionHooks,
     ):
+        job_contract = getattr(job, "job", job)
+
         def telemetry_ocr_progress(current_page: int, total_page_count: int) -> None:
             if not self.ocr_started_logged:
                 logger.info(
-                    "conversion_ocr_started filename=%s estimated_pages_count=%s ocr_engine=%s",
-                    job.document.filename or "unknown.pdf",
+                    "conversion_ocr_started job_id=%s batch_id=%s estimated_pages_count=%s ocr_engine=%s",
+                    job_contract.job_id,
+                    job_contract.batch_id or "",
                     job.preflight_result.estimated_pages_count,
                     self.ocr_engine,
                 )
@@ -194,10 +202,11 @@ class DocumentConversionPipeline:
             ocr_max_pages = prepared.preflight_policy.ocr_max_pages
             logger.info(
                 (
-                    "conversion_analyze_started filename=%s identity_type=%s scanned_likely=%s "
+                    "conversion_analyze_started job_id=%s batch_id=%s identity_type=%s scanned_likely=%s "
                     "estimated_pages_count=%s max_upload_size_bytes=%s ocr_max_pages=%s"
                 ),
-                request.document.filename or "unknown.pdf",
+                request.job.job_id,
+                request.job.batch_id or "",
                 getattr(prepared.identity, "identity_type", "unknown"),
                 request.preflight_result.scanned_likely,
                 request.preflight_result.estimated_pages_count,
@@ -219,10 +228,11 @@ class DocumentConversionPipeline:
             else:
                 document = request.document
                 logger.info(
-                    "analyze_start extension=%s size_bytes=%d filename=%s",
+                    "analyze_start job_id=%s batch_id=%s extension=%s size_bytes=%d",
+                    request.job.job_id,
+                    request.job.batch_id or "",
                     document.file_type,
                     document.size_bytes,
-                    (document.filename or "")[:120],
                 )
                 resolved_analysis_id = (runtime.attempt_processing_id or "").strip() or f"an_{uuid4().hex[:12]}"
                 parse_started_at = monotonic()
@@ -306,8 +316,9 @@ class DocumentConversionPipeline:
         identity = request.identity
         runtime.identity = identity
         logger.info(
-            "conversion_analyze_precheck filename=%s identity_type=%s scanned_likely=%s estimated_pages_count=%s",
-            request.document.filename or "unknown.pdf",
+            "conversion_analyze_precheck job_id=%s batch_id=%s identity_type=%s scanned_likely=%s estimated_pages_count=%s",
+            request.job.job_id,
+            request.job.batch_id or "",
             getattr(identity, "identity_type", "unknown"),
             request.preflight_result.scanned_likely,
             request.preflight_result.estimated_pages_count,
@@ -345,7 +356,7 @@ class DocumentConversionPipeline:
         identity,
     ) -> None:
         if identity.identity_type == "user":
-            runtime.attempt_processing_id = f"an_{uuid4().hex[:12]}"
+            runtime.attempt_processing_id = runtime.attempt_processing_id or f"an_{uuid4().hex[:12]}"
             _safe_record_user_conversion(
                 self.access_control_service,
                 user_id=identity.identity_id,
@@ -378,7 +389,7 @@ class DocumentConversionPipeline:
                 expires_at=None,
             )
         elif identity.identity_type == "anonymous":
-            runtime.attempt_anonymous_event_id = f"anon_evt_{uuid4().hex[:24]}"
+            runtime.attempt_anonymous_event_id = runtime.attempt_anonymous_event_id or f"anon_evt_{uuid4().hex[:24]}"
             _safe_record_anonymous_conversion_event(
                 self.access_control_service,
                 event_id=runtime.attempt_anonymous_event_id,
@@ -443,14 +454,16 @@ class DocumentConversionPipeline:
             bank_name=getattr(analysis, "bank_name", None),
         )
         logger.info(
-            "conversion_result_persist_started filename=%s identity_type=%s status=Sucesso analysis_id=%s",
-            request.document.filename or "unknown.pdf",
+            "conversion_result_persist_started job_id=%s batch_id=%s identity_type=%s status=Sucesso analysis_id=%s",
+            request.job.job_id,
+            request.job.batch_id or "",
             getattr(identity, "identity_type", "unknown"),
             analysis.analysis_id,
         )
         quota_result = self.quota_validator_service.consume_quota_for_conversion(
             identity=identity,
             analysis=analysis,
+            idempotency_key=request.job.job_id,
         )
         quota_remaining = quota_result.quota_remaining
         if identity.identity_type == "user":
@@ -566,8 +579,9 @@ class DocumentConversionPipeline:
         ocr_attempted = runtime.ocr_pages_processed > 0 or bool(ocr_context)
         failed_event_id: str | None = None
         logger.info(
-            "conversion_result_persist_started filename=%s identity_type=%s status=Falha error_code=%s error_stage=%s",
-            request.document.filename or "unknown.pdf",
+            "conversion_result_persist_started job_id=%s batch_id=%s identity_type=%s status=Falha error_code=%s error_stage=%s",
+            request.job.job_id,
+            request.job.batch_id or "",
             getattr(identity, "identity_type", "unknown"),
             error_code,
             error_stage or "",
@@ -638,7 +652,8 @@ class DocumentConversionPipeline:
             )
         _log_conversion_failure(
             identity=identity,
-            filename=request.document.filename or "unknown.pdf",
+            job_id=request.job.job_id,
+            batch_id=request.job.batch_id,
             event_id=failed_event_id,
             error_code=error_code,
             error_stage=error_stage,
@@ -720,21 +735,28 @@ def _is_likely_corrupted_pdf_detail(detail: str) -> bool:
 def _safe_record_anonymous_conversion_event(access_control_service: AccessControlService, **kwargs) -> None:
     try:
         access_control_service.record_anonymous_conversion_event(**kwargs)
-    except Exception:
-        logger.warning("Failed to persist anonymous conversion event telemetry.", exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "conversion_anonymous_telemetry_persist_failed error_class=%s",
+            type(exc).__name__,
+        )
 
 
 def _safe_record_user_conversion(access_control_service: AccessControlService, **kwargs) -> None:
     try:
         access_control_service.record_user_conversion(**kwargs)
-    except Exception:
-        logger.warning("Failed to persist user conversion telemetry.", exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "conversion_user_telemetry_persist_failed error_class=%s",
+            type(exc).__name__,
+        )
 
 
 def _log_conversion_failure(
     *,
     identity,
-    filename: str,
+    job_id: str,
+    batch_id: str | None,
     event_id: str | None,
     error_code: str,
     error_stage: str | None,
@@ -746,16 +768,16 @@ def _log_conversion_failure(
     duration_ms: int,
     failure_diagnostics: dict[str, str | int | bool | list[str]],
 ) -> None:
-    logger.exception(
+    logger.error(
         (
-            "conversion_processing_failed event_id=%s identity_type=%s identity_id=%s filename=%s "
+            "conversion_processing_failed event_id=%s job_id=%s batch_id=%s identity_type=%s "
             "error_code=%s error_stage=%s error_subcode=%s exception_class=%s scanned_likely=%s "
             "estimated_pages_count=%s ocr_pages_processed=%s duration_ms=%s failure_diagnostics=%s"
         ),
         event_id or "",
+        job_id,
+        batch_id or "",
         getattr(identity, "identity_type", "unknown"),
-        getattr(identity, "identity_id", "unknown"),
-        filename,
         error_code,
         error_stage or "",
         error_subcode or "",

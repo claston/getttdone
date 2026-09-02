@@ -22,10 +22,24 @@ from app.application import (
     InlineConversionJobExecutor,
     QuotaValidatorService,
     ReportService,
+    S3AnalysisStorage,
     S3ConversionDocumentStore,
     SmtpContactService,
     TempAnalysisStorage,
 )
+from app.application.conversion.conversion_batch_repository import (
+    ConversionBatchRepository,
+    InMemoryConversionBatchRepository,
+)
+from app.application.conversion.conversion_batch_service import ConversionBatchService
+from app.application.conversion.conversion_runtime_config import (
+    ConversionArchitectureMode,
+    ConversionExecutionMode,
+    ConversionRuntimeConfig,
+)
+from app.application.conversion.postgres_conversion_batch_repository import PostgresConversionBatchRepository
+from app.application.conversion.s3_direct_upload_service import S3DirectUploadService
+from app.application.conversion.sqs_conversion_queue import SqsConversionQueuePublisher
 from app.application.conversion_pipeline import ConversionPipeline
 from app.application.default_conversion_pipeline import build_default_conversion_pipeline
 from app.application.repositories import AnalysisRepository
@@ -51,28 +65,47 @@ def _build_conversion_document_store(*, backend_root: Path) -> ConversionDocumen
     raise RuntimeError("CONVERSION_DOCUMENT_STORE must be 'filesystem' or 's3'.")
 
 
-_storage = TempAnalysisStorage(
-    root_dir=_backend_root / "tmp" / "analyses",
-    ttl_seconds=int(os.getenv("ANALYSIS_TTL_SECONDS", "86400")),
-)
+def _build_analysis_storage(*, backend_root: Path):
+    mode = os.getenv("ANALYSIS_STORAGE", "filesystem").strip().lower()
+    ttl_seconds = int(os.getenv("ANALYSIS_TTL_SECONDS", "86400"))
+    if mode == "filesystem":
+        return TempAnalysisStorage(
+            root_dir=backend_root / "tmp" / "analyses",
+            ttl_seconds=ttl_seconds,
+        )
+    if mode == "s3":
+        return S3AnalysisStorage(
+            root_dir=backend_root / "tmp" / "analyses",
+            ttl_seconds=ttl_seconds,
+            bucket=os.getenv("CONVERSION_S3_BUCKET", ""),
+            prefix=os.getenv("CONVERSION_RESULTS_S3_PREFIX", "conversion/results"),
+            region=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
+            server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
+            kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
+        )
+    raise RuntimeError("ANALYSIS_STORAGE must be 'filesystem' or 's3'.")
+
+
+_storage = _build_analysis_storage(backend_root=_backend_root)
 _conversion_processing_pipeline = build_default_conversion_pipeline()
 _report_service = ReportService(storage=_storage)
 _document_preflight_service = DocumentPreflightService()
 _conversion_document_store = _build_conversion_document_store(backend_root=_backend_root)
-_conversion_job_repository = FilesystemConversionJobRepository(
-    root_dir=_backend_root / "tmp" / "conversion_jobs" / "registry",
-    active_ttl_seconds=int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400")),
-    terminal_ttl_seconds=int(os.getenv("CONVERSION_JOB_TERMINAL_TTL_SECONDS", "86400")),
-)
-_conversion_job_cleanup_service = ConversionJobCleanupService(
-    job_repository=_conversion_job_repository,
-    document_store=_conversion_document_store,
-)
+_conversion_job_repository: ConversionJobRepository | None = None
+_conversion_job_cleanup_service: ConversionJobCleanupService | None = None
 _access_control_service: AccessControlService | None = None
 _contact_service: ContactService | None = None
 _contact_form_service: ContactService | SmtpContactService | None = None
 _google_oauth_service: GoogleOAuthService | None = None
 _conversion_capacity_controller: ConversionCapacityController | None = None
+_conversion_batch_repository: ConversionBatchRepository | None = None
+_conversion_batch_service: ConversionBatchService | None = None
+
+
+class _DisabledConversionQueuePublisher:
+    def publish(self, *, job_id: str, batch_id: str, trace_id: str) -> str:
+        _ = (job_id, batch_id, trace_id)
+        raise RuntimeError("Conversion SQS publishing is disabled by the active runtime fallback.")
 
 
 def _resolve_access_control_state_file() -> Path:
@@ -111,11 +144,91 @@ def get_conversion_document_store() -> ConversionDocumentStore:
 
 
 def get_conversion_job_repository() -> ConversionJobRepository:
+    global _conversion_job_repository
+    if _conversion_job_repository is None:
+        runtime = get_conversion_runtime_config()
+        if runtime.architecture_mode == ConversionArchitectureMode.ASYNC_AWS:
+            _conversion_job_repository = get_conversion_batch_repository()
+        else:
+            _conversion_job_repository = FilesystemConversionJobRepository(
+                root_dir=_backend_root / "tmp" / "conversion_jobs" / "registry",
+                active_ttl_seconds=int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400")),
+                terminal_ttl_seconds=int(os.getenv("CONVERSION_JOB_TERMINAL_TTL_SECONDS", "86400")),
+            )
     return _conversion_job_repository
 
 
 def get_conversion_job_cleanup_service() -> ConversionJobCleanupService:
+    global _conversion_job_cleanup_service
+    if _conversion_job_cleanup_service is None:
+        _conversion_job_cleanup_service = ConversionJobCleanupService(
+            job_repository=get_conversion_job_repository(),
+            document_store=get_conversion_document_store(),
+        )
     return _conversion_job_cleanup_service
+
+
+def get_conversion_runtime_config() -> ConversionRuntimeConfig:
+    return ConversionRuntimeConfig.from_mapping(os.environ)
+
+
+def get_conversion_batch_repository() -> ConversionBatchRepository:
+    global _conversion_batch_repository
+    if _conversion_batch_repository is not None:
+        return _conversion_batch_repository
+
+    mode = os.getenv("CONVERSION_BATCH_REPOSITORY", "postgres").strip().lower()
+    if mode == "memory":
+        if is_production_env():
+            raise RuntimeError("CONVERSION_BATCH_REPOSITORY=memory is not allowed in production.")
+        _conversion_batch_repository = InMemoryConversionBatchRepository(
+            ttl_seconds=int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400")),
+        )
+        return _conversion_batch_repository
+    if mode != "postgres":
+        raise RuntimeError("CONVERSION_BATCH_REPOSITORY must be 'postgres' or 'memory'.")
+
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for asynchronous conversion batches.")
+    _conversion_batch_repository = PostgresConversionBatchRepository(
+        database_url=database_url,
+        database_schema=os.getenv("DATABASE_SCHEMA", "public"),
+        active_ttl_seconds=int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400")),
+        terminal_ttl_seconds=int(os.getenv("CONVERSION_JOB_TERMINAL_TTL_SECONDS", "86400")),
+    )
+    return _conversion_batch_repository
+
+
+def get_conversion_batch_service() -> ConversionBatchService | None:
+    global _conversion_batch_service
+    runtime = get_conversion_runtime_config()
+    if runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS:
+        return None
+    if _conversion_batch_service is None:
+        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+        direct_upload_service = S3DirectUploadService(
+            bucket=os.getenv("CONVERSION_S3_BUCKET", ""),
+            prefix=os.getenv("CONVERSION_S3_PREFIX", "conversion/jobs"),
+            region=region,
+            expires_in_seconds=int(os.getenv("CONVERSION_DIRECT_UPLOAD_TTL_SECONDS", "900")),
+            server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
+            kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
+        )
+        if runtime.execution_mode == ConversionExecutionMode.SQS_LAMBDA:
+            queue_publisher = SqsConversionQueuePublisher(
+                queue_url=os.getenv("CONVERSION_SQS_QUEUE_URL", ""),
+                region=region,
+            )
+        else:
+            queue_publisher = _DisabledConversionQueuePublisher()
+        _conversion_batch_service = ConversionBatchService(
+            repository=get_conversion_batch_repository(),
+            direct_upload_service=direct_upload_service,
+            queue_publisher=queue_publisher,
+            batch_max_files=runtime.batch_max_files,
+        )
+    return _conversion_batch_service
 
 
 def get_access_control_service() -> AccessControlService:

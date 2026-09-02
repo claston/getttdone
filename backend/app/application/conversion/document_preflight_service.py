@@ -155,14 +155,13 @@ class DocumentPreflightService:
         max_pages_per_file: int,
         scanned_likely: bool | None,
     ) -> None:
+        _ = filename
         logger.info(
             (
-                "conversion_pages_limit_exceeded identity_type=%s identity_id=%s filename=%s "
-                "pages_count=%s max_pages_per_file=%s scanned_likely=%s"
+                "conversion_pages_limit_exceeded identity_type=%s pages_count=%s "
+                "max_pages_per_file=%s scanned_likely=%s"
             ),
             getattr(identity, "identity_type", "unknown"),
-            getattr(identity, "identity_id", "unknown"),
-            filename,
             pages_count,
             max_pages_per_file,
             scanned_likely,

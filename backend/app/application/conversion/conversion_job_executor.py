@@ -68,7 +68,7 @@ class InlineConversionJobExecutor:
             analysis_id = str(payload.get("processing_id") or payload.get("analysis_id") or "").strip()
             self.job_repository.mark_completed(
                 job.job_id,
-                result=ConversionJobResultReference(analysis_id=analysis_id),
+                result=ConversionJobResultReference(analysis_id=analysis_id, payload=result.payload),
             )
             return
         if result.status == ConversionPipelineStatus.REJECTED:

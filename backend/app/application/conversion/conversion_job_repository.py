@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from threading import RLock
+from time import sleep
 from typing import Callable, Protocol
+from uuid import uuid4
 
 from app.application.access_control import IdentityContext
 from app.application.conversion.conversion_document_store import ConversionDocumentReference
@@ -19,15 +21,22 @@ _JOB_ID_PATTERN = re.compile(r"^job_[A-Za-z0-9_-]{1,64}$")
 
 
 class ConversionJobStatus(str, Enum):
+    UPLOADING = "uploading"
+    UPLOADED = "uploaded"
     SUBMITTED = "submitted"
+    QUEUED = "queued"
     RUNNING = "running"
+    RETRYING = "retrying"
     COMPLETED = "completed"
     FAILED = "failed"
+    EXPIRED = "expired"
 
 
 @dataclass(frozen=True, slots=True)
 class ConversionJobResultReference:
     analysis_id: str
+    payload: dict[str, object] | None = None
+    s3_prefix: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,6 +255,7 @@ class FilesystemConversionJobRepository:
                 "document": asdict(record.job.document),
                 "identity": self._serialize_identity(record.job.identity),
                 "preflight_result": asdict(record.job.preflight_result),
+                "batch_id": record.job.batch_id,
             },
             "status": record.status.value,
             "created_at": record.created_at.isoformat(),
@@ -267,6 +277,7 @@ class FilesystemConversionJobRepository:
             document=ConversionDocumentReference(**job_payload["document"]),
             identity=IdentityContext(**job_payload["identity"]),
             preflight_result=DocumentPreflightResult(**job_payload["preflight_result"]),
+            batch_id=job_payload.get("batch_id"),
         )
         return ConversionJobRecord(
             job=job,
@@ -308,10 +319,17 @@ class FilesystemConversionJobRepository:
 
     @staticmethod
     def _write_text_atomic(path: Path, content: str) -> None:
-        temporary = path.with_suffix(f"{path.suffix}.tmp")
+        temporary = path.with_suffix(f"{path.suffix}.{uuid4().hex}.tmp")
         try:
             temporary.write_text(content, encoding="utf-8")
-            temporary.replace(path)
+            for attempt in range(3):
+                try:
+                    temporary.replace(path)
+                    break
+                except PermissionError:
+                    if attempt == 2:
+                        raise
+                    sleep(0.01 * (attempt + 1))
         finally:
             temporary.unlink(missing_ok=True)
 

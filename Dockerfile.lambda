@@ -1,0 +1,25 @@
+ARG PYTHON_IMAGE=public.ecr.aws/lambda/python:3.12
+
+FROM ${PYTHON_IMAGE} AS build
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+COPY backend/requirements.txt backend/requirements-lambda.txt ./
+RUN python -m pip install --only-binary=:all: --target /build/site-packages -r requirements-lambda.txt
+
+FROM ${PYTHON_IMAGE} AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/var/task
+ENV APP_RUNTIME_TMP_DIR=/tmp/gettdone
+ARG APP_RELEASE=local
+ENV APP_RELEASE=${APP_RELEASE}
+
+WORKDIR /var/task
+COPY --from=build /build/site-packages /var/task
+COPY backend/app /var/task/app
+
+CMD ["app.workers.conversion_lambda.lambda_handler"]

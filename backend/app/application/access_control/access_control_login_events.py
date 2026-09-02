@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import time_ns
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -22,7 +23,9 @@ class AccessControlLoginEventsComponent:
         if normalized_auth_method not in LOGIN_AUTH_METHODS:
             raise ValueError("Unsupported login auth_method")
 
-        event_id = f"ule_{uuid4().hex[:20]}"
+        # The time prefix preserves insertion order when the platform clock
+        # gives multiple events the same created_at value.
+        event_id = f"ule_{time_ns():020d}_{uuid4().hex[:8]}"
         created_at = self._service.now_provider().isoformat()
         with self._service._lock:
             with self._service._connect() as conn:

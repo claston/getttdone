@@ -396,8 +396,18 @@ class AccessControlService:
     def ensure_quota_available(self, identity: IdentityContext, *, required_units: int = 1) -> None:
         self.quota.ensure_quota_available(identity, required_units=required_units)
 
-    def consume_quota(self, identity: IdentityContext, *, consumed_units: int = 1) -> int:
-        return self.quota.consume_quota(identity, consumed_units=consumed_units)
+    def consume_quota(
+        self,
+        identity: IdentityContext,
+        *,
+        consumed_units: int = 1,
+        idempotency_key: str | None = None,
+    ) -> int:
+        return self.quota.consume_quota(
+            identity,
+            consumed_units=consumed_units,
+            idempotency_key=idempotency_key,
+        )
 
     def get_remaining_quota(self, identity: IdentityContext) -> int:
         return self.quota.get_remaining_quota(identity)
