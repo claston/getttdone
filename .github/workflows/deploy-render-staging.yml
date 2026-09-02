@@ -49,26 +49,7 @@ jobs:
             exit 0
           fi
           export DATABASE_SCHEMA="${DATABASE_SCHEMA:-public}"
-          max_attempts=3
-          attempt=1
-          while [ "${attempt}" -le "${max_attempts}" ]; do
-            echo "Running Alembic migration (attempt ${attempt}/${max_attempts})..."
-            if python -m alembic upgrade head; then
-              echo "::notice::Alembic migration completed successfully."
-              break
-            fi
-
-            exit_code=$?
-            if [ "${attempt}" -lt "${max_attempts}" ]; then
-              sleep_seconds=$((attempt * 5))
-              echo "::warning::Alembic migration failed on attempt ${attempt}/${max_attempts} (exit ${exit_code}). Retrying in ${sleep_seconds}s."
-              sleep "${sleep_seconds}"
-            else
-              echo "::error::Alembic migration failed after ${max_attempts} attempts."
-              exit "${exit_code}"
-            fi
-            attempt=$((attempt + 1))
-          done
+          python scripts/run_alembic_migrations.py
 
   deploy-render-staging:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
