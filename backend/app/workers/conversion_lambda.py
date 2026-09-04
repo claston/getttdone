@@ -29,6 +29,7 @@ from app.application.report_service import ReportService
 from app.application.s3_analysis_storage import S3AnalysisStorage
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class ConversionPipeline(Protocol):
