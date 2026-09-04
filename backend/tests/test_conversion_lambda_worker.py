@@ -1,3 +1,6 @@
+import io
+import json
+import logging
 from datetime import datetime, timezone
 
 from app.application.access_control import IdentityContext
@@ -201,3 +204,26 @@ def test_lambda_scheduled_event_dispatches_transactional_outbox(monkeypatch) -> 
     assert response == {"published": 1}
     assert publisher.calls == [job.job_id]
     assert repository.list_pending_outbox() == []
+
+
+def test_worker_structured_info_logs_are_emitted_with_warning_root_logger() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    root_logger = logging.getLogger()
+    previous_root_level = root_logger.level
+    previous_propagate = conversion_lambda.logger.propagate
+    conversion_lambda.logger.addHandler(handler)
+    conversion_lambda.logger.propagate = False
+    root_logger.setLevel(logging.WARNING)
+
+    try:
+        conversion_lambda._log_json("worker_smoke", job_id="job_safe")
+    finally:
+        root_logger.setLevel(previous_root_level)
+        conversion_lambda.logger.propagate = previous_propagate
+        conversion_lambda.logger.removeHandler(handler)
+
+    assert json.loads(stream.getvalue()) == {
+        "event": "worker_smoke",
+        "job_id": "job_safe",
+    }
