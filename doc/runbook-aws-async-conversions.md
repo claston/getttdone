@@ -62,6 +62,31 @@ O primeiro corte usa o Textract assíncrono em modo `text`, com polling dentro d
 10. Aplicar em uma só mudança o perfil `AWS normal` e reiniciar o Render.
 11. Observar os sinais abaixo por pelo menos uma janela completa do maior job.
 
+### Primeiro canário escaneado em modo escuro
+
+Com `QueueTriggerEnabled=false` e `OutboxDispatcherEnabled=false`, execute da
+raiz do repositório público:
+
+```powershell
+backend\venv\Scripts\python.exe backend\scripts\run_conversion_worker_canary.py `
+  --profile gettdone-iac `
+  --region us-east-1
+```
+
+O utilitário recusa a execução se os dois toggles não estiverem desligados,
+gera o cenário escaneado `inline_signed_values` do corpus sintético e usa
+somente o objeto S3 reservado
+`conversion/jobs/doc_cafe5afe0000000000000000/document.pdf`. Ele cria um lote
+e um job identificados por `worker_canary` no PostgreSQL, sob a identidade
+anônima isolada `gettdone-worker-canary`, e invoca diretamente a Lambda sem
+publicar na SQS. Em caso de sucesso, exige evidência
+`extraction_provider=aws_textract`, confirma a conclusão no banco e verifica
+que o worker removeu o arquivo temporário de entrada.
+
+O comando não imprime `DATABASE_URL` nem outros segredos. O resultado e a
+telemetria sintéticos permanecem sujeitos ao TTL/lifecycle normal; nenhum dado
+ou cota de usuário real é utilizado.
+
 ## Sinais e alarmes
 
 Alarmes acionáveis:
