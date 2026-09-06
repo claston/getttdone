@@ -99,6 +99,14 @@ def validate_production_security_baseline() -> None:
         if not verification_url.lower().startswith("https://"):
             issues.append("AUTH_EMAIL_VERIFICATION_FRONTEND_URL must use HTTPS in production.")
 
+    async_rollout_enabled = False
+    try:
+        from app.application.conversion.async_conversion_rollout import AsyncConversionRolloutPolicy
+
+        async_rollout_enabled = AsyncConversionRolloutPolicy.from_mapping(os.environ).enabled
+    except ValueError as exc:
+        issues.append(f"Invalid async conversion rollout configuration: {exc}")
+
     conversion_execution_mode = os.getenv("CONVERSION_EXECUTION_MODE", "").strip().lower()
     try:
         from app.application.conversion.conversion_runtime_config import ConversionRuntimeConfig
@@ -108,7 +116,10 @@ def validate_production_security_baseline() -> None:
     except ValueError as exc:
         issues.append(f"Invalid conversion runtime configuration: {exc}")
 
-    if os.getenv("CONVERSION_ARCHITECTURE_MODE", "legacy").strip().lower() == "async_aws":
+    async_architecture_enabled = (
+        os.getenv("CONVERSION_ARCHITECTURE_MODE", "legacy").strip().lower() == "async_aws"
+    )
+    if async_architecture_enabled:
         database_url = os.getenv("DATABASE_URL", "").strip().lower()
         if not (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
             issues.append("DATABASE_URL must be PostgreSQL for async_aws conversions.")
@@ -128,6 +139,21 @@ def validate_production_security_baseline() -> None:
                 issues.append("CONVERSION_SQS_QUEUE_URL must be an HTTPS AWS SQS URL.")
         if not (os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")):
             issues.append("AWS_REGION must be configured for async_aws conversions.")
+    elif async_rollout_enabled:
+        database_url = os.getenv("DATABASE_URL", "").strip().lower()
+        if not (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
+            issues.append("DATABASE_URL must be PostgreSQL for user-scoped async conversions.")
+        if os.getenv("CONVERSION_BATCH_REPOSITORY", "postgres").strip().lower() != "postgres":
+            issues.append("CONVERSION_BATCH_REPOSITORY must be 'postgres' for user-scoped async conversions.")
+        if not os.getenv("CONVERSION_S3_BUCKET", "").strip():
+            issues.append("CONVERSION_S3_BUCKET must be configured for user-scoped async conversions.")
+        queue_url = os.getenv("CONVERSION_SQS_QUEUE_URL", "").strip()
+        if not queue_url:
+            issues.append("CONVERSION_SQS_QUEUE_URL must be configured for user-scoped async conversions.")
+        elif not queue_url.startswith("https://sqs."):
+            issues.append("CONVERSION_SQS_QUEUE_URL must be an HTTPS AWS SQS URL.")
+        if not (os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")):
+            issues.append("AWS_REGION must be configured for user-scoped async conversions.")
 
     if issues:
         details = "\n- ".join(issues)

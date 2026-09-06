@@ -344,6 +344,9 @@ class AccessControlService:
     def get_user_by_email(self, email: str) -> RegisteredUser:
         return self.auth.get_user_by_email(email)
 
+    def get_user_by_id(self, user_id: str) -> RegisteredUser:
+        return self.session_core.get_registered_user_by_id(user_id=user_id)
+
     def is_user_admin(self, *, user_id: str) -> bool:
         return self.admin.is_user_admin(user_id=user_id)
 

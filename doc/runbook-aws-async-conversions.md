@@ -20,6 +20,48 @@ Nos perfis `fallback compartilhado` e `AWS normal`, preserve também o caminho p
 
 O primeiro rollback deve usar `fallback compartilhado`: novos PDFs voltam a passar pelo Render e são processados inline, enquanto jobs e resultados existentes continuam no S3/PostgreSQL. Se S3 ou PostgreSQL também estiverem indisponíveis, aplicar o perfil `atual/emergência`. O perfil atual não apaga a fila nem jobs assíncronos; eles podem ser retomados depois.
 
+## Canário por usuário com o perfil global legado
+
+Antes do corte global, `CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST` permite enviar somente usuários autenticados e verificados para o fluxo AWS. O backend resolve a identidade pelo token ou cookie de sessão e consulta o e-mail no banco; o frontend não decide sozinho quem participa. E-mails não listados e sessões anônimas permanecem no fluxo legado.
+
+No Render, mantenha as variáveis globais abaixo:
+
+```text
+CONVERSION_ARCHITECTURE_MODE=legacy
+CONVERSION_UPLOAD_MODE=proxy
+CONVERSION_EXECUTION_MODE=inline_legacy
+CONVERSION_DOCUMENT_STORE=filesystem
+ANALYSIS_STORAGE=filesystem
+```
+
+Configure também o caminho assíncrono lateral:
+
+```text
+CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST=<email-verificado-do-canário>
+CONVERSION_BATCH_REPOSITORY=postgres
+DATABASE_URL=<conexão-postgresql-neon-com-tls>
+DATABASE_SCHEMA=gettdone
+CONVERSION_S3_BUCKET=<bucket-privado>
+CONVERSION_S3_PREFIX=conversion/jobs
+CONVERSION_RESULTS_S3_PREFIX=conversion/results
+CONVERSION_SQS_QUEUE_URL=<url-https-da-fila>
+AWS_REGION=us-east-1
+```
+
+As credenciais AWS da identidade restrita da API Render devem estar disponíveis pelo provider chain do SDK. Ela precisa apenas das permissões de upload/consulta nos prefixos previstos e `sqs:SendMessage`; não use credenciais da role de infraestrutura. A Lambda continua recebendo banco, schema, Textract e bucket por sua própria configuração.
+
+Sequência do primeiro teste:
+
+1. Publicar backend e frontend com a allowlist vazia; confirmar que o fluxo legado continua funcionando.
+2. Configurar as variáveis laterais e adicionar somente o e-mail verificado do canário.
+3. Confirmar, autenticado como o canário, que `GET /api/conversion-runtime` retorna `direct_batch_enabled=true`.
+4. Confirmar com outro usuário que o mesmo endpoint retorna `direct_batch_enabled=false`.
+5. Habilitar o event source mapping da fila e o dispatcher do outbox.
+6. Pelo frontend, enviar um PDF controlado, aguardar o lote, revisar uma linha e baixar OFX e XLSX.
+7. Conferir status no PostgreSQL, objetos em `conversion/results/`, logs seguros, fila/DLQ e alarmes.
+
+Rollback imediato: esvaziar `CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST` e reiniciar o Render. Isso impede novos lotes AWS sem mudar o perfil dos demais usuários. Jobs já enfileirados podem terminar; se também for necessário interrompê-los, desabilite o event source mapping depois de retirar a allowlist. Não apague S3, filas ou tabelas durante a investigação.
+
 ## Infraestrutura mínima no repositório privado
 
 - Um bucket S3 privado, Block Public Access ativo, SSE-S3 e sem versionamento inicialmente.
