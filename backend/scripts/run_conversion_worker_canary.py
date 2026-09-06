@@ -198,7 +198,7 @@ class AwsCliCanaryClient:
                 "Canary refused: QueueTriggerEnabled and OutboxDispatcherEnabled must both be false."
             )
 
-    def object_exists(self, *, bucket: str) -> bool:
+    def reserved_object_remains(self, *, bucket: str) -> bool:
         completed = self._run(
             "s3api",
             "head-object",
@@ -211,13 +211,15 @@ class AwsCliCanaryClient:
         if completed.returncode == 0:
             return True
         detail = f"{completed.stdout}\n{completed.stderr}".lower()
-        if "404" in detail or "not found" in detail or "nosuchkey" in detail:
+        # The successful HeadObject immediately after upload proves GetObject.
+        # Without ListBucket, S3 intentionally returns 403 for a now-missing key.
+        if any(marker in detail for marker in ("403", "404", "forbidden", "not found", "nosuchkey")):
             return False
         raise RuntimeError("Unable to check the reserved canary object in S3.")
 
     def upload_pdf(self, *, bucket: str, raw_pdf: bytes, path: Path) -> None:
         path.write_bytes(raw_pdf)
-        self._run(
+        completed = self._run(
             "s3api",
             "put-object",
             "--bucket",
@@ -230,7 +232,33 @@ class AwsCliCanaryClient:
             "application/pdf",
             "--server-side-encryption",
             "AES256",
+            "--if-none-match",
+            "*",
+            check=False,
         )
+        if completed.returncode != 0:
+            detail = f"{completed.stdout}\n{completed.stderr}".strip()
+            if "PreconditionFailed" in detail or "412" in detail:
+                raise RuntimeError(
+                    "The reserved canary object already exists. Inspect the previous run before retrying."
+                )
+            raise RuntimeError((detail or "Unable to upload the reserved canary object.")[:500])
+
+        verified = self._run(
+            "s3api",
+            "head-object",
+            "--bucket",
+            bucket,
+            "--key",
+            CANARY_OBJECT_KEY,
+            check=False,
+        )
+        if verified.returncode != 0:
+            try:
+                self.delete_pdf(bucket=bucket)
+            except Exception:
+                pass
+            raise RuntimeError("The uploaded canary object could not be verified with HeadObject.")
 
     def delete_pdf(self, *, bucket: str) -> None:
         self._run(
@@ -310,11 +338,6 @@ def execute_canary(*, settings: CanarySettings, raw_pdf: bytes, run_id: str) -> 
     bucket = foundation_outputs.get("ConversionBucketName", "").strip()
     if not bucket:
         raise RuntimeError("ConversionBucketName was not found in the foundation stack outputs.")
-    if client.object_exists(bucket=bucket):
-        raise RuntimeError(
-            "The reserved canary object already exists. Inspect the previous run before retrying."
-        )
-
     repository = PostgresConversionBatchRepository(
         database_url=settings.database_url,
         database_schema=settings.database_schema,
@@ -361,7 +384,7 @@ def execute_canary(*, settings: CanarySettings, raw_pdf: bytes, run_id: str) -> 
         raise RuntimeError(f"Worker reported a batch item failure: {json.dumps(summary, sort_keys=True)}")
     if record.status != ConversionJobStatus.COMPLETED:
         raise RuntimeError(f"Canary did not complete: {json.dumps(summary, sort_keys=True)}")
-    if client.object_exists(bucket=bucket):
+    if client.reserved_object_remains(bucket=bucket):
         raise RuntimeError("Worker completed but did not delete the temporary canary source object.")
     return summary
 

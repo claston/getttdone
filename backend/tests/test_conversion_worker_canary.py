@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from app.application.conversion.conversion_job_repository import ConversionJobSt
 from scripts.run_conversion_worker_canary import (
     CANARY_OBJECT_KEY,
     CANARY_STORAGE_KEY,
+    AwsCliCanaryClient,
     build_canary_records,
     build_sqs_event,
     load_env_file,
@@ -82,6 +84,45 @@ def test_load_env_file_handles_comments_and_quoted_values(tmp_path: Path) -> Non
         "DATABASE_URL": "postgresql://user:secret@host/db?sslmode=require",
         "DATABASE_SCHEMA": "gettdone",
     }
+
+
+def test_upload_reserves_canary_object_without_bucket_listing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = AwsCliCanaryClient(profile="gettdone-iac", region="us-east-1", aws_cli="aws")
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+
+    def fake_run(*arguments: str, **kwargs):
+        calls.append((arguments, kwargs))
+        return subprocess.CompletedProcess(arguments, 0, stdout="{}", stderr="")
+
+    monkeypatch.setattr(client, "_run", fake_run)
+
+    client.upload_pdf(bucket="synthetic-bucket", raw_pdf=b"%PDF synthetic", path=tmp_path / "input.pdf")
+
+    put_arguments = calls[0][0]
+    assert put_arguments[:2] == ("s3api", "put-object")
+    assert put_arguments[put_arguments.index("--if-none-match") + 1] == "*"
+    assert calls[1][0][:2] == ("s3api", "head-object")
+
+
+def test_post_worker_object_check_accepts_s3_missing_key_403_without_list_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = AwsCliCanaryClient(profile="gettdone-iac", region="us-east-1", aws_cli="aws")
+    monkeypatch.setattr(
+        client,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [],
+            255,
+            stdout="",
+            stderr="An error occurred (403) when calling the HeadObject operation: Forbidden",
+        ),
+    )
+
+    assert client.reserved_object_remains(bucket="synthetic-bucket") is False
 
 
 def test_summarize_completed_record_reports_textract_evidence() -> None:
