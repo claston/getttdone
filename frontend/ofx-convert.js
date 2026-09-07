@@ -188,9 +188,11 @@
 
   async function syncConversionRuntime() {
     try {
+      const runtimeHeaders = buildOptionalAuthHeaders(getUserToken()) || {};
       const response = await fetch(`${apiBase}/api/conversion-runtime`, {
         method: "GET",
         credentials: "include",
+        headers: runtimeHeaders,
       });
       if (!response.ok) return;
       const payload = await response.json().catch(() => ({}));

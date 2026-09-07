@@ -27,6 +27,7 @@ from app.application import (
     SmtpContactService,
     TempAnalysisStorage,
 )
+from app.application.conversion.async_conversion_rollout import AsyncConversionRolloutPolicy
 from app.application.conversion.conversion_batch_repository import (
     ConversionBatchRepository,
     InMemoryConversionBatchRepository,
@@ -100,6 +101,7 @@ _google_oauth_service: GoogleOAuthService | None = None
 _conversion_capacity_controller: ConversionCapacityController | None = None
 _conversion_batch_repository: ConversionBatchRepository | None = None
 _conversion_batch_service: ConversionBatchService | None = None
+_async_conversion_report_service: ReportService | None = None
 
 
 class _DisabledConversionQueuePublisher:
@@ -172,6 +174,33 @@ def get_conversion_runtime_config() -> ConversionRuntimeConfig:
     return ConversionRuntimeConfig.from_mapping(os.environ)
 
 
+def get_async_conversion_rollout_policy() -> AsyncConversionRolloutPolicy:
+    return AsyncConversionRolloutPolicy.from_mapping(os.environ)
+
+
+def get_async_conversion_report_service() -> ReportService | None:
+    global _async_conversion_report_service
+    runtime = get_conversion_runtime_config()
+    rollout_policy = get_async_conversion_rollout_policy()
+    if runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS and not rollout_policy.enabled:
+        return None
+    if os.getenv("ANALYSIS_STORAGE", "filesystem").strip().lower() == "s3":
+        return _report_service
+    if _async_conversion_report_service is None:
+        _async_conversion_report_service = ReportService(
+            storage=S3AnalysisStorage(
+                root_dir=_backend_root / "tmp" / "async_analyses",
+                ttl_seconds=int(os.getenv("ANALYSIS_TTL_SECONDS", "86400")),
+                bucket=os.getenv("CONVERSION_S3_BUCKET", ""),
+                prefix=os.getenv("CONVERSION_RESULTS_S3_PREFIX", "conversion/results"),
+                region=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
+                server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
+                kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
+            )
+        )
+    return _async_conversion_report_service
+
+
 def get_conversion_batch_repository() -> ConversionBatchRepository:
     global _conversion_batch_repository
     if _conversion_batch_repository is not None:
@@ -203,7 +232,8 @@ def get_conversion_batch_repository() -> ConversionBatchRepository:
 def get_conversion_batch_service() -> ConversionBatchService | None:
     global _conversion_batch_service
     runtime = get_conversion_runtime_config()
-    if runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS:
+    rollout_policy = get_async_conversion_rollout_policy()
+    if runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS and not rollout_policy.enabled:
         return None
     if _conversion_batch_service is None:
         region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
@@ -215,7 +245,7 @@ def get_conversion_batch_service() -> ConversionBatchService | None:
             server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
             kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
         )
-        if runtime.execution_mode == ConversionExecutionMode.SQS_LAMBDA:
+        if runtime.execution_mode == ConversionExecutionMode.SQS_LAMBDA or rollout_policy.enabled:
             queue_publisher = SqsConversionQueuePublisher(
                 queue_url=os.getenv("CONVERSION_SQS_QUEUE_URL", ""),
                 region=region,

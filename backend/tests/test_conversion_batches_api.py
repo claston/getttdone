@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import dependencies
-from app.application.access_control import IdentityContext
+from app.application.access_control import IdentityContext, RegisteredUser
+from app.application.conversion.async_conversion_rollout import AsyncConversionRolloutPolicy
 from app.application.conversion.conversion_batch_repository import InMemoryConversionBatchRepository
 from app.application.conversion.conversion_batch_service import ConversionBatchService
 from app.application.conversion.conversion_document_store import ConversionDocumentReference
@@ -12,6 +13,7 @@ from app.application.conversion.conversion_runtime_config import ConversionRunti
 from app.application.conversion.s3_direct_upload_service import PreparedS3Upload
 from app.dependencies import (
     get_access_control_service,
+    get_async_conversion_rollout_policy,
     get_conversion_batch_service,
     get_conversion_runtime_config,
 )
@@ -31,6 +33,34 @@ class FakeAccessControlService:
             identity_id="anon_123",
             quota_limit=20,
             max_upload_size_bytes=5 * 1024 * 1024,
+        )
+
+
+class FakeRegisteredAccessControlService:
+    def __init__(self, *, email: str) -> None:
+        self.email = email
+
+    def ensure_quota_available(self, identity, *, required_units=1):
+        assert identity.identity_id == "usr_canary"
+        assert required_units >= 1
+
+    def resolve_identity(self, *, anonymous_fingerprint, user_token):
+        assert anonymous_fingerprint in {None, ""}
+        assert user_token == "allowed-token"
+        return IdentityContext(
+            identity_type="user",
+            identity_id="usr_canary",
+            quota_limit=20,
+            max_upload_size_bytes=5 * 1024 * 1024,
+        )
+
+    def get_user_by_id(self, user_id: str) -> RegisteredUser:
+        assert user_id == "usr_canary"
+        return RegisteredUser(
+            user_id=user_id,
+            email=self.email,
+            name="Canary",
+            token="allowed-token",
         )
 
 
@@ -150,6 +180,7 @@ def test_batch_api_stays_disabled_in_legacy_fallback_mode() -> None:
 
 def test_conversion_runtime_endpoint_exposes_safe_fallback_contract() -> None:
     app.dependency_overrides[get_conversion_runtime_config] = lambda: ConversionRuntimeConfig.from_mapping({})
+    app.dependency_overrides[get_access_control_service] = lambda: FakeAccessControlService()
     client = TestClient(app)
     try:
         response = client.get("/api/conversion-runtime")
@@ -165,6 +196,101 @@ def test_conversion_runtime_endpoint_exposes_safe_fallback_contract() -> None:
         "direct_batch_enabled": False,
         "fallback_endpoint": "/api/conversions/upload",
     }
+
+
+def test_allowlisted_user_gets_async_runtime_while_global_mode_stays_legacy() -> None:
+    app.dependency_overrides[get_conversion_runtime_config] = lambda: ConversionRuntimeConfig.from_mapping({})
+    app.dependency_overrides[get_access_control_service] = lambda: FakeRegisteredAccessControlService(
+        email="a@a.com.br"
+    )
+    app.dependency_overrides[get_async_conversion_rollout_policy] = lambda: (
+        AsyncConversionRolloutPolicy.from_mapping(
+            {"CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST": "a@a.com.br"}
+        )
+    )
+    client = TestClient(app)
+    try:
+        allowed = client.get(
+            "/api/conversion-runtime",
+            headers={"Authorization": "Bearer allowed-token"},
+        )
+        anonymous = client.get("/api/conversion-runtime")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert allowed.status_code == 200
+    assert allowed.json() == {
+        "architecture_mode": "async_aws",
+        "upload_mode": "direct_s3",
+        "execution_mode": "sqs_lambda",
+        "batch_max_files": 12,
+        "direct_batch_enabled": True,
+        "fallback_endpoint": "/api/conversions/upload",
+    }
+    assert anonymous.status_code == 200
+    assert anonymous.json()["architecture_mode"] == "legacy"
+    assert anonymous.json()["direct_batch_enabled"] is False
+
+
+def test_allowlisted_user_can_create_batch_while_global_mode_stays_legacy() -> None:
+    service = ConversionBatchService(
+        repository=InMemoryConversionBatchRepository(),
+        direct_upload_service=FakeDirectUploadService(),
+        queue_publisher=FakePublisher(calls=[]),
+    )
+    app.dependency_overrides[get_conversion_runtime_config] = lambda: ConversionRuntimeConfig.from_mapping({})
+    app.dependency_overrides[get_conversion_batch_service] = lambda: service
+    app.dependency_overrides[get_access_control_service] = lambda: FakeRegisteredAccessControlService(
+        email="a@a.com.br"
+    )
+    app.dependency_overrides[get_async_conversion_rollout_policy] = lambda: (
+        AsyncConversionRolloutPolicy.from_mapping(
+            {"CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST": "a@a.com.br"}
+        )
+    )
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/conversion-batches",
+            headers={
+                "Authorization": "Bearer allowed-token",
+                "Idempotency-Key": "allowed-request",
+            },
+            json={"files": _request_payload(1)["files"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "uploading"
+
+
+def test_non_allowlisted_user_cannot_create_batch_in_legacy_mode() -> None:
+    app.dependency_overrides[get_conversion_runtime_config] = lambda: ConversionRuntimeConfig.from_mapping({})
+    app.dependency_overrides[get_conversion_batch_service] = lambda: object()
+    app.dependency_overrides[get_access_control_service] = lambda: FakeRegisteredAccessControlService(
+        email="other@example.com"
+    )
+    app.dependency_overrides[get_async_conversion_rollout_policy] = lambda: (
+        AsyncConversionRolloutPolicy.from_mapping(
+            {"CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST": "a@a.com.br"}
+        )
+    )
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/conversion-batches",
+            headers={
+                "Authorization": "Bearer allowed-token",
+                "Idempotency-Key": "blocked-request",
+            },
+            json={"files": _request_payload(1)["files"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "async_conversion_disabled"
 
 
 def test_inline_shared_fallback_builds_without_sqs_configuration(monkeypatch: pytest.MonkeyPatch) -> None:

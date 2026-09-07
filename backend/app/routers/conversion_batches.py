@@ -8,6 +8,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.application import AccessControlService, InvalidUserTokenError, QuotaExceededError
+from app.application.conversion.async_conversion_rollout import AsyncConversionRolloutPolicy
 from app.application.conversion.conversion_batch_repository import ConversionBatchSnapshot
 from app.application.conversion.conversion_batch_service import (
     ConversionBatchFile,
@@ -23,6 +24,7 @@ from app.application.conversion.conversion_runtime_config import (
 )
 from app.dependencies import (
     get_access_control_service,
+    get_async_conversion_rollout_policy,
     get_conversion_batch_service,
     get_conversion_runtime_config,
 )
@@ -30,6 +32,7 @@ from app.routers.auth_session import (
     ANONYMOUS_IDENTITY_COOKIE_NAME,
     SESSION_ACCESS_COOKIE_NAME,
     resolve_anonymous_fingerprint_with_cookie,
+    resolve_user_token_with_session,
 )
 
 router = APIRouter()
@@ -91,14 +94,29 @@ class ConversionRuntimeResponse(BaseModel):
 
 @router.get("/api/conversion-runtime", response_model=ConversionRuntimeResponse)
 def conversion_runtime(
+    authorization: str | None = Header(default=None),
+    access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
+    access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConversionRuntimeResponse:
+    identity = _resolve_optional_registered_identity(
+        access_control_service=access_control_service,
+        authorization=authorization,
+        access_cookie_token=access_cookie_token,
+    )
+    effective_runtime = _effective_runtime(
+        runtime=runtime,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
+    )
     return ConversionRuntimeResponse(
-        architecture_mode=runtime.architecture_mode.value,
-        upload_mode=runtime.upload_mode.value,
-        execution_mode=runtime.execution_mode.value,
-        batch_max_files=runtime.batch_max_files,
-        direct_batch_enabled=_direct_batch_enabled(runtime),
+        architecture_mode=effective_runtime.architecture_mode.value,
+        upload_mode=effective_runtime.upload_mode.value,
+        execution_mode=effective_runtime.execution_mode.value,
+        batch_max_files=effective_runtime.batch_max_files,
+        direct_batch_enabled=_direct_batch_enabled(effective_runtime),
         fallback_endpoint="/api/conversions/upload",
     )
 
@@ -111,10 +129,10 @@ def create_conversion_batch(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
     service: ConversionBatchService | None = Depends(get_conversion_batch_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConversionBatchResponse:
-    active_service = _require_direct_batch(runtime, service)
     identity = _resolve_identity(
         access_control_service=access_control_service,
         anonymous_cookie_token=anonymous_cookie_token,
@@ -122,6 +140,13 @@ def create_conversion_batch(
         user_token=request.user_token,
         authorization=authorization,
         access_cookie_token=access_cookie_token,
+    )
+    active_service = _require_direct_batch(
+        runtime,
+        service,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
     )
     try:
         required_units = len(request.files) if identity.quota_mode == "conversion" else 1
@@ -172,10 +197,10 @@ def submit_conversion_batch(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
     service: ConversionBatchService | None = Depends(get_conversion_batch_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConversionBatchResponse:
-    active_service = _require_direct_batch(runtime, service)
     identity = _resolve_identity(
         access_control_service=access_control_service,
         anonymous_cookie_token=anonymous_cookie_token,
@@ -183,6 +208,13 @@ def submit_conversion_batch(
         user_token=request.user_token,
         authorization=authorization,
         access_cookie_token=access_cookie_token,
+    )
+    active_service = _require_direct_batch(
+        runtime,
+        service,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
     )
     trace_id = (x_request_id or "").strip()[:128] or f"trace-{uuid4().hex}"
     try:
@@ -224,10 +256,10 @@ def get_conversion_batch(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
     service: ConversionBatchService | None = Depends(get_conversion_batch_service),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> ConversionBatchResponse:
-    active_service = _require_async_service(runtime, service)
     identity = _resolve_identity(
         access_control_service=access_control_service,
         anonymous_cookie_token=anonymous_cookie_token,
@@ -235,6 +267,13 @@ def get_conversion_batch(
         user_token=user_token,
         authorization=authorization,
         access_cookie_token=access_cookie_token,
+    )
+    active_service = _require_async_service(
+        runtime,
+        service,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
     )
     snapshot = active_service.repository.get_for_owner(
         batch_id,
@@ -280,11 +319,63 @@ def _direct_batch_enabled(runtime: ConversionRuntimeConfig) -> bool:
     )
 
 
+def _resolve_optional_registered_identity(
+    *,
+    access_control_service: AccessControlService,
+    authorization: str | None,
+    access_cookie_token: str | None,
+):
+    try:
+        user_token = resolve_user_token_with_session(
+            access_control_service=access_control_service,
+            authorization=authorization,
+            explicit_user_token=None,
+            access_cookie_token=access_cookie_token,
+        )
+        if not user_token:
+            return None
+        return access_control_service.resolve_identity(
+            anonymous_fingerprint=None,
+            user_token=user_token,
+        )
+    except InvalidUserTokenError:
+        return None
+
+
+def _effective_runtime(
+    *,
+    runtime: ConversionRuntimeConfig,
+    rollout_policy: AsyncConversionRolloutPolicy,
+    identity,
+    access_control_service: AccessControlService,
+) -> ConversionRuntimeConfig:
+    if _direct_batch_enabled(runtime):
+        return runtime
+    if rollout_policy.allows(identity=identity, access_control_service=access_control_service):
+        return ConversionRuntimeConfig(
+            architecture_mode=ConversionArchitectureMode.ASYNC_AWS,
+            upload_mode=ConversionUploadMode.DIRECT_S3,
+            execution_mode=ConversionExecutionMode.SQS_LAMBDA,
+            batch_max_files=runtime.batch_max_files,
+        )
+    return runtime
+
+
 def _require_direct_batch(
     runtime: ConversionRuntimeConfig,
     service: ConversionBatchService | None,
+    *,
+    rollout_policy: AsyncConversionRolloutPolicy,
+    identity,
+    access_control_service: AccessControlService,
 ) -> ConversionBatchService:
-    if not _direct_batch_enabled(runtime) or service is None:
+    effective_runtime = _effective_runtime(
+        runtime=runtime,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
+    )
+    if not _direct_batch_enabled(effective_runtime) or service is None:
         raise HTTPException(
             status_code=409,
             detail={
@@ -299,8 +390,18 @@ def _require_direct_batch(
 def _require_async_service(
     runtime: ConversionRuntimeConfig,
     service: ConversionBatchService | None,
+    *,
+    rollout_policy: AsyncConversionRolloutPolicy,
+    identity,
+    access_control_service: AccessControlService,
 ) -> ConversionBatchService:
-    if runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS or service is None:
+    effective_runtime = _effective_runtime(
+        runtime=runtime,
+        rollout_policy=rollout_policy,
+        identity=identity,
+        access_control_service=access_control_service,
+    )
+    if effective_runtime.architecture_mode != ConversionArchitectureMode.ASYNC_AWS or service is None:
         raise HTTPException(status_code=404, detail="Conversion batch not found.")
     return service
 

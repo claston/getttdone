@@ -88,6 +88,71 @@ def test_validate_baseline_accepts_inline_shared_fallback_without_queue(monkeypa
     validate_production_security_baseline()
 
 
+def test_validate_baseline_rejects_incomplete_user_scoped_async_rollout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONVERSION_ARCHITECTURE_MODE", "legacy")
+    monkeypatch.setenv("CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST", "a@a.com.br")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CONVERSION_S3_BUCKET", raising=False)
+    monkeypatch.delenv("CONVERSION_SQS_QUEUE_URL", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_security_baseline()
+
+    message = str(exc.value)
+    assert "DATABASE_URL must be PostgreSQL for user-scoped async conversions" in message
+    assert "CONVERSION_S3_BUCKET must be configured for user-scoped async conversions" in message
+    assert "CONVERSION_SQS_QUEUE_URL must be configured for user-scoped async conversions" in message
+    assert "AWS_REGION must be configured for user-scoped async conversions" in message
+
+
+def test_validate_baseline_accepts_user_scoped_async_rollout_while_legacy_stays_local(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONVERSION_ARCHITECTURE_MODE", "legacy")
+    monkeypatch.setenv("CONVERSION_UPLOAD_MODE", "proxy")
+    monkeypatch.setenv("CONVERSION_EXECUTION_MODE", "inline_legacy")
+    monkeypatch.setenv("CONVERSION_DOCUMENT_STORE", "filesystem")
+    monkeypatch.setenv("ANALYSIS_STORAGE", "filesystem")
+    monkeypatch.setenv("CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST", "a@a.com.br")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://database.example/gettdone?sslmode=require")
+    monkeypatch.setenv("CONVERSION_BATCH_REPOSITORY", "postgres")
+    monkeypatch.setenv("CONVERSION_S3_BUCKET", "private-conversions")
+    monkeypatch.setenv("CONVERSION_SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/123/jobs")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+    validate_production_security_baseline()
+
+
+def test_validate_baseline_rejects_invalid_async_rollout_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ACCESS_CONTROL_TOKEN_SECRET", "a" * 40)
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://ofxsimples.com.br")
+    monkeypatch.setenv("ENABLE_API_DOCS", "false")
+    monkeypatch.setenv("UNLIMITED_ANON_QUOTA", "false")
+    monkeypatch.setenv("CONVERSION_ASYNC_USER_EMAIL_ALLOWLIST", "not-an-email")
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_security_baseline()
+
+    assert "Invalid async conversion rollout configuration" in str(exc.value)
+
+
 def test_read_bool_env_falls_back_to_default_for_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECURITY_FLAG", "not-a-bool")
     assert read_bool_env("SECURITY_FLAG", default=False) is False

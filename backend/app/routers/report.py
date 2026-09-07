@@ -12,7 +12,18 @@ from app.application import (
     InvalidUserTokenError,
     ReportService,
 )
-from app.dependencies import get_access_control_service, get_report_service
+from app.application.conversion.async_conversion_rollout import AsyncConversionRolloutPolicy
+from app.application.conversion.conversion_runtime_config import (
+    ConversionArchitectureMode,
+    ConversionRuntimeConfig,
+)
+from app.dependencies import (
+    get_access_control_service,
+    get_async_conversion_report_service,
+    get_async_conversion_rollout_policy,
+    get_conversion_runtime_config,
+    get_report_service,
+)
 from app.routers.auth_session import (
     ANONYMOUS_IDENTITY_COOKIE_NAME,
     SESSION_ACCESS_COOKIE_NAME,
@@ -142,6 +153,9 @@ def get_convert_report(
     access_cookie_token: str | None = Cookie(default=None, alias=SESSION_ACCESS_COOKIE_NAME),
     anonymous_cookie_token: str | None = Cookie(default=None, alias=ANONYMOUS_IDENTITY_COOKIE_NAME),
     service: ReportService = Depends(get_report_service),
+    async_service: ReportService | None = Depends(get_async_conversion_report_service),
+    runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
     access_control_service: AccessControlService = Depends(get_access_control_service),
 ) -> FileResponse:
     try:
@@ -160,12 +174,16 @@ def get_convert_report(
             anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
-        service.assert_convert_owner(
+        active_service = _select_convert_report_service(
             analysis_id=processing_id,
-            identity_type=identity.identity_type,
-            identity_id=identity.identity_id,
+            legacy_service=service,
+            async_service=async_service,
+            runtime=runtime,
+            rollout_policy=rollout_policy,
+            identity=identity,
+            access_control_service=access_control_service,
         )
-        report_path = service.get_convert_report_path(
+        report_path = active_service.get_convert_report_path(
             processing_id,
             file_format=file_format,
             closing_balance=closing_balance if file_format == "ofx" else None,
@@ -173,7 +191,7 @@ def get_convert_report(
             account_number=account_number if file_format == "ofx" else None,
             bank_code=bank_code if file_format == "ofx" else None,
         )
-        upload_filename = service.get_upload_filename(processing_id)
+        upload_filename = active_service.get_upload_filename(processing_id)
     except AnalysisNotFoundError:
         raise HTTPException(status_code=404, detail="Analysis not found")
     except AnalysisAccessDeniedError:
@@ -207,6 +225,9 @@ def apply_convert_edits(
     processing_id: str,
     payload: ConvertEditsRequest,
     service: ReportService = Depends(get_report_service),
+    async_service: ReportService | None = Depends(get_async_conversion_report_service),
+    runtime: ConversionRuntimeConfig = Depends(get_conversion_runtime_config),
+    rollout_policy: AsyncConversionRolloutPolicy = Depends(get_async_conversion_rollout_policy),
     anonymous_fingerprint: str | None = Query(default=None),
     authorization: str | None = Header(default=None),
     user_token: str | None = Query(default=None),
@@ -230,12 +251,16 @@ def apply_convert_edits(
             anonymous_fingerprint=resolved_anonymous_fingerprint,
             user_token=resolved_user_token or None,
         )
-        service.assert_convert_owner(
+        active_service = _select_convert_report_service(
             analysis_id=processing_id,
-            identity_type=identity.identity_type,
-            identity_id=identity.identity_id,
+            legacy_service=service,
+            async_service=async_service,
+            runtime=runtime,
+            rollout_policy=rollout_policy,
+            identity=identity,
+            access_control_service=access_control_service,
         )
-        result = service.apply_convert_edits(
+        result = active_service.apply_convert_edits(
             analysis_id=processing_id,
             edits=[item.model_dump() for item in payload.edits],
             expected_updated_at=payload.expected_updated_at,
@@ -259,6 +284,39 @@ def apply_convert_edits(
             status_code=400,
             detail="Missing or invalid identity context. Start an anonymous session or authenticate.",
         )
+
+
+def _select_convert_report_service(
+    *,
+    analysis_id: str,
+    legacy_service: ReportService,
+    async_service: ReportService | None,
+    runtime: ConversionRuntimeConfig,
+    rollout_policy: AsyncConversionRolloutPolicy,
+    identity,
+    access_control_service: AccessControlService,
+) -> ReportService:
+    use_async = runtime.architecture_mode == ConversionArchitectureMode.ASYNC_AWS or rollout_policy.allows(
+        identity=identity,
+        access_control_service=access_control_service,
+    )
+    candidates: list[ReportService] = []
+    if use_async and async_service is not None:
+        candidates.append(async_service)
+    if all(candidate is not legacy_service for candidate in candidates):
+        candidates.append(legacy_service)
+
+    for candidate in candidates:
+        try:
+            candidate.assert_convert_owner(
+                analysis_id=analysis_id,
+                identity_type=identity.identity_type,
+                identity_id=identity.identity_id,
+            )
+            return candidate
+        except AnalysisNotFoundError:
+            continue
+    raise AnalysisNotFoundError
 
 
 def _build_convert_download_filename(analysis_id: str, upload_filename: str | None, file_format: str) -> str:
