@@ -2405,7 +2405,7 @@
     );
     state.bankBranchOverride = normalizeBankBranchDisplay(analysis.bank_branch || "");
     state.accountNumberOverride = normalizeAccountDisplay(analysis.account_number || "");
-    state.bankCodeOverride = resolveInitialBankCode(analysis, state.bankCodeOverride);
+    state.bankCodeOverride = resolveInitialBankCode(analysis, "");
     markChangedRow(null);
     if (addRowBtn) addRowBtn.disabled = false;
 

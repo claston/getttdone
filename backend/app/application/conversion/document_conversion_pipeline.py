@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import monotonic
 from uuid import uuid4
@@ -25,6 +25,7 @@ from app.application.conversion.document_extractor import (
 )
 from app.application.conversion.document_preflight_service import (
     DocumentPreflightPolicy,
+    DocumentPreflightResult,
     DocumentPreflightService,
 )
 from app.application.conversion.persisted_conversion_result import PersistedConversionResult
@@ -313,6 +314,7 @@ class DocumentConversionPipeline:
         request: MaterializedConversionJob,
         runtime: DocumentConversionRuntime,
     ) -> PreparedDocumentConversion:
+        request = self._materialize_missing_preflight(request)
         identity = request.identity
         runtime.identity = identity
         logger.info(
@@ -346,6 +348,32 @@ class DocumentConversionPipeline:
             job=request,
             identity=identity,
             preflight_policy=preflight_policy,
+        )
+
+    def _materialize_missing_preflight(self, request: MaterializedConversionJob) -> MaterializedConversionJob:
+        current = request.preflight_result
+        needs_scan_detection = current.scanned_likely is None
+        needs_page_count = request.document.file_type == "pdf" and current.estimated_pages_count is None
+        if not needs_scan_detection and not needs_page_count:
+            return request
+
+        inspected = self.document_preflight_service.inspect_raw_bytes(
+            filename=request.document.filename,
+            raw_bytes=request.document.raw_bytes,
+        )
+        resolved = DocumentPreflightResult(
+            scanned_likely=current.scanned_likely if current.scanned_likely is not None else inspected.scanned_likely,
+            estimated_pages_count=(
+                current.estimated_pages_count
+                if current.estimated_pages_count is not None
+                else inspected.estimated_pages_count
+            ),
+        )
+        if resolved == current:
+            return request
+        return MaterializedConversionJob(
+            job=replace(request.job, preflight_result=resolved),
+            document=request.document,
         )
 
     def _record_processing_started(

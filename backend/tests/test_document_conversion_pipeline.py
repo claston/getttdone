@@ -10,7 +10,7 @@ from app.application.conversion.document_conversion_pipeline import (
     DocumentConversionRuntime,
 )
 from app.application.conversion.document_extractor import ExtractedDocument
-from app.application.conversion.document_preflight_service import DocumentPreflightResult
+from app.application.conversion.document_preflight_service import DocumentPreflightResult, DocumentPreflightService
 from app.application.conversion.statement_parser import ParsedBankStatement, ParsedTransaction
 from app.application.conversion.uploaded_document import UploadedDocument, UploadedDocumentStage
 from app.application.conversion_pipeline import ConversionPipelineResult, OperationalPipelineSummary
@@ -227,6 +227,15 @@ class FakeStatementParser:
         )
 
 
+class RecordingDocumentPreflightService(DocumentPreflightService):
+    def __init__(self) -> None:
+        self.inspections: list[tuple[str, bytes]] = []
+
+    def inspect_raw_bytes(self, *, filename: str, raw_bytes: bytes) -> DocumentPreflightResult:
+        self.inspections.append((filename, raw_bytes))
+        return DocumentPreflightResult(scanned_likely=True, estimated_pages_count=4)
+
+
 def test_conversion_job_captures_preflight_flags() -> None:
     staged_path = Path(__file__).parent / "fixtures" / "document_conversion_pipeline_statement.csv"
     document = UploadedDocument.from_staged_upload(
@@ -343,3 +352,42 @@ def test_document_conversion_pipeline_uses_processing_pipeline_when_available() 
     assert response.metadata["page_count"] == 1
     assert report_service.owners == [(response.payload["processing_id"], "user", "user_123")]
     assert access_control_service.consumed_units == [1]
+
+
+def test_async_job_materializes_missing_preflight_before_recording_conversion() -> None:
+    staged_path = Path(__file__).parent / "fixtures" / "document_conversion_pipeline_statement.csv"
+    document = UploadedDocument.from_staged_upload(
+        filename="scanned-statement.pdf",
+        staged_upload=UploadedDocumentStage(
+            path=staged_path,
+            size_bytes=staged_path.stat().st_size,
+            sha256_hex="abc123",
+        ),
+    )
+    access_control_service = FakeAccessControlService()
+    preflight_service = RecordingDocumentPreflightService()
+    pipeline = DocumentConversionPipeline(
+        report_service=FakeReportService(),
+        access_control_service=access_control_service,
+        document_preflight_service=preflight_service,
+        processing_pipeline=FakeProcessingPipeline(),
+        analysis_repository=FakeAnalysisRepository(),
+        document_extractor=FakeDocumentExtractor(),
+        statement_parser=FakeStatementParser(),
+    )
+    job = ConversionJob.create(
+        batch_id="batch_async_preflight",
+        document=ConversionDocumentReference.from_document(
+            document,
+            storage_key="doc_1234567890abcdef12345678",
+        ),
+        identity=access_control_service.identity,
+    )
+
+    response = pipeline.run_job(job=job, document=document, hooks=ConversionExecutionHooks())
+
+    assert job.preflight_result == DocumentPreflightResult(scanned_likely=None, estimated_pages_count=None)
+    assert preflight_service.inspections == [("scanned-statement.pdf", document.raw_bytes)]
+    assert access_control_service.recorded_user_conversions[-1]["scanned_likely"] is True
+    assert response.metadata is not None
+    assert response.metadata["is_scanned"] is True
