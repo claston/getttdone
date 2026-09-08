@@ -6,8 +6,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /build
-COPY backend/requirements.txt backend/requirements-lambda.txt ./
-RUN python -m pip install --only-binary=:all: --target /build/site-packages -r requirements-lambda.txt
+COPY backend/requirements-worker.txt ./
+RUN python -m pip install --only-binary=:all: --target /build/site-packages -r requirements-worker.txt
 
 FROM ${PYTHON_IMAGE} AS runtime
 
@@ -20,6 +20,12 @@ ENV APP_RELEASE=${APP_RELEASE}
 
 WORKDIR /var/task
 COPY --from=build /build/site-packages /var/task
-COPY backend/app /var/task/app
+COPY backend/app/__init__.py /var/task/app/__init__.py
+COPY backend/app/schemas.py /var/task/app/schemas.py
+COPY backend/app/application /var/task/app/application
+COPY backend/app/data /var/task/app/data
+COPY backend/app/workers /var/task/app/workers
+
+RUN python -m app.workers.worker_image_contract
 
 CMD ["app.workers.conversion_lambda.lambda_handler"]
