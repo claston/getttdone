@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.application.access_control import IdentityContext
 from app.application.conversion.conversion_batch import ConversionBatch
 from app.application.conversion.conversion_batch_repository import (
     ConversionBatchRepository,
@@ -13,6 +12,7 @@ from app.application.conversion.conversion_batch_repository import (
 from app.application.conversion.conversion_document_store import ConversionDocumentReference
 from app.application.conversion.conversion_job import ConversionJob
 from app.application.conversion.conversion_job_repository import ConversionJobStatus
+from app.application.conversion.identity import IdentityContext
 from app.application.conversion.s3_direct_upload_service import PreparedS3Upload, S3DirectUploadService
 
 

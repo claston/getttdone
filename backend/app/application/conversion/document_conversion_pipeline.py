@@ -10,9 +10,9 @@ from pathlib import Path
 from time import monotonic
 from uuid import uuid4
 
-from app.application.access_control import AccessControlService
 from app.application.analysis_response_builder import build_convert_response_payload, persist_conversion_result
 from app.application.bank_identity import resolve_conversion_model_label
+from app.application.conversion.conversion_access import ConversionAccessPort
 from app.application.conversion.conversion_document_store import ConversionDocumentReference
 from app.application.conversion.conversion_job import ConversionExecutionHooks, ConversionJob
 from app.application.conversion.conversion_job_factory import resolve_conversion_identity
@@ -131,7 +131,7 @@ class DocumentConversionPipeline:
         self,
         *,
         report_service: ReportService,
-        access_control_service: AccessControlService,
+        access_control_service: ConversionAccessPort,
         document_preflight_service: DocumentPreflightService | None = None,
         quota_validator_service: QuotaValidatorService | None = None,
         processing_pipeline: ConversionPipeline | None = None,
@@ -760,7 +760,7 @@ def _is_likely_corrupted_pdf_detail(detail: str) -> bool:
     return any(marker in normalized for marker in corrupted_markers)
 
 
-def _safe_record_anonymous_conversion_event(access_control_service: AccessControlService, **kwargs) -> None:
+def _safe_record_anonymous_conversion_event(access_control_service: ConversionAccessPort, **kwargs) -> None:
     try:
         access_control_service.record_anonymous_conversion_event(**kwargs)
     except Exception as exc:
@@ -770,7 +770,7 @@ def _safe_record_anonymous_conversion_event(access_control_service: AccessContro
         )
 
 
-def _safe_record_user_conversion(access_control_service: AccessControlService, **kwargs) -> None:
+def _safe_record_user_conversion(access_control_service: ConversionAccessPort, **kwargs) -> None:
     try:
         access_control_service.record_user_conversion(**kwargs)
     except Exception as exc:

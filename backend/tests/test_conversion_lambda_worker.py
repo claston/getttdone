@@ -227,3 +227,31 @@ def test_worker_structured_info_logs_are_emitted_with_warning_root_logger() -> N
         "event": "worker_smoke",
         "job_id": "job_safe",
     }
+
+
+def test_build_lambda_processor_uses_worker_access_without_token_secret(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class WorkerAccess:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    class AnalysisStorage:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://worker:test@database.example/gettdone")
+    monkeypatch.setenv("CONVERSION_S3_BUCKET", "gettdone-conversions")
+    monkeypatch.delenv("ACCESS_CONTROL_TOKEN_SECRET", raising=False)
+    monkeypatch.setattr(conversion_lambda, "PostgresConversionAccessService", WorkerAccess)
+    monkeypatch.setattr(conversion_lambda, "S3AnalysisStorage", AnalysisStorage)
+
+    processor = conversion_lambda.build_lambda_processor()
+
+    assert isinstance(processor.pipeline.access_control_service, WorkerAccess)
+    assert captured == {
+        "database_url": "postgresql://worker:test@database.example/gettdone",
+        "database_schema": "public",
+        "db_pool_min_size": 1,
+        "db_pool_max_size": 1,
+    }
