@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from app.application.access_control import AccessControlService
+from app.application.access_control import AccessControlService, RegisteredUser
 from app.application.errors import (
     GoogleOAuthAccountNotFoundError,
     GoogleOAuthExchangeError,
@@ -27,6 +27,12 @@ class GoogleOAuthConfig:
     redirect_uri: str
     frontend_base_url: str
     state_ttl_seconds: int = 600
+
+
+@dataclass(frozen=True)
+class GoogleOAuthCallbackResult:
+    redirect_url: str
+    user: RegisteredUser | None = None
 
 
 class GoogleOAuthService:
@@ -70,6 +76,10 @@ class GoogleOAuthService:
         return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
     def build_callback_redirect_url(self, *, code: str, state: str) -> str:
+        """Compatibility facade for callers that only need the destination URL."""
+        return self.complete_callback(code=code, state=state).redirect_url
+
+    def complete_callback(self, *, code: str, state: str) -> GoogleOAuthCallbackResult:
         self._assert_configured()
         oauth_state = self.access_control_service.consume_google_oauth_state(state=state)
         if oauth_state is None:
@@ -117,7 +127,9 @@ class GoogleOAuthService:
                     "prefill_name": name or email.split("@", 1)[0],
                 }
             )
-            return f"{self.config.frontend_base_url}/signup.html?{params}"
+            return GoogleOAuthCallbackResult(
+                redirect_url=f"{self.config.frontend_base_url}/signup.html?{params}"
+            )
 
         record_successful_login_safely(
             self.access_control_service,
@@ -127,12 +139,14 @@ class GoogleOAuthService:
 
         params = urlencode(
             {
-                "user_token": user.token,
                 "next": self._normalize_next_path(str(oauth_state["next_path"])),
                 "provider": "google",
             }
         )
-        return f"{self.config.frontend_base_url}/auth-callback.html?{params}"
+        return GoogleOAuthCallbackResult(
+            redirect_url=f"{self.config.frontend_base_url}/auth-callback.html?{params}",
+            user=user,
+        )
 
     def _exchange_code_for_token(self, *, code: str, code_verifier: str) -> dict[str, Any]:
         payload = urlencode(

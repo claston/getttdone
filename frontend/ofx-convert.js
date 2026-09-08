@@ -1,4 +1,7 @@
 (function () {
+  "use strict";
+
+  const session = window.OfxSession;
   const input = document.getElementById("file-input");
   const dropzone = document.getElementById("dropzone");
   const dropzoneEmpty = document.getElementById("dropzone-empty");
@@ -177,22 +180,16 @@
   const QUOTA_LOGIN_URL = "./login.html?next=%2Fclient-area.html&force_auth=1";
   const QUOTA_PLANS_URL = "./planos.html?reason=quota";
   const QUOTA_SUPPORT_URL = "./contato.html?reason=quota";
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const USER_TOKEN_COOKIE = "ofxsimples_user_token";
   const OAUTH_DEBUG_KEY = "ofxsimples_last_google_oauth_debug";
-  const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
-  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
   const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
   const QUOTA_LOCK_VARIANT_ANONYMOUS = "anonymous-free-limit";
   const QUOTA_LOCK_VARIANT_REGISTERED = "registered-free-limit";
+  let currentUser = null;
 
   async function syncConversionRuntime() {
     try {
-      const runtimeHeaders = buildOptionalAuthHeaders(getUserToken()) || {};
-      const response = await fetch(`${apiBase}/api/conversion-runtime`, {
+      const response = await session.request(`${apiBase}/api/conversion-runtime`, {
         method: "GET",
-        credentials: "include",
-        headers: runtimeHeaders,
       });
       if (!response.ok) return;
       const payload = await response.json().catch(() => ({}));
@@ -215,101 +212,6 @@
     } catch (_error) {
       state.conversionRuntime = { directBatchEnabled: false, batchMaxFiles: 1 };
       input.multiple = false;
-    }
-  }
-
-  function isIpv4Host(hostname) {
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
-  }
-
-  function normalizeDomainCandidate(value) {
-    return String(value || "").trim().toLowerCase().replace(/^\.+/, "");
-  }
-
-  function getConfiguredSharedCookieAllowlist() {
-    const configured = window.__OFX_TOKEN_SHARED_COOKIE_ALLOWLIST__;
-    if (!Array.isArray(configured)) {
-      return TOKEN_SHARED_COOKIE_ALLOWLIST;
-    }
-    const normalized = configured
-      .map(function (item) {
-        return normalizeDomainCandidate(item);
-      })
-      .filter(function (item) {
-        return /^[a-z0-9.-]+$/.test(item) && item.includes(".");
-      });
-    if (normalized.length) {
-      return normalized;
-    }
-    return TOKEN_SHARED_COOKIE_ALLOWLIST;
-  }
-
-  function resolveLegacySharedCookieDomain() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const labels = host.split(".").filter(Boolean);
-    if (labels.length < 2) {
-      return null;
-    }
-    if (labels.length >= 3 && labels[labels.length - 2] === "com" && labels[labels.length - 1] === "br") {
-      return `.${labels.slice(-3).join(".")}`;
-    }
-    return `.${labels.slice(-2).join(".")}`;
-  }
-
-  function resolveSharedCookieDomain() {
-    if (window.location.protocol !== "https:") {
-      return null;
-    }
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const allowedDomains = getConfiguredSharedCookieAllowlist();
-    for (const allowedDomain of allowedDomains) {
-      if (host === allowedDomain || host.endsWith(`.${allowedDomain}`)) {
-        return `.${allowedDomain}`;
-      }
-    }
-    return null;
-  }
-
-  function readUserTokenCookie() {
-    const entries = String(document.cookie || "").split(";");
-    for (const entry of entries) {
-      const [namePart, ...valueParts] = entry.split("=");
-      const name = String(namePart || "").trim();
-      if (name !== USER_TOKEN_COOKIE) continue;
-      const rawValue = valueParts.join("=");
-      const decoded = decodeURIComponent(String(rawValue || "").trim());
-      if (decoded) return decoded;
-    }
-    return "";
-  }
-
-  function writeUserTokenCookie(token) {
-    const safeToken = encodeURIComponent(String(token || "").trim());
-    if (!safeToken) return;
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function clearUserTokenCookie() {
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    const legacySharedDomain = resolveLegacySharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-    if (legacySharedDomain && legacySharedDomain !== sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${legacySharedDomain}; SameSite=Lax${secureAttr}`;
     }
   }
 
@@ -340,23 +242,13 @@
     }
   }
 
-  function getUserToken() {
-    const localToken = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    if (localToken) {
-      writeUserTokenCookie(localToken);
-      return localToken;
-    }
-    const cookieToken = readUserTokenCookie();
-    if (cookieToken) {
-      localStorage.setItem(USER_TOKEN_KEY, cookieToken);
-      return cookieToken;
-    }
-    return null;
+  function hasUserSession() {
+    return currentUser !== null;
   }
 
-  function clearUserToken() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    clearUserTokenCookie();
+  function clearUserSession() {
+    currentUser = null;
+    if (session) void session.logout();
   }
 
   function persistOAuthDebug(payload) {
@@ -373,29 +265,15 @@
     }
   }
 
-  function getProfileHint() {
-    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
-  }
-
-  function setProfileHint(email) {
-    const value = String(email || "").trim();
-    if (value) {
-      localStorage.setItem(PROFILE_HINT_KEY, value);
-    }
-    const token = getUserToken();
-    if (token) {
-      writeUserTokenCookie(token);
-    }
-  }
-
-  function consumeLogoutQueryFlag() {
+  async function consumeLogoutQueryFlag() {
     const url = new URL(window.location.href);
     const rawLogout = String(url.searchParams.get("logout") || "").trim().toLowerCase();
     const shouldLogout = rawLogout === "1" || rawLogout === "true" || rawLogout === "yes" || rawLogout === "on";
     if (!shouldLogout) {
       return false;
     }
-    clearUserToken();
+    currentUser = null;
+    if (session) await session.logout();
     url.searchParams.delete("logout");
     const cleaned = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState({}, "", cleaned);
@@ -439,36 +317,19 @@
   }
 
   async function getSessionValidationState() {
-    const token = getUserToken();
     try {
-      const requestInit = {
-        credentials: "include",
-      };
-      if (token) {
-        requestInit.headers = { authorization: `Bearer ${token}` };
-      }
-      const response = await fetch(`${apiBase}/auth/me`, {
-        ...requestInit,
-      });
+      const resolvedUser = session ? await session.getCurrentUser() : null;
+      currentUser = resolvedUser;
       persistOAuthDebug({
         stage: "ofx_convert_auth_me_result",
         path: window.location.pathname,
-        hasToken: Boolean(token),
-        status: response.status,
-        ok: response.ok,
+        hasSession: Boolean(resolvedUser),
       });
-      if (response.ok) {
-        return "valid";
-      }
-      if (response.status === 401) {
-        return token ? "invalid" : "missing";
-      }
-      return "unknown";
+      return resolvedUser ? "valid" : "missing";
     } catch (_error) {
       persistOAuthDebug({
         stage: "ofx_convert_auth_me_network_error",
         path: window.location.pathname,
-        hasToken: Boolean(token),
       });
       return "unknown";
     }
@@ -482,26 +343,13 @@
     if (!requireAuthAccess) {
       return true;
     }
-    const token = getUserToken();
-    if (!token) {
-      redirectToInternalLogin();
-      return false;
-    }
     const sessionState = await getSessionValidationState();
     if (sessionState !== "valid") {
-      clearUserToken();
+      clearUserSession();
       redirectToInternalLogin();
       return false;
     }
     return true;
-  }
-
-  function buildOptionalAuthHeaders(userToken) {
-    const token = String(userToken || "").trim();
-    if (!token) {
-      return null;
-    }
-    return { authorization: `Bearer ${token}` };
   }
 
   function parseDownloadFilenameFromContentDisposition(headerValue) {
@@ -744,9 +592,9 @@
       (quotaLockOverlay && quotaLockOverlay.dataset ? quotaLockOverlay.dataset.variant : "") ||
       "";
     const sessionState = await getSessionValidationState();
-    if (sessionState === "invalid") {
+    if (sessionState === "missing") {
       hideQuotaLockOverlay();
-      clearUserToken();
+      clearUserSession();
       syncHeroAuthLinks();
       setStatus("Sua sessão expirou. Faça login novamente para continuar.", "error");
       return;
@@ -901,14 +749,23 @@
   }
 
   function syncHeroAuthLinks(profileEmail) {
-    const fallbackEmail = String(profileEmail || "").trim() || getProfileHint();
-    const hasSession = Boolean(String(profileEmail || "").trim() || getUserToken());
+    const fallbackEmail = String(profileEmail || currentUser?.email || "conta").trim() || "conta";
+    const hasSession = Boolean(String(profileEmail || "").trim() || hasUserSession());
     if (topAuthLoginLink) topAuthLoginLink.classList.toggle("hidden", hasSession);
     if (topAuthPrimaryLink) {
       if (hasSession) {
         const email = fallbackEmail;
         const initial = email.charAt(0).toUpperCase();
-        topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${email}</span><span class="top-account-caret">&#9662;</span>`;
+        const avatar = document.createElement("span");
+        avatar.className = "top-account-avatar";
+        avatar.textContent = initial;
+        const label = document.createElement("span");
+        label.className = "top-account-email";
+        label.textContent = email;
+        const caret = document.createElement("span");
+        caret.className = "top-account-caret";
+        caret.textContent = "▾";
+        topAuthPrimaryLink.replaceChildren(avatar, label, caret);
         topAuthPrimaryLink.classList.add("top-account-trigger");
       } else {
         topAuthPrimaryLink.textContent = "Converter agora";
@@ -919,25 +776,15 @@
   }
 
   async function hydrateTopAccountEmail() {
-    const token = getUserToken();
     if (!topAuthPrimaryLink) return;
     try {
-      const requestInit = {
-        credentials: "include",
-      };
-      if (token) {
-        requestInit.headers = { authorization: `Bearer ${token}` };
-      }
-      const response = await fetch(`${apiBase}/auth/me`, {
-        ...requestInit,
-      });
-      if (!response.ok) {
-        if (response.status === 401 && token) clearUserToken();
+      const payload = session ? await session.getCurrentUser() : null;
+      currentUser = payload;
+      if (!payload) {
+        syncHeroAuthLinks();
         return;
       }
-      const payload = await response.json().catch(() => ({}));
       const email = String(payload.email || "conta").trim() || "conta";
-      setProfileHint(email);
       syncHeroAuthLinks(email);
     } catch (_error) {
       // Keep fallback.
@@ -964,7 +811,7 @@
 
   function saveViewState(payload) {
     try {
-      localStorage.setItem(VIEW_STATE_KEY, JSON.stringify(payload));
+      sessionStorage.setItem(VIEW_STATE_KEY, JSON.stringify(payload));
     } catch (_error) {
       // Ignore storage failures.
     }
@@ -972,7 +819,7 @@
 
   function loadViewState() {
     try {
-      const raw = localStorage.getItem(VIEW_STATE_KEY);
+      const raw = sessionStorage.getItem(VIEW_STATE_KEY);
       if (!raw) {
         return null;
       }
@@ -988,7 +835,7 @@
 
   function clearViewState() {
     try {
-      localStorage.removeItem(VIEW_STATE_KEY);
+      sessionStorage.removeItem(VIEW_STATE_KEY);
     } catch (_error) {
       // Ignore storage failures.
     }
@@ -1482,19 +1329,19 @@
     const ofxMetaRow = isCreditCardFlow
       ? `
       <div class="ofx-meta-row">
-        <p class="kpi-hint">Fatura de cartao detectada</p>
+        <p class="kpi-hint">Fatura de cartão detectada</p>
         <div class="ofx-meta-fields">
-          <p class="kpi-hint">OFX de cartao nao precisa de banco, agencia ou conta para exportacao.</p>
+          <p class="kpi-hint">OFX de cartão não precisa de banco, agência ou conta para exportação.</p>
         </div>
       </div>
       `
       : isOfxFlow
         ? `
         <div class="ofx-meta-row">
-          <p class="kpi-hint">Banco, Agencia e Conta</p>
+          <p class="kpi-hint">Banco, Agência e Conta</p>
           <div class="ofx-meta-fields">
             <select id="bank-code-select" class="kpi-edit-input">${bankOptionsMarkup}</select>
-            <input id="bank-branch-input" class="kpi-edit-input" type="text" inputmode="numeric" placeholder="Agencia (ex: 1234-5)" value="${bankBranchValue}" />
+            <input id="bank-branch-input" class="kpi-edit-input" type="text" inputmode="numeric" placeholder="Agência (ex: 1234-5)" value="${bankBranchValue}" />
             <input id="account-number-input" class="kpi-edit-input" type="text" inputmode="numeric" placeholder="Conta (ex: 123456-7)" value="${accountNumberValue}" />
           </div>
         </div>
@@ -1509,11 +1356,11 @@
       ${reviewWarningsMarkup}
       ${ofxMetaRow}
       <article class="kpi">
-        <p class="kpi-label">Transacoes</p>
+        <p class="kpi-label">Transações</p>
         <p class="kpi-value">${derived.transactionsTotal}</p>
       </article>
       <article class="kpi">
-        <p class="kpi-label">Paginas convertidas</p>
+        <p class="kpi-label">Páginas convertidas</p>
         <p class="kpi-value">${pagesConverted}</p>
       </article>
       <article class="kpi">
@@ -2104,7 +1951,7 @@
       return "Saldo inconsistente";
     }
     if (key === "layout_fallback") {
-      return "Modelo generico";
+      return "Modelo genérico";
     }
     if (key === "manual_review_recommended") {
       return "Revisao manual";
@@ -2121,13 +1968,13 @@
   function mapWarningTypeExplanation(value) {
     const key = String(value || "").trim().toLowerCase();
     if (key === "balance_consistency_failed") {
-      return "O saldo calculado para esta linha nao bateu com a consistencia esperada do extrato.";
+      return "O saldo calculado para esta linha não bateu com a consistência esperada do extrato.";
     }
     if (key === "layout_fallback") {
-      return "O PDF foi lido com o modelo generico porque o layout especifico do extrato nao foi identificado com confianca.";
+      return "O PDF foi lido com o modelo genérico porque o layout específico do extrato não foi identificado com confiança.";
     }
     if (key === "manual_review_recommended") {
-      return "Esta linha foi marcada para revisao manual antes da exportacao.";
+      return "Esta linha foi marcada para revisão manual antes da exportação.";
     }
     if (key === "textract_layout_inferred") {
       return "Esta linha veio de uma inferencia automatica de layout e pode precisar de conferencia.";
@@ -2135,7 +1982,7 @@
     if (key === "textract_table_row_candidate") {
       return "Esta linha foi montada a partir de uma extracao tabular automatica e deve ser conferida.";
     }
-    return "Esta linha recebeu um alerta e precisa de revisao antes da exportacao.";
+    return "Esta linha recebeu um alerta e precisa de revisão antes da exportação.";
   }
 
   function restoreViewFromState(viewState) {
@@ -2210,14 +2057,11 @@
 
   async function postConvert(formData, options) {
     const onStatusEvent = options && typeof options.onStatusEvent === "function" ? options.onStatusEvent : null;
-    const token = getUserToken();
     const headers = {
       Accept: "text/event-stream",
-      ...(buildOptionalAuthHeaders(token) || {}),
     };
-    const response = await fetch(`${apiBase}/api/conversions/upload`, {
+    const response = await session.request(`${apiBase}/api/conversions/upload`, {
       method: "POST",
-      credentials: "include",
       headers,
       body: formData,
     });
@@ -2291,24 +2135,15 @@
   }
 
   async function syncUploadLimitsBySession() {
-    const token = getUserToken();
     try {
-      const requestInit = {
-        credentials: "include",
-      };
-      if (token) {
-        requestInit.headers = { authorization: `Bearer ${token}` };
-      }
-      const response = await fetch(`${apiBase}/auth/me`, {
-        ...requestInit,
-      });
-      if (!response.ok) {
+      const me = session ? await session.getCurrentUser() : null;
+      currentUser = me;
+      if (!me) {
         state.quotaMode = "conversion";
         updateQuotaRemainingLabel();
         setUploadLimitsText(5 * 1024 * 1024, 6);
         return;
       }
-      const me = await response.json().catch(() => ({}));
       state.quotaMode = normalizeQuotaMode(me.quota_mode);
       if (state.quotaRemaining !== null && state.quotaLimit !== null) {
         updateQuotaRemainingValue(state.quotaRemaining, state.quotaLimit);
@@ -2366,17 +2201,13 @@
   }
 
   async function postConvertEdit(processingId, editPatch) {
-    const token = getUserToken();
-    if (!token) {
+    if (!hasUserSession()) {
       await ensureAnonymousSession();
     }
     const query = buildIdentityQueryParams().toString();
-    const optionalHeaders = buildOptionalAuthHeaders(token);
-    const response = await fetch(`${apiBase}/convert-edits/${processingId}?${query}`, {
+    const response = await session.request(`${apiBase}/convert-edits/${processingId}?${query}`, {
       method: "POST",
-      credentials: "include",
       headers: {
-        ...(optionalHeaders || {}),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -2454,12 +2285,11 @@
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const token = getUserToken();
-      if (token) {
+      if (hasUserSession()) {
         const sessionState = await getSessionValidationState();
-        if (sessionState === "invalid") {
+        if (sessionState === "missing") {
           hideQuotaLockOverlay();
-          clearUserToken();
+          clearUserSession();
           syncHeroAuthLinks();
           setStatus("Sua sessão expirou. Faça login novamente para continuar.", "error");
           return;
@@ -2517,7 +2347,7 @@
         const detailQuotaMode =
           detail && typeof detail === "object" ? String(detail.quota_mode || "").trim().toLowerCase() : "";
         const shouldShowAnonymousQuotaLock =
-          detailIdentityType === "anonymous" || (!detailIdentityType && !getUserToken());
+          detailIdentityType === "anonymous" || (!detailIdentityType && !hasUserSession());
         if (shouldShowAnonymousQuotaLock) {
           showQuotaLockOverlay(detail);
           setStatus("Você atingiu o limite gratuito desta semana.", "error");
@@ -2543,7 +2373,7 @@
         (normalizedMessage.includes("invalid identity context") || normalizedMessage.includes("invalid user token"))
       ) {
         hideQuotaLockOverlay();
-        clearUserToken();
+        clearUserSession();
         syncHeroAuthLinks();
         setStatus("Sua sessão expirou. Faça login novamente para continuar.", "error");
         return;
@@ -2565,8 +2395,7 @@
   }
 
   async function fetchBatchJson(path, options) {
-    const response = await fetch(`${apiBase}${path}`, {
-      credentials: "include",
+    const response = await session.request(`${apiBase}${path}`, {
       ...options,
     });
     const payload = await response.json().catch(() => ({}));
@@ -2648,12 +2477,11 @@
     batchResultsPanel.classList.remove("hidden");
   }
 
-  async function pollConversionBatch(batchId, authHeaders) {
+  async function pollConversionBatch(batchId) {
     const deadline = Date.now() + 15 * 60 * 1000;
     while (Date.now() < deadline) {
       const payload = await fetchBatchJson(`/api/conversion-batches/${encodeURIComponent(batchId)}`, {
         method: "GET",
-        headers: authHeaders,
       });
       const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
       const terminalCount = jobs.filter(function (job) {
@@ -2678,11 +2506,10 @@
     setProgressTarget(3);
     startProgressDrift();
     try {
-      const token = getUserToken();
-      if (token) {
+      if (hasUserSession()) {
         const sessionState = await getSessionValidationState();
-        if (sessionState === "invalid") {
-          clearUserToken();
+        if (sessionState === "missing") {
+          clearUserSession();
           syncHeroAuthLinks();
           setStatus("Sua sessão expirou. Faça login novamente para continuar.", "error");
           return;
@@ -2690,7 +2517,6 @@
       } else {
         await ensureAnonymousSession();
       }
-      const authHeaders = buildOptionalAuthHeaders(token) || {};
       const fileContracts = [];
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
@@ -2710,7 +2536,6 @@
       const created = await fetchBatchJson("/api/conversion-batches", {
         method: "POST",
         headers: {
-          ...authHeaders,
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
@@ -2721,10 +2546,10 @@
       setProgressTarget(48);
       await fetchBatchJson(`/api/conversion-batches/${encodeURIComponent(created.batch_id)}/submit`, {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: "{}",
       });
-      const completed = await pollConversionBatch(created.batch_id, authHeaders);
+      const completed = await pollConversionBatch(created.batch_id);
       renderBatchResults(completed.jobs);
       const successfulJobs = completed.jobs.filter(function (job) {
         return job.status === "completed" && job.result && job.result.analysis;
@@ -2818,12 +2643,10 @@
       setStatus("Converta um arquivo antes de baixar.", "error");
       return;
     }
-    const token = getUserToken();
-    if (!token) {
+    if (!hasUserSession()) {
       await ensureAnonymousSession();
     }
     const query = buildIdentityQueryParams();
-    const headers = buildOptionalAuthHeaders(token);
 
     try {
       setStatus("Preparando download...", null);
@@ -2838,11 +2661,9 @@
         const accountNumber = isCreditCardFlow ? "" : normalizeDigits(state.accountNumberOverride);
         const bankCode = isCreditCardFlow ? "" : normalizeDigits(state.bankCodeOverride || "").slice(0, 3);
         const settingsQuery = buildIdentityQueryParams();
-        const settingsResponse = await fetch(`${apiBase}/convert-edits/${downloadConfig.targetId}?${settingsQuery.toString()}`, {
+        const settingsResponse = await session.request(`${apiBase}/convert-edits/${downloadConfig.targetId}?${settingsQuery.toString()}`, {
           method: "POST",
-          credentials: "include",
           headers: {
-            ...(headers || {}),
             "content-type": "application/json",
           },
           body: JSON.stringify({
@@ -2869,10 +2690,8 @@
         }
       }
       const url = `${downloadConfig.endpoint}?${query.toString()}`;
-      const response = await fetch(url, {
+      const response = await session.request(url, {
         method: "GET",
-        credentials: "include",
-        ...(headers ? { headers } : {}),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -3148,11 +2967,14 @@
     updateQuotaRemainingLabel();
     forceUnlockUi();
     setSelectedFileLabel();
-    const didForceLogout = consumeLogoutQueryFlag();
+    const didForceLogout = await consumeLogoutQueryFlag();
+    if (!didForceLogout) {
+      await getSessionValidationState();
+    }
     if (!(await enforceAuthenticatedAccess())) {
       return;
     }
-    if (!getUserToken()) {
+    if (!hasUserSession()) {
       try {
         await ensureAnonymousSession();
       } catch (_error) {

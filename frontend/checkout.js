@@ -1,8 +1,7 @@
 (function () {
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const USER_TOKEN_COOKIE = "ofxsimples_user_token";
-  const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
-  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
+  "use strict";
+
+  const session = window.OfxSession;
   const yearNode = document.getElementById("footer-year");
   const menuToggle = document.getElementById("menu-toggle");
   const topLinks = document.getElementById("top-links");
@@ -32,101 +31,6 @@
 
   let selectedPlan = null;
   let currentIntentId = String(new URL(window.location.href).searchParams.get("intent") || "").trim();
-
-  function isIpv4Host(hostname) {
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
-  }
-
-  function normalizeDomainCandidate(value) {
-    return String(value || "").trim().toLowerCase().replace(/^\.+/, "");
-  }
-
-  function getConfiguredSharedCookieAllowlist() {
-    const configured = window.__OFX_TOKEN_SHARED_COOKIE_ALLOWLIST__;
-    if (!Array.isArray(configured)) {
-      return TOKEN_SHARED_COOKIE_ALLOWLIST;
-    }
-    const normalized = configured
-      .map(function (item) {
-        return normalizeDomainCandidate(item);
-      })
-      .filter(function (item) {
-        return /^[a-z0-9.-]+$/.test(item) && item.includes(".");
-      });
-    if (normalized.length) {
-      return normalized;
-    }
-    return TOKEN_SHARED_COOKIE_ALLOWLIST;
-  }
-
-  function resolveLegacySharedCookieDomain() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const labels = host.split(".").filter(Boolean);
-    if (labels.length < 2) {
-      return null;
-    }
-    if (labels.length >= 3 && labels[labels.length - 2] === "com" && labels[labels.length - 1] === "br") {
-      return `.${labels.slice(-3).join(".")}`;
-    }
-    return `.${labels.slice(-2).join(".")}`;
-  }
-
-  function resolveSharedCookieDomain() {
-    if (window.location.protocol !== "https:") {
-      return null;
-    }
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const allowedDomains = getConfiguredSharedCookieAllowlist();
-    for (const allowedDomain of allowedDomains) {
-      if (host === allowedDomain || host.endsWith(`.${allowedDomain}`)) {
-        return `.${allowedDomain}`;
-      }
-    }
-    return null;
-  }
-
-  function readUserTokenCookie() {
-    const entries = String(document.cookie || "").split(";");
-    for (const entry of entries) {
-      const [namePart, ...valueParts] = entry.split("=");
-      const name = String(namePart || "").trim();
-      if (name !== USER_TOKEN_COOKIE) continue;
-      const rawValue = valueParts.join("=");
-      const decoded = decodeURIComponent(String(rawValue || "").trim());
-      if (decoded) return decoded;
-    }
-    return "";
-  }
-
-  function writeUserTokenCookie(token) {
-    const safeToken = encodeURIComponent(String(token || "").trim());
-    if (!safeToken) return;
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function clearUserTokenCookie() {
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    const legacySharedDomain = resolveLegacySharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-    if (legacySharedDomain && legacySharedDomain !== sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${legacySharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
 
   if (yearNode) {
     yearNode.textContent = "(c) " + new Date().getFullYear() + " OFX Simples. Todos os direitos reservados.";
@@ -199,52 +103,21 @@
     throw lastError || new Error("network-failure");
   }
 
-  function getUserToken() {
-    const localToken = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    if (localToken) {
-      writeUserTokenCookie(localToken);
-      return localToken;
-    }
-    const cookieToken = readUserTokenCookie();
-    if (cookieToken) {
-      localStorage.setItem(USER_TOKEN_KEY, cookieToken);
-      return cookieToken;
-    }
-    return null;
-  }
-
-  function getProfileHint() {
-    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
-  }
-
-  function setProfileHint(email) {
-    const value = String(email || "").trim();
-    if (value) localStorage.setItem(PROFILE_HINT_KEY, value);
-  }
-
-  function clearAuthState() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    localStorage.removeItem(PROFILE_HINT_KEY);
-    clearUserTokenCookie();
-  }
-
-  function buildOptionalAuthHeaders(userToken) {
-    const token = String(userToken || "").trim();
-    if (!token) return null;
-    return { authorization: `Bearer ${token}` };
-  }
-
   function renderLoggedInTop(email) {
     if (topAuthLoginLink) topAuthLoginLink.classList.add("hidden");
     if (topAuthPrimaryLink) {
       const safe = String(email || "conta").trim() || "conta";
       const initial = safe.charAt(0).toUpperCase();
-      topAuthPrimaryLink.innerHTML =
-        '<span class="top-account-avatar">' +
-        initial +
-        '</span><span class="top-account-email">' +
-        safe +
-        '</span><span class="top-account-caret">▼</span>';
+      const avatar = document.createElement("span");
+      avatar.className = "top-account-avatar";
+      avatar.textContent = initial;
+      const label = document.createElement("span");
+      label.className = "top-account-email";
+      label.textContent = safe;
+      const caret = document.createElement("span");
+      caret.className = "top-account-caret";
+      caret.textContent = "▼";
+      topAuthPrimaryLink.replaceChildren(avatar, label, caret);
       topAuthPrimaryLink.classList.add("top-account-trigger");
       topAuthPrimaryLink.setAttribute("href", "./client-area.html");
     }
@@ -269,42 +142,18 @@
   }
 
   async function syncTopAuthBySession() {
-    const token = getUserToken();
-    if (token) {
-      renderLoggedInTop(getProfileHint());
-    } else {
-      renderLoggedOutTop();
-    }
     try {
-      const apiBase = resolveApiBase();
-      const headers = buildOptionalAuthHeaders(token);
-      const result = await fetchJsonWithRetry(
-        `${apiBase}/auth/me`,
-        {
-          credentials: "include",
-          ...(headers ? { headers } : {}),
-        },
-        { attempts: 2 },
-      );
-      if (!result.ok) {
-        if (result.status === 401) {
-          if (token) {
-            clearAuthState();
-          }
-          renderLoggedOutTop();
-        }
+      const payload = session ? await session.getCurrentUser() : null;
+      if (!payload) {
+        renderLoggedOutTop();
         return;
       }
-      const payload = result.payload || {};
       const name = String(payload.name || "").trim();
       const email = String(payload.email || "").trim();
       prefillCheckoutIdentity(name, email);
-      if (email) {
-        setProfileHint(email);
-        renderLoggedInTop(email);
-      }
+      renderLoggedInTop(email);
     } catch (_error) {
-      // Keep optimistic state.
+      renderLoggedOutTop();
     }
   }
 
@@ -360,6 +209,15 @@
     return "Acompanhar pedido";
   }
 
+  function safePaymentLink(value) {
+    try {
+      const url = new URL(String(value || "").trim());
+      return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
   function renderOrderWorkflow(data) {
     if (!orderIntentIdNode || !orderStatusValueNode || !orderNextStepNode || !orderPaymentLinkLineNode || !orderPaymentLinkNode) {
       return;
@@ -368,7 +226,7 @@
     orderStatusValueNode.textContent = mapStatusLabel(String(data.status || ""));
     orderNextStepNode.textContent = mapNextStepLabel(String(data.next_step || ""));
 
-    const paymentLink = String(data.payment_link || "").trim();
+    const paymentLink = safePaymentLink(data.payment_link);
     if (paymentLink) {
       orderPaymentLinkNode.setAttribute("href", paymentLink);
       orderPaymentLinkLineNode.classList.remove("hidden");
@@ -388,11 +246,11 @@
       return;
     }
     planNameNode.textContent = plan.name;
-    planPriceNode.textContent = `${formatPriceBRL(plan.price_cents)}/mes`;
+    planPriceNode.textContent = `${formatPriceBRL(plan.price_cents)}/mês`;
     planDetailsNode.innerHTML = [
       `<li>${Number(plan.quota_limit || 0)} páginas por mês</li>`,
       `<li>Tamanho máximo: ${Math.round(Number(plan.max_upload_size_bytes || 0) / (1024 * 1024))} MB por arquivo</li>`,
-      "<li>Ativação manual apos pagamento Pix</li>",
+      "<li>Ativação manual após pagamento Pix</li>",
     ].join("");
   }
 
@@ -427,15 +285,12 @@
 
   async function refreshOrderStatus() {
     if (!currentIntentId) return;
-    const userToken = getUserToken();
     if (orderRefreshBtn) orderRefreshBtn.disabled = true;
     try {
       const apiBase = resolveApiBase();
-      const headers = buildOptionalAuthHeaders(userToken);
-      const response = await fetch(`${apiBase}/checkout/intents/${encodeURIComponent(currentIntentId)}`, {
-        credentials: "include",
-        ...(headers ? { headers } : {}),
-      });
+      const response = await session.request(
+        `${apiBase}/checkout/intents/${encodeURIComponent(currentIntentId)}`,
+      );
       const body = await response.json().catch(function () {
         return {};
       });
@@ -505,9 +360,8 @@
     setStatus("Enviando seu pedido...", false);
     try {
       const apiBase = resolveApiBase();
-      const response = await fetch(`${apiBase}/checkout/intents`, {
+      const response = await session.request(`${apiBase}/checkout/intents`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });

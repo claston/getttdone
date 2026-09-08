@@ -5,8 +5,7 @@
   const pricingGrid = document.getElementById("pricing-grid");
   const menuToggle = document.getElementById("menu-toggle");
   const topLinks = document.getElementById("top-links");
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
+  const session = window.OfxSession;
   const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
   const COLD_START_TIMEOUT_MS = 5000;
 
@@ -14,41 +13,21 @@
     yearNode.textContent = "(c) " + new Date().getFullYear() + " OFX Simples. Todos os direitos reservados.";
   }
 
-  function resolveApiBase() {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const isLocalHost = host === "localhost" || host === "127.0.0.1";
-    const isDevFrontend = isLocalHost && port !== "8000";
-    if (isDevFrontend) return "http://127.0.0.1:8000";
-    if (window.location.origin && window.location.origin !== "null") return window.location.origin;
-    return "http://127.0.0.1:8000";
-  }
-
-  function getUserToken() {
-    const token = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    return token || null;
-  }
-
-  function getProfileHint() {
-    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
-  }
-
-  function setProfileHint(email) {
-    const value = String(email || "").trim();
-    if (value) localStorage.setItem(PROFILE_HINT_KEY, value);
-  }
-
-  function clearAuthState() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    localStorage.removeItem(PROFILE_HINT_KEY);
-  }
-
   function renderLoggedInTop(email) {
     if (topAuthLoginLink) topAuthLoginLink.classList.add("hidden");
     if (topAuthPrimaryLink) {
       const safe = String(email || "conta").trim() || "conta";
       const initial = safe.charAt(0).toUpperCase();
-      topAuthPrimaryLink.innerHTML = `<span class="top-account-avatar">${initial}</span><span class="top-account-email">${safe}</span><span class="top-account-caret">▾</span>`;
+      const avatar = document.createElement("span");
+      avatar.className = "top-account-avatar";
+      avatar.textContent = initial;
+      const label = document.createElement("span");
+      label.className = "top-account-email";
+      label.textContent = safe;
+      const caret = document.createElement("span");
+      caret.className = "top-account-caret";
+      caret.textContent = "▾";
+      topAuthPrimaryLink.replaceChildren(avatar, label, caret);
       topAuthPrimaryLink.classList.add("top-account-trigger");
       topAuthPrimaryLink.setAttribute("href", "./client-area.html");
     }
@@ -125,7 +104,7 @@
     if (!plans.length) {
       pricingGrid.innerHTML = [
         '<article class="plan-card">',
-        "<h2>Planos indisponiveis</h2>",
+        "<h2>Planos indisponíveis</h2>",
         '<p class="price">Consulte suporte</p>',
         "<ul><li>Tente novamente em instantes</li></ul>",
         '<a class="btn btn-outline" href="./checkout.html">Ir para checkout</a>',
@@ -165,7 +144,7 @@
   async function loadPlansCatalog() {
     if (!pricingGrid) return;
     try {
-      const apiBase = resolveApiBase();
+      const apiBase = session ? session.apiBase : window.location.origin;
       const payload = await fetchJsonWithRetry(`${apiBase}/plans`, undefined, 3);
       renderPlans(payload.items || []);
     } catch (_error) {
@@ -174,34 +153,12 @@
   }
 
   async function syncTopAuthBySession() {
-    const token = getUserToken();
-    if (!token) {
-      renderLoggedOutTop();
-      return;
-    }
-
-    renderLoggedInTop(getProfileHint());
-
     try {
-      const apiBase = resolveApiBase();
-      const response = await fetch(`${apiBase}/auth/me`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          clearAuthState();
-          renderLoggedOutTop();
-        }
-        return;
-      }
-      const payload = await response.json().catch(() => ({}));
-      const email = String(payload.email || "").trim();
-      if (email) {
-        setProfileHint(email);
-        renderLoggedInTop(email);
-      }
+      const currentUser = session ? await session.getCurrentUser() : null;
+      if (currentUser) renderLoggedInTop(currentUser.email);
+      else renderLoggedOutTop();
     } catch (_error) {
-      // Keep optimistic state.
+      renderLoggedOutTop();
     }
   }
 

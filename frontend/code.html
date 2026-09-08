@@ -136,7 +136,7 @@
             pointer-events: none;
         }
     </style>
-  <script src="/privacy-consent.js" defer></script>
+  <script src="/privacy-consent.js?v=2" defer></script>
 </head>
 <body class="bg-background text-on-background font-body selection:bg-primary-fixed selection:text-on-primary-fixed">
 
@@ -659,7 +659,7 @@
     }
 
     function getApiBase() {
-        return normalizeApiBase(localStorage.getItem("ofxsimples_api_base") || DEFAULT_API_BASE);
+        return normalizeApiBase(DEFAULT_API_BASE);
     }
 
     function formatCurrency(value) {

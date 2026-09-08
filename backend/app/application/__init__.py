@@ -80,7 +80,7 @@ from app.application.errors import (
     UnsupportedFileTypeError,
     UserAlreadyExistsError,
 )
-from app.application.google_oauth_service import GoogleOAuthConfig, GoogleOAuthService
+from app.application.google_oauth_service import GoogleOAuthCallbackResult, GoogleOAuthConfig, GoogleOAuthService
 from app.application.ledger_match_engine import (
     match_exact_then_date_tolerance_then_description_similarity_1to1,
 )
@@ -146,6 +146,7 @@ __all__ = [
     "FilesystemConversionDocumentStore",
     "FilesystemConversionJobRepository",
     "GoogleOAuthAccountNotFoundError",
+    "GoogleOAuthCallbackResult",
     "GoogleOAuthConfig",
     "GoogleOAuthExchangeError",
     "GoogleOAuthNotConfiguredError",

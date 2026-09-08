@@ -24,7 +24,7 @@ from app.application import (
     ReusedSessionTokenError,
     UserAlreadyExistsError,
 )
-from app.application.access_control import DEFAULT_MAX_PAGES_PER_FILE, MAX_UPLOAD_SIZE_BYTES
+from app.application.access_control import DEFAULT_MAX_PAGES_PER_FILE, MAX_UPLOAD_SIZE_BYTES, SessionTokenBundle
 from app.application.login_tracking import record_successful_login_safely
 from app.dependencies import get_access_control_service, get_contact_service, get_google_oauth_service
 from app.routers.access_control_common import (
@@ -56,6 +56,32 @@ from app.security_baseline import is_production_env
 router = APIRouter()
 logger = logging.getLogger(__name__)
 _LEGACY_ANONYMOUS_FINGERPRINT_PATTERN = re.compile(r"^anon-\d{10,16}-[0-9a-f]{4,32}$")
+
+
+def _session_auth_response(*, service: AccessControlService, session_bundle: SessionTokenBundle) -> JSONResponse:
+    identity = service.resolve_identity(anonymous_fingerprint=None, user_token=session_bundle.user.token)
+    payload_model = SessionAuthResponse(
+        user_id=session_bundle.user.user_id,
+        name=session_bundle.user.name,
+        email=session_bundle.user.email,
+        quota_remaining=service.get_remaining_quota(identity),
+        quota_limit=identity.quota_limit,
+        quota_mode=identity.quota_mode,
+        plan_code=identity.plan_code,
+        plan_name=identity.plan_name,
+        max_upload_size_bytes=identity.max_upload_size_bytes,
+        max_pages_per_file=identity.max_pages_per_file,
+        access_expires_at=session_bundle.access_expires_at,
+        refresh_expires_at=session_bundle.refresh_expires_at,
+    )
+    response = JSONResponse(content=payload_model.model_dump())
+    response.headers["Cache-Control"] = "no-store"
+    set_session_cookies(
+        response,
+        access_token=session_bundle.access_token,
+        refresh_token=session_bundle.refresh_token,
+    )
+    return response
 
 
 @router.post("/auth/anonymous-session", response_model=AnonymousSessionResponse)
@@ -413,29 +439,32 @@ def session_login(
         user_id=user.user_id,
         auth_method="local_password",
     )
-    identity = service.resolve_identity(anonymous_fingerprint=None, user_token=session_bundle.user.token)
-    payload_model = SessionAuthResponse(
-        user_id=session_bundle.user.user_id,
-        name=session_bundle.user.name,
-        email=session_bundle.user.email,
-        quota_remaining=service.get_remaining_quota(identity),
-        quota_limit=identity.quota_limit,
-        quota_mode=identity.quota_mode,
-        plan_code=identity.plan_code,
-        plan_name=identity.plan_name,
-        max_upload_size_bytes=identity.max_upload_size_bytes,
-        max_pages_per_file=identity.max_pages_per_file,
-        access_expires_at=session_bundle.access_expires_at,
-        refresh_expires_at=session_bundle.refresh_expires_at,
+    return _session_auth_response(service=service, session_bundle=session_bundle)
+
+
+@router.post("/auth/session/migrate", response_model=SessionAuthResponse)
+def session_migrate(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    service: AccessControlService = Depends(get_access_control_service),
+) -> JSONResponse:
+    legacy_token = resolve_header_query_or_cookie_token(
+        authorization=authorization,
+        query_token=None,
+        cookie_token=None,
     )
-    response = JSONResponse(content=payload_model.model_dump())
-    response.headers["Cache-Control"] = "no-store"
-    set_session_cookies(
-        response,
-        access_token=session_bundle.access_token,
-        refresh_token=session_bundle.refresh_token,
+    if not legacy_token:
+        raise HTTPException(status_code=401, detail="Legacy user token is required.")
+    try:
+        user = service.get_user_by_token(user_token=legacy_token)
+    except InvalidUserTokenError:
+        raise HTTPException(status_code=401, detail="Invalid user token.")
+    session_bundle = service.create_user_session(
+        user_id=user.user_id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
     )
-    return response
+    return _session_auth_response(service=service, session_bundle=session_bundle)
 
 
 @router.post("/auth/session/refresh", response_model=SessionAuthResponse)
@@ -457,29 +486,7 @@ def session_refresh(
         raise HTTPException(status_code=401, detail="Session token reuse detected. Please login again.")
     except InvalidSessionTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh session token.")
-    identity = service.resolve_identity(anonymous_fingerprint=None, user_token=session_bundle.user.token)
-    payload_model = SessionAuthResponse(
-        user_id=session_bundle.user.user_id,
-        name=session_bundle.user.name,
-        email=session_bundle.user.email,
-        quota_remaining=service.get_remaining_quota(identity),
-        quota_limit=identity.quota_limit,
-        quota_mode=identity.quota_mode,
-        plan_code=identity.plan_code,
-        plan_name=identity.plan_name,
-        max_upload_size_bytes=identity.max_upload_size_bytes,
-        max_pages_per_file=identity.max_pages_per_file,
-        access_expires_at=session_bundle.access_expires_at,
-        refresh_expires_at=session_bundle.refresh_expires_at,
-    )
-    response = JSONResponse(content=payload_model.model_dump())
-    response.headers["Cache-Control"] = "no-store"
-    set_session_cookies(
-        response,
-        access_token=session_bundle.access_token,
-        refresh_token=session_bundle.refresh_token,
-    )
-    return response
+    return _session_auth_response(service=service, session_bundle=session_bundle)
 
 
 @router.post("/auth/session/logout", response_model=SessionLogoutResponse)
@@ -565,12 +572,13 @@ def google_start(
 
 @router.get("/auth/google/callback")
 def google_callback(
+    request: Request,
     code: str = Query(...),
     state: str = Query(...),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
 ) -> RedirectResponse:
     try:
-        redirect_url = oauth_service.build_callback_redirect_url(code=code, state=state)
+        callback_result = oauth_service.complete_callback(code=code, state=state)
     except GoogleOAuthNotConfiguredError:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured.")
     except (GoogleOAuthStateError, GoogleOAuthExchangeError) as exc:
@@ -589,6 +597,21 @@ def google_callback(
             payload["error_detail"] = str(exc).strip() or exc.__class__.__name__
         params = urlencode(payload)
         fallback = f"{oauth_service.config.frontend_base_url}/auth-callback.html?{params}"
-        return RedirectResponse(url=fallback, status_code=307)
+        response = RedirectResponse(url=fallback, status_code=307)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     logger.info("google_oauth_callback_succeeded")
-    return RedirectResponse(url=redirect_url, status_code=307)
+    response = RedirectResponse(url=callback_result.redirect_url, status_code=307)
+    response.headers["Cache-Control"] = "no-store"
+    if callback_result.user is not None:
+        session_bundle = oauth_service.access_control_service.create_user_session(
+            user_id=callback_result.user.user_id,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        set_session_cookies(
+            response,
+            access_token=session_bundle.access_token,
+            refresh_token=session_bundle.refresh_token,
+        )
+    return response

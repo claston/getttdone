@@ -100,6 +100,40 @@
     return "badge";
   }
 
+  function createTextElement(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) node.className = className;
+    node.textContent = String(text ?? "");
+    return node;
+  }
+
+  function appendLabeledParagraph(parent, label, value) {
+    const paragraph = document.createElement("p");
+    paragraph.appendChild(createTextElement("strong", "", `${label}:`));
+    paragraph.appendChild(document.createTextNode(` ${String(value ?? "-")}`));
+    parent.appendChild(paragraph);
+  }
+
+  function createActionButton(action, idKey, idValue, label, options) {
+    const settings = options || {};
+    const button = createTextElement("button", settings.className || "", label);
+    button.dataset.action = action;
+    button.dataset[idKey] = String(idValue || "");
+    button.disabled = !!settings.disabled;
+    return button;
+  }
+
+  function setHistoryMessage(historyNode, message) {
+    historyNode.replaceChildren(createTextElement("p", "", message));
+  }
+
+  function appendHistoryLine(historyNode, emphasizedText, detailText) {
+    const paragraph = document.createElement("p");
+    paragraph.appendChild(createTextElement("strong", "", emphasizedText));
+    paragraph.appendChild(document.createTextNode(` ${String(detailText || "")}`));
+    historyNode.appendChild(paragraph);
+  }
+
   async function tryRefreshAdminSession() {
     const response = await fetch(`${resolveApiBase()}/auth/session/refresh`, {
       method: "POST",
@@ -213,44 +247,65 @@
       String(order.user_id || "").trim().length > 0 || String(order.customer_email || "").trim().length > 0;
     const canRelease = !isReleased && hasUserReference;
 
-    container.innerHTML = [
-      `<div class="order-head">`,
-      `  <div>`,
-      `    <h3 class="order-title">Protocolo ${String(order.intent_id || "-")}</h3>`,
-      `    <p class="order-meta">Criado em ${formatDateTime(order.created_at)}</p>`,
-      `  </div>`,
-      `  <span class="${badgeClass(status)}">${mapStatusLabel(status)}</span>`,
-      `</div>`,
-      `<div class="grid">`,
-      `  <p><strong>Plano:</strong> ${String(order.plan_name || "-")}</p>`,
-      `  <p><strong>Valor:</strong> ${formatPriceBRL(order.price_cents)}</p>`,
-      `  <p><strong>Cliente:</strong> ${String(order.customer_name || "-")}</p>`,
-      `  <p><strong>Email:</strong> ${String(order.customer_email || "-")}</p>`,
-      `  <p><strong>WhatsApp:</strong> ${String(order.customer_whatsapp || "-")}</p>`,
-      `  <p><strong>User ID:</strong> ${String(order.user_id || "-")}</p>`,
-      `  <p><strong>Proximo passo:</strong> ${mapNextStepLabel(order.next_step)}</p>`,
-      `  <p><strong>Link atual:</strong> ${String(order.payment_link || "-")}</p>`,
-      `</div>`,
-      `<div class="admin-actions">`,
-      `  <div class="inline">`,
-      `    <input data-action="payment-link-input" type="url" placeholder="https://pagamento.exemplo/link" value="${String(order.payment_link || "")}" />`,
-      `    <button data-action="send-link" data-intent-id="${String(order.intent_id || "")}" ${isReleased ? "disabled" : ""}>Enviar link</button>`,
-      `  </div>`,
-      `  <div class="pill-row">`,
-      `    <button data-action="release" data-intent-id="${String(order.intent_id || "")}" class="ghost" ${
-        canRelease ? "" : "disabled"
-      }>Liberar plano</button>`,
-      `    <button data-action="history" data-intent-id="${String(order.intent_id || "")}" class="ghost">Ver histórico</button>`,
-      `  </div>`,
-      `  <div class="history hidden" data-role="history"></div>`,
-      `</div>`,
-    ].join("");
+    const head = document.createElement("div");
+    head.className = "order-head";
+    const titleBlock = document.createElement("div");
+    titleBlock.appendChild(createTextElement("h3", "order-title", `Protocolo ${String(order.intent_id || "-")}`));
+    titleBlock.appendChild(createTextElement("p", "order-meta", `Criado em ${formatDateTime(order.created_at)}`));
+    head.appendChild(titleBlock);
+    head.appendChild(createTextElement("span", badgeClass(status), mapStatusLabel(status)));
+    container.appendChild(head);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    appendLabeledParagraph(grid, "Plano", order.plan_name || "-");
+    appendLabeledParagraph(grid, "Valor", formatPriceBRL(order.price_cents));
+    appendLabeledParagraph(grid, "Cliente", order.customer_name || "-");
+    appendLabeledParagraph(grid, "E-mail", order.customer_email || "-");
+    appendLabeledParagraph(grid, "WhatsApp", order.customer_whatsapp || "-");
+    appendLabeledParagraph(grid, "User ID", order.user_id || "-");
+    appendLabeledParagraph(grid, "Próximo passo", mapNextStepLabel(order.next_step));
+    appendLabeledParagraph(grid, "Link atual", order.payment_link || "-");
+    container.appendChild(grid);
+
+    const actions = document.createElement("div");
+    actions.className = "admin-actions";
+    const inline = document.createElement("div");
+    inline.className = "inline";
+    const paymentInput = document.createElement("input");
+    paymentInput.dataset.action = "payment-link-input";
+    paymentInput.type = "url";
+    paymentInput.placeholder = "https://pagamento.exemplo/link";
+    paymentInput.value = String(order.payment_link || "");
+    inline.appendChild(paymentInput);
+    inline.appendChild(
+      createActionButton("send-link", "intentId", order.intent_id, "Enviar link", { disabled: isReleased }),
+    );
+    actions.appendChild(inline);
+
+    const buttonRow = document.createElement("div");
+    buttonRow.className = "pill-row";
+    buttonRow.appendChild(
+      createActionButton("release", "intentId", order.intent_id, "Liberar plano", {
+        className: "ghost",
+        disabled: !canRelease,
+      }),
+    );
+    buttonRow.appendChild(
+      createActionButton("history", "intentId", order.intent_id, "Ver histórico", { className: "ghost" }),
+    );
+    actions.appendChild(buttonRow);
+    const history = document.createElement("div");
+    history.className = "history hidden";
+    history.dataset.role = "history";
+    actions.appendChild(history);
+    container.appendChild(actions);
     return container;
   }
 
   function renderOrders(items) {
     if (!ordersListNode || !emptyNode) return;
-    ordersListNode.innerHTML = "";
+    ordersListNode.replaceChildren();
     if (!items.length) {
       emptyNode.classList.remove("hidden");
       return;
@@ -263,47 +318,83 @@
 
   function renderUsers(items) {
     if (!usersListNode) return;
-    usersListNode.innerHTML = "";
+    usersListNode.replaceChildren();
     items.forEach(function (user) {
       const isAdmin = !!user.is_admin;
       const isActive = user.is_active !== false;
       const isEmailVerified = String(user.email_verification_status || "verified") === "verified";
       const card = document.createElement("article");
       card.className = "order-card";
-      card.innerHTML = [
-        `<div class="order-head">`,
-        `  <div>`,
-        `    <h3 class="order-title">${String(user.name || "-")}</h3>`,
-        `    <p class="order-meta">${String(user.email || "-")}</p>`,
-        `  </div>`,
-        `  <div class="pill-row">`,
-        `    <span class="badge ${isActive ? "released" : "awaiting"}">${isActive ? "Ativo" : "Inativo"}</span>`,
-        `    <span class="badge ${isAdmin ? "released" : ""}">${isAdmin ? "Admin" : "Usuário"}</span>`,
-        `    <span class="badge ${isEmailVerified ? "released" : "awaiting"}">${isEmailVerified ? "E-mail confirmado" : "E-mail pendente"}</span>`,
-        `  </div>`,
-        `</div>`,
-        `<div class="grid">`,
-        `  <p><strong>User ID:</strong> ${String(user.user_id || "-")}</p>`,
-        `  <p><strong>Criado:</strong> ${formatDateTime(user.created_at)}</p>`,
-        `  <p><strong>Atualizado:</strong> ${formatDateTime(user.updated_at)}</p>`,
-        `  <p><strong>Retornos registrados:</strong> ${Number(user.login_count || 0)}</p>`,
-        `  <p><strong>Login com senha:</strong> ${Number(user.local_login_count || 0)}</p>`,
-        `  <p><strong>Login com Google:</strong> ${Number(user.google_login_count || 0)}</p>`,
-        `  <p><strong>Último login:</strong> ${formatDateTime(user.last_login_at)}</p>`,
-        `</div>`,
-        `<div class="pill-row">`,
-        `  <button data-action="toggle-role" data-user-id="${String(user.user_id || "")}" data-is-admin="${isAdmin ? "1" : "0"}" class="ghost">${
-          isAdmin ? "Revogar admin" : "Promover a admin"
-        }</button>`,
-        `  <button data-action="toggle-status" data-user-id="${String(user.user_id || "")}" data-is-active="${isActive ? "1" : "0"}" class="ghost">${
-          isActive ? "Inativar usuário" : "Reativar usuário"
-        }</button>`,
-        `  <button data-action="user-login-history" data-user-id="${String(user.user_id || "")}" class="ghost">Ver histórico de logins</button>`,
-        `  <button data-action="user-role-history" data-user-id="${String(user.user_id || "")}" class="ghost">Ver histórico de permissões</button>`,
-        `</div>`,
-        `<div class="history hidden" data-role="user-login-history"></div>`,
-        `<div class="history hidden" data-role="user-role-history"></div>`,
-      ].join("");
+      const head = document.createElement("div");
+      head.className = "order-head";
+      const identity = document.createElement("div");
+      identity.appendChild(createTextElement("h3", "order-title", user.name || "-"));
+      identity.appendChild(createTextElement("p", "order-meta", user.email || "-"));
+      head.appendChild(identity);
+      const badges = document.createElement("div");
+      badges.className = "pill-row";
+      badges.appendChild(createTextElement("span", `badge ${isActive ? "released" : "awaiting"}`, isActive ? "Ativo" : "Inativo"));
+      badges.appendChild(createTextElement("span", `badge ${isAdmin ? "released" : ""}`, isAdmin ? "Admin" : "Usuário"));
+      badges.appendChild(
+        createTextElement(
+          "span",
+          `badge ${isEmailVerified ? "released" : "awaiting"}`,
+          isEmailVerified ? "E-mail confirmado" : "E-mail pendente",
+        ),
+      );
+      head.appendChild(badges);
+      card.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      appendLabeledParagraph(grid, "User ID", user.user_id || "-");
+      appendLabeledParagraph(grid, "Criado", formatDateTime(user.created_at));
+      appendLabeledParagraph(grid, "Atualizado", formatDateTime(user.updated_at));
+      appendLabeledParagraph(grid, "Retornos registrados", Number(user.login_count || 0));
+      appendLabeledParagraph(grid, "Login com senha", Number(user.local_login_count || 0));
+      appendLabeledParagraph(grid, "Login com Google", Number(user.google_login_count || 0));
+      appendLabeledParagraph(grid, "Último login", formatDateTime(user.last_login_at));
+      card.appendChild(grid);
+
+      const buttonRow = document.createElement("div");
+      buttonRow.className = "pill-row";
+      const roleButton = createActionButton(
+        "toggle-role",
+        "userId",
+        user.user_id,
+        isAdmin ? "Revogar admin" : "Promover a admin",
+        { className: "ghost" },
+      );
+      roleButton.dataset.isAdmin = isAdmin ? "1" : "0";
+      buttonRow.appendChild(roleButton);
+      const statusButton = createActionButton(
+        "toggle-status",
+        "userId",
+        user.user_id,
+        isActive ? "Inativar usuário" : "Reativar usuário",
+        { className: "ghost" },
+      );
+      statusButton.dataset.isActive = isActive ? "1" : "0";
+      buttonRow.appendChild(statusButton);
+      buttonRow.appendChild(
+        createActionButton("user-login-history", "userId", user.user_id, "Ver histórico de logins", {
+          className: "ghost",
+        }),
+      );
+      buttonRow.appendChild(
+        createActionButton("user-role-history", "userId", user.user_id, "Ver histórico de permissões", {
+          className: "ghost",
+        }),
+      );
+      card.appendChild(buttonRow);
+      const loginHistory = document.createElement("div");
+      loginHistory.className = "history hidden";
+      loginHistory.dataset.role = "user-login-history";
+      card.appendChild(loginHistory);
+      const roleHistory = document.createElement("div");
+      roleHistory.className = "history hidden";
+      roleHistory.dataset.role = "user-role-history";
+      card.appendChild(roleHistory);
       usersListNode.appendChild(card);
     });
   }
@@ -352,30 +443,29 @@
   async function loadOrderHistory(intentId, historyNode) {
     if (!historyNode) return;
     historyNode.classList.remove("hidden");
-    historyNode.innerHTML = "<p>Carregando histórico...</p>";
+    setHistoryMessage(historyNode, "Carregando histórico...");
     try {
       const { response, payload } = await apiRequest(
         `/admin/checkout/intents/${encodeURIComponent(intentId)}/history?limit=20`,
       );
       if (!response.ok) {
-        historyNode.innerHTML = `<p>${String(payload.detail || "Falha ao carregar histórico.")}</p>`;
+        setHistoryMessage(historyNode, String(payload.detail || "Falha ao carregar histórico."));
         return;
       }
       const items = Array.isArray(payload.items) ? payload.items : [];
       if (!items.length) {
-        historyNode.innerHTML = "<p>Nenhum evento registrado.</p>";
+        setHistoryMessage(historyNode, "Nenhum evento registrado.");
         return;
       }
-      historyNode.innerHTML = items
-        .map(function (item) {
-          const when = formatDateTime(item.created_at);
-          const who = String(item.actor_kind || "system");
-          const msg = String(item.event_message || item.event_type || "-");
-          return `<p><strong>${when}</strong> [${who}] ${msg}</p>`;
-        })
-        .join("");
+      historyNode.replaceChildren();
+      items.forEach(function (item) {
+        const when = formatDateTime(item.created_at);
+        const who = String(item.actor_kind || "system");
+        const message = String(item.event_message || item.event_type || "-");
+        appendHistoryLine(historyNode, when, `[${who}] ${message}`);
+      });
     } catch (_error) {
-      historyNode.innerHTML = "<p>Falha de rede ao carregar histórico.</p>";
+      setHistoryMessage(historyNode, "Falha de rede ao carregar histórico.");
     }
   }
 
@@ -428,59 +518,57 @@
   async function loadUserRoleHistory(userId, historyNode) {
     if (!historyNode) return;
     historyNode.classList.remove("hidden");
-    historyNode.innerHTML = "<p>Carregando histórico de permissões...</p>";
+    setHistoryMessage(historyNode, "Carregando histórico de permissões...");
     try {
       const { response, payload } = await apiRequest(
         `/admin/users/${encodeURIComponent(userId)}/history?limit=20`,
       );
       if (!response.ok) {
-        historyNode.innerHTML = `<p>${String(payload.detail || "Falha ao carregar histórico de permissões.")}</p>`;
+        setHistoryMessage(historyNode, String(payload.detail || "Falha ao carregar histórico de permissões."));
         return;
       }
       const items = Array.isArray(payload.items) ? payload.items : [];
       if (!items.length) {
-        historyNode.innerHTML = "<p>Nenhuma alteração de permissão registrada.</p>";
+        setHistoryMessage(historyNode, "Nenhuma alteração de permissão registrada.");
         return;
       }
-      historyNode.innerHTML = items
-        .map(function (item) {
-          const when = formatDateTime(item.created_at);
-          const actor = String(item.actor_email || item.actor_user_id || "sistema");
-          const label = String(item.new_is_admin ? "Promovido para admin" : "Revogado admin");
-          return `<p><strong>${when}</strong> ${label} por ${actor}</p>`;
-        })
-        .join("");
+      historyNode.replaceChildren();
+      items.forEach(function (item) {
+        const when = formatDateTime(item.created_at);
+        const actor = String(item.actor_email || item.actor_user_id || "sistema");
+        const label = String(item.new_is_admin ? "Promovido para admin" : "Revogado admin");
+        appendHistoryLine(historyNode, when, `${label} por ${actor}`);
+      });
     } catch (_error) {
-      historyNode.innerHTML = "<p>Falha de rede ao carregar histórico de permissões.</p>";
+      setHistoryMessage(historyNode, "Falha de rede ao carregar histórico de permissões.");
     }
   }
 
   async function loadUserLoginHistory(userId, historyNode) {
     if (!historyNode) return;
     historyNode.classList.remove("hidden");
-    historyNode.innerHTML = "<p>Carregando histórico de logins...</p>";
+    setHistoryMessage(historyNode, "Carregando histórico de logins...");
     try {
       const { response, payload } = await apiRequest(
         `/admin/users/${encodeURIComponent(userId)}/login-history?limit=20`,
       );
       if (!response.ok) {
-        historyNode.innerHTML = `<p>${String(payload.detail || "Falha ao carregar histórico de logins.")}</p>`;
+        setHistoryMessage(historyNode, String(payload.detail || "Falha ao carregar histórico de logins."));
         return;
       }
       const items = Array.isArray(payload.items) ? payload.items : [];
       if (!items.length) {
-        historyNode.innerHTML = "<p>Nenhum retorno registrado desde o início do monitoramento.</p>";
+        setHistoryMessage(historyNode, "Nenhum retorno registrado desde o início do monitoramento.");
         return;
       }
-      historyNode.innerHTML = items
-        .map(function (item) {
-          const when = formatDateTime(item.created_at);
-          const method = String(item.auth_method || "") === "google_oauth" ? "Google" : "Senha";
-          return `<p><strong>${when}</strong> via ${method}</p>`;
-        })
-        .join("");
+      historyNode.replaceChildren();
+      items.forEach(function (item) {
+        const when = formatDateTime(item.created_at);
+        const method = String(item.auth_method || "") === "google_oauth" ? "Google" : "Senha";
+        appendHistoryLine(historyNode, when, `via ${method}`);
+      });
     } catch (_error) {
-      historyNode.innerHTML = "<p>Falha de rede ao carregar histórico de logins.</p>";
+      setHistoryMessage(historyNode, "Falha de rede ao carregar histórico de logins.");
     }
   }
 
@@ -585,10 +673,10 @@
       } catch (_error) {
       }
       setAuthenticatedView(false);
-      setStatus("Sessao encerrada.", "ok");
+      setStatus("Sessão encerrada.", "ok");
       setUsersStatus("", null);
-      if (ordersListNode) ordersListNode.innerHTML = "";
-      if (usersListNode) usersListNode.innerHTML = "";
+      if (ordersListNode) ordersListNode.replaceChildren();
+      if (usersListNode) usersListNode.replaceChildren();
     });
   }
 
