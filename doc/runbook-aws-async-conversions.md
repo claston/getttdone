@@ -85,16 +85,16 @@ O primeiro corte usa o Textract assíncrono em modo `text`, com polling dentro d
 
 - Role da Lambda: somente leitura/remoção no prefixo de entrada, leitura/escrita no prefixo de resultados e no staging `textract/tmp/`, `Start/GetDocumentTextDetection`, consumo da fila e logs.
 - Identidade da API Render: somente criação de presigned POST/`HeadObject`, escrita/leitura nos prefixos necessários, `Start/GetDocumentTextDetection` para o fallback inline e `sqs:SendMessage`. Guardar as credenciais somente como secrets do Render e rotacioná-las.
-- Role de deploy: criada por bootstrap local com credenciais temporárias/MFA.
-- GitHub Actions do repositório privado: OIDC com `id-token: write` e `contents: read`; nenhuma `AWS_ACCESS_KEY_ID` ou `AWS_SECRET_ACCESS_KEY` no GitHub.
-- Trust policy restrita ao owner/repository ID imutável quando disponível, ambiente protegido `production` e branch autorizada. Pull requests e forks não recebem permissão de deploy.
-- Actions externas devem ser fixadas por SHA; `apply` exige aprovação manual.
+- Role de deploy local: criada por bootstrap e usada com credenciais temporárias/MFA.
+- Role de deploy do GitHub: OIDC com `id-token: write` e `contents: read`; nenhuma `AWS_ACCESS_KEY_ID` ou `AWS_SECRET_ACCESS_KEY` no GitHub.
+- Trust policy restrita ao subject atual `repo:claston/gettdone:ref:refs/heads/main`. Pull requests, forks e outras branches não recebem permissão de deploy.
+- Actions externas são fixadas por SHA; o workflow exige disparo manual e confirmação explícita.
 
 ## Ordem de implantação sem staging
 
 1. Criar o repositório privado e executar o bootstrap IAM localmente.
 2. Criar S3, SQS/DLQ, ECR, Lambda, EventBridge, roles, logs, métricas, alarmes e budget com o trigger SQS desabilitado.
-3. Construir `Dockerfile.lambda`; validar o import do handler, a disponibilidade do SDK Textract e a arquitetura da imagem compatível com a função.
+3. Construir o primeiro `Dockerfile.lambda` e criar a stack em modo escuro; nas atualizações seguintes, usar o workflow manual OIDC para publicar e trocar somente o digest da imagem.
 4. Executar a migração aditiva `20260829_01` antes do backend novo. O backend antigo ignora as novas tabelas.
 5. Publicar backend e frontend mantendo o perfil `atual/emergência`.
 6. Invocar diretamente a Lambda com jobs sintéticos internos: 1 arquivo, lote de 5 e lote de 12.

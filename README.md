@@ -242,6 +242,7 @@ Arquivos de deploy:
 - `.dockerignore`: reduz contexto de build.
 - `.github/workflows/publish-ghcr.yml`: publica imagem em `ghcr.io/<owner>/gettdone`.
 - `.github/workflows/deploy-render-staging.yml`: faz trigger de deploy pela API do Render.
+- `.github/workflows/deploy-worker-ecr.yml`: publica o worker no ECR e atualiza a Lambda por digest usando GitHub OIDC.
 
 Passo a passo no Render:
 
@@ -249,6 +250,16 @@ Passo a passo no Render:
 2. Configure `Health Check Path` como `/health`.
 3. Defina `PORT` (Render injeta automaticamente; o container ja respeita esse valor).
 4. (Opcional) Defina `CORS_ALLOW_ORIGINS` com dominios permitidos separados por virgula.
+
+## Deploy do worker AWS
+
+O workflow `CD | Deploy Worker Image (ECR)` é manual e aceita deploy somente da
+branch `main`. Configure a variável de Actions `AWS_WORKER_DEPLOY_ROLE_ARN` com
+o output homônimo do bootstrap de infraestrutura. O workflow usa credenciais
+temporárias OIDC, constrói `Dockerfile.lambda` para `linux/amd64`, publica uma
+tag imutável por commit e atualiza somente `ConversionImageUri` na stack do
+worker. Nenhuma access key AWS, URL do banco ou token da aplicação é armazenado
+no GitHub.
 
 ## Baseline de seguranca (Fase 0 - MVP)
 
