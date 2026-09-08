@@ -1,0 +1,348 @@
+name: CD | Deploy Worker Image (ECR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Build, publish and deploy the worker image from main
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-worker-ecr-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  FOUNDATION_STACK_NAME: gettdone-production-foundation
+  WORKER_STACK_NAME: gettdone-production-worker
+
+jobs:
+  deploy-worker:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate deployment configuration
+        env:
+          AWS_WORKER_DEPLOY_ROLE_ARN: ${{ vars.AWS_WORKER_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_WORKER_DEPLOY_ROLE_ARN:-}" ]; then
+            echo "::error::Repository variable AWS_WORKER_DEPLOY_ROLE_ARN is not configured."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_WORKER_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gettdone-worker-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Resolve ECR and CloudFormation targets
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          partition="$(printf '%s' "${caller_arn}" | cut -d: -f2)"
+          repository_uri="$(aws cloudformation describe-stacks \
+            --stack-name "${FOUNDATION_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ConversionImageRepositoryUri'].OutputValue | [0]" \
+            --output text)"
+          repository_name="${repository_uri#*/}"
+          registry="${repository_uri%%/*}"
+          image_tag="release-${GITHUB_SHA::12}"
+          execution_role_arn="arn:${partition}:iam::${account_id}:role/gettdone/GettDoneCloudFormationExecutionRole"
+
+          if [ -z "${repository_uri}" ] || [ "${repository_uri}" = "None" ]; then
+            echo "::error::ConversionImageRepositoryUri was not found in the foundation stack."
+            exit 1
+          fi
+
+          current_image_uri="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='ConversionImageUri'].ParameterValue | [0]" \
+            --output text)"
+          queue_trigger="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='EnableQueueTrigger'].ParameterValue | [0]" \
+            --output text)"
+          outbox_dispatcher="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='EnableOutboxDispatcher'].ParameterValue | [0]" \
+            --output text)"
+
+          image_exists=false
+          existing_digest=""
+          if existing_digest="$(aws ecr describe-images \
+            --repository-name "${repository_name}" \
+            --image-ids "imageTag=${image_tag}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null)"; then
+            if [[ "${existing_digest}" == sha256:* ]]; then
+              image_exists=true
+              echo "::notice::Reusing existing immutable image ${image_tag}."
+            fi
+          fi
+
+          echo "::add-mask::${account_id}"
+          {
+            echo "repository_uri=${repository_uri}"
+            echo "repository_name=${repository_name}"
+            echo "registry=${registry}"
+            echo "image_tag=${image_tag}"
+            echo "image_exists=${image_exists}"
+            echo "existing_digest=${existing_digest}"
+            echo "execution_role_arn=${execution_role_arn}"
+            echo "current_image_uri=${current_image_uri}"
+            echo "queue_trigger=${queue_trigger}"
+            echo "outbox_dispatcher=${outbox_dispatcher}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        if: steps.target.outputs.image_exists != 'true'
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to Amazon ECR
+        if: steps.target.outputs.image_exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password | docker login \
+            --username AWS \
+            --password-stdin "${{ steps.target.outputs.registry }}"
+
+      - name: Build and push immutable worker image
+        id: build
+        if: steps.target.outputs.image_exists != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile.lambda
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          build-args: |
+            APP_RELEASE=${{ github.sha }}
+          tags: ${{ steps.target.outputs.repository_uri }}:${{ steps.target.outputs.image_tag }}
+          cache-from: type=gha,scope=conversion-worker
+          cache-to: type=gha,mode=min,scope=conversion-worker
+
+      - name: Resolve immutable image URI
+        id: image
+        env:
+          IMAGE_EXISTS: ${{ steps.target.outputs.image_exists }}
+          EXISTING_DIGEST: ${{ steps.target.outputs.existing_digest }}
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+          REPOSITORY_URI: ${{ steps.target.outputs.repository_uri }}
+          CURRENT_IMAGE_URI: ${{ steps.target.outputs.current_image_uri }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository_uri="${REPOSITORY_URI}"
+          if [ "${IMAGE_EXISTS}" = "true" ]; then
+            digest="${EXISTING_DIGEST}"
+          else
+            digest="${BUILT_DIGEST}"
+          fi
+          if [[ "${digest}" != sha256:* ]]; then
+            echo "::error::The ECR image digest is invalid or missing."
+            exit 1
+          fi
+
+          image_uri="${repository_uri}@${digest}"
+          needs_update=true
+          if [ "${image_uri}" = "${CURRENT_IMAGE_URI}" ]; then
+            needs_update=false
+            echo "::notice::Worker stack already uses ${digest}; no update is necessary."
+          fi
+          {
+            echo "digest=${digest}"
+            echo "image_uri=${image_uri}"
+            echo "needs_update=${needs_update}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create and validate worker image change set
+        id: change_set
+        if: steps.image.outputs.needs_update == 'true'
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          EXECUTION_ROLE_ARN: ${{ steps.target.outputs.execution_role_arn }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters_file="${RUNNER_TEMP}/worker-parameters.json"
+          change_file="${RUNNER_TEMP}/worker-change-set.json"
+          change_set="worker-image-${GITHUB_SHA::12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query 'Stacks[0].Parameters[].ParameterKey' \
+            --output json |
+            jq --arg image "${IMAGE_URI}" '
+              map(
+                if . == "ConversionImageUri" then
+                  {ParameterKey: ., ParameterValue: $image}
+                else
+                  {ParameterKey: ., UsePreviousValue: true}
+                end
+              )
+            ' > "${parameters_file}"
+
+          aws cloudformation create-change-set \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --change-set-name "${change_set}" \
+            --change-set-type UPDATE \
+            --use-previous-template \
+            --parameters "file://${parameters_file}" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --role-arn "${EXECUTION_ROLE_ARN}" \
+            --description "Deploy Lambda image for app commit ${GITHUB_SHA}" \
+            >/dev/null
+
+          echo "created=true" >> "${GITHUB_OUTPUT}"
+          echo "name=${change_set}" >> "${GITHUB_OUTPUT}"
+
+          if ! aws cloudformation wait change-set-create-complete \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --change-set-name "${change_set}"; then
+            aws cloudformation describe-change-set \
+              --stack-name "${WORKER_STACK_NAME}" \
+              --change-set-name "${change_set}" \
+              --query '{Status:Status,StatusReason:StatusReason}' \
+              --output table || true
+            aws cloudformation delete-change-set \
+              --stack-name "${WORKER_STACK_NAME}" \
+              --change-set-name "${change_set}" || true
+            exit 1
+          fi
+
+          aws cloudformation describe-change-set \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --change-set-name "${change_set}" \
+            --include-property-values \
+            --output json > "${change_file}"
+
+          if ! jq -e --arg image "${IMAGE_URI}" '
+            .Status == "CREATE_COMPLETE" and
+            .ExecutionStatus == "AVAILABLE" and
+            (.Changes | length == 1) and
+            (.Changes[0].ResourceChange.Action == "Modify") and
+            (.Changes[0].ResourceChange.LogicalResourceId == "ConversionWorker") and
+            (.Changes[0].ResourceChange.ResourceType == "AWS::Lambda::Function") and
+            (.Changes[0].ResourceChange.Replacement == "False") and
+            ([
+              .Changes[0].ResourceChange.Details[].Target
+              | select(
+                  .Path == "/Properties/Code/ImageUri" and
+                  .AfterValue == $image and
+                  .RequiresRecreation == "Never"
+                )
+            ] | length >= 1)
+          ' "${change_file}" >/dev/null; then
+            echo "::error::Change set contains changes beyond ConversionWorker.Code.ImageUri."
+            jq '{
+              Status,
+              ExecutionStatus,
+              Changes: [.Changes[].ResourceChange | {
+                Action,
+                LogicalResourceId,
+                ResourceType,
+                Replacement,
+                Paths: [.Details[].Target.Path]
+              }]
+            }' "${change_file}"
+            aws cloudformation delete-change-set \
+              --stack-name "${WORKER_STACK_NAME}" \
+              --change-set-name "${change_set}"
+            exit 1
+          fi
+
+      - name: Execute worker image change set
+        if: steps.image.outputs.needs_update == 'true'
+        env:
+          CHANGE_SET_NAME: ${{ steps.change_set.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation execute-change-set \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --change-set-name "${CHANGE_SET_NAME}"
+
+          if ! aws cloudformation wait stack-update-complete \
+            --stack-name "${WORKER_STACK_NAME}"; then
+            aws cloudformation describe-stack-events \
+              --stack-name "${WORKER_STACK_NAME}" \
+              --query 'StackEvents[:15].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+              --output table || true
+            exit 1
+          fi
+
+      - name: Verify deployed worker state
+        env:
+          EXPECTED_IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          PREVIOUS_QUEUE_TRIGGER: ${{ steps.target.outputs.queue_trigger }}
+          PREVIOUS_OUTBOX_DISPATCHER: ${{ steps.target.outputs.outbox_dispatcher }}
+          IMAGE_TAG: ${{ steps.target.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack_status="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query 'Stacks[0].StackStatus' \
+            --output text)"
+          deployed_image_uri="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='ConversionImageUri'].ParameterValue | [0]" \
+            --output text)"
+          queue_trigger="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='EnableQueueTrigger'].ParameterValue | [0]" \
+            --output text)"
+          outbox_dispatcher="$(aws cloudformation describe-stacks \
+            --stack-name "${WORKER_STACK_NAME}" \
+            --query "Stacks[0].Parameters[?ParameterKey=='EnableOutboxDispatcher'].ParameterValue | [0]" \
+            --output text)"
+
+          if [ "${stack_status}" != "UPDATE_COMPLETE" ] && [ "${stack_status}" != "CREATE_COMPLETE" ]; then
+            echo "::error::Unexpected worker stack status: ${stack_status}"
+            exit 1
+          fi
+          if [ "${deployed_image_uri}" != "${EXPECTED_IMAGE_URI}" ]; then
+            echo "::error::Worker stack does not reference the expected image digest."
+            exit 1
+          fi
+          if [ "${queue_trigger}" != "${PREVIOUS_QUEUE_TRIGGER}" ]; then
+            echo "::error::EnableQueueTrigger changed during the image deployment."
+            exit 1
+          fi
+          if [ "${outbox_dispatcher}" != "${PREVIOUS_OUTBOX_DISPATCHER}" ]; then
+            echo "::error::EnableOutboxDispatcher changed during the image deployment."
+            exit 1
+          fi
+
+          {
+            echo "## Worker deployment"
+            echo ""
+            echo "- Image tag: ${IMAGE_TAG}"
+            echo "- Image digest: ${IMAGE_DIGEST}"
+            echo "- Stack status: ${stack_status}"
+            echo "- Queue trigger preserved: ${queue_trigger}"
+            echo "- Outbox dispatcher preserved: ${outbox_dispatcher}"
+          } >> "${GITHUB_STEP_SUMMARY}"
