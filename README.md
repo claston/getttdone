@@ -261,6 +261,11 @@ tag imutável por commit e atualiza somente `ConversionImageUri` na stack do
 worker. Nenhuma access key AWS, URL do banco ou token da aplicação é armazenado
 no GitHub.
 
+A imagem do worker possui uma fronteira própria: compartilha o core de
+conversão, mas exclui frontend, rotas, administração, autenticação, checkout e
+dependências web. Enquanto a publicação permanecer operacionalmente manual,
+siga o runbook de [isolamento e publicação manual do worker](docs/worker-runtime-isolation.md).
+
 ## Baseline de seguranca (Fase 0 - MVP)
 
 Quando `APP_ENV=production`, a aplicacao agora faz validacao de seguranca na inicializacao e nao sobe se houver configuracao insegura.

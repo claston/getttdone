@@ -28,6 +28,7 @@ from app.application.access_control.access_control_quota import AccessControlQuo
 from app.application.access_control.access_control_schema import AccessControlSchemaComponent
 from app.application.access_control.access_control_session import AccessControlSessionComponent
 from app.application.access_control.access_control_session_core import AccessControlSessionCoreComponent
+from app.application.conversion.identity import IdentityContext
 from app.application.errors import InvalidUserTokenError
 
 ANONYMOUS_QUOTA_LIMIT = 3
@@ -43,20 +44,6 @@ DEFAULT_DB_CONNECT_RETRY_BASE_MS = 200
 DEFAULT_DB_POOL_MIN_SIZE = 1
 DEFAULT_DB_POOL_MAX_SIZE = 3
 DEFAULT_DB_POOL_TIMEOUT_SECONDS = 5.0
-
-
-@dataclass(frozen=True)
-class IdentityContext:
-    identity_type: str
-    identity_id: str
-    quota_limit: int
-    quota_mode: str = "conversion"
-    quota_window_days: int = QUOTA_WINDOW_DAYS
-    max_upload_size_bytes: int = MAX_UPLOAD_SIZE_BYTES
-    max_pages_per_file: int = DEFAULT_MAX_PAGES_PER_FILE
-    max_pages_per_file_ocr: int | None = None
-    plan_code: str | None = None
-    plan_name: str | None = None
 
 
 @dataclass(frozen=True)

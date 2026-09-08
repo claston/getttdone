@@ -8,7 +8,7 @@ from pathlib import Path
 from time import monotonic, time
 from typing import Protocol
 
-from app.application.access_control import AccessControlService
+from app.application.conversion.conversion_access import PostgresConversionAccessService
 from app.application.conversion.conversion_batch_repository import ConversionBatchRepository
 from app.application.conversion.conversion_batch_service import dispatch_conversion_outbox
 from app.application.conversion.conversion_document_store import (
@@ -241,7 +241,6 @@ def lambda_handler(event, context):
 def build_lambda_processor() -> ConversionLambdaProcessor:
     database_url = _required_env("DATABASE_URL")
     bucket = _required_env("CONVERSION_S3_BUCKET")
-    token_secret = _required_env("ACCESS_CONTROL_TOKEN_SECRET")
     region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
     database_schema = os.getenv("DATABASE_SCHEMA", "public")
     active_ttl = int(os.getenv("CONVERSION_JOB_ACTIVE_TTL_SECONDS", "86400"))
@@ -268,9 +267,7 @@ def build_lambda_processor() -> ConversionLambdaProcessor:
         server_side_encryption=os.getenv("CONVERSION_S3_SERVER_SIDE_ENCRYPTION", "AES256"),
         kms_key_id=os.getenv("CONVERSION_S3_KMS_KEY_ID"),
     )
-    access_control_service = AccessControlService(
-        state_file=Path("/tmp/gettdone/access/state.json"),
-        token_secret=token_secret,
+    access_control_service = PostgresConversionAccessService(
         database_url=database_url,
         database_schema=database_schema,
         db_pool_min_size=1,

@@ -12,10 +12,10 @@ from time import sleep
 from typing import Callable, Protocol
 from uuid import uuid4
 
-from app.application.access_control import IdentityContext
 from app.application.conversion.conversion_document_store import ConversionDocumentReference
 from app.application.conversion.conversion_job import ConversionJob
 from app.application.conversion.document_preflight_service import DocumentPreflightResult
+from app.application.conversion.identity import IdentityContext
 
 _JOB_ID_PATTERN = re.compile(r"^job_[A-Za-z0-9_-]{1,64}$")
 

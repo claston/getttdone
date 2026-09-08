@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterator
 from uuid import uuid4
 
-from app.application.access_control import IdentityContext
 from app.application.conversion.conversion_batch import ConversionBatch, ConversionBatchStatus, resolve_conversion_batch_status
 from app.application.conversion.conversion_batch_repository import (
     ConversionBatchSnapshot,
@@ -24,6 +23,7 @@ from app.application.conversion.conversion_job_repository import (
     ConversionJobSubmission,
 )
 from app.application.conversion.document_preflight_service import DocumentPreflightResult
+from app.application.conversion.identity import IdentityContext
 
 _SCHEMA_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ConnectionFactory = Callable[[], Any]

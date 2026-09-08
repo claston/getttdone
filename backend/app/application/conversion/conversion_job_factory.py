@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from app.application.access_control import AccessControlService
 from app.application.conversion.conversion_document_store import ConversionDocumentStore
 from app.application.conversion.conversion_job import ConversionJob
 from app.application.conversion.conversion_job_cleanup_service import ConversionJobCleanupService
@@ -11,9 +11,15 @@ from app.application.conversion.uploaded_document import UploadedDocument
 from app.application.errors import InvalidSessionTokenError, InvalidUserTokenError
 
 
+class ConversionIdentityResolver(Protocol):
+    def get_user_by_session_access_token(self, token: str): ...
+
+    def resolve_identity(self, anonymous_fingerprint: str | None, user_token: str | None): ...
+
+
 @dataclass(frozen=True, slots=True)
 class ConversionJobFactory:
-    access_control_service: AccessControlService
+    access_control_service: ConversionIdentityResolver
     document_store: ConversionDocumentStore
     job_repository: ConversionJobRepository
     cleanup_service: ConversionJobCleanupService | None = None
@@ -59,7 +65,7 @@ class ConversionJobFactory:
 
 def resolve_conversion_identity(
     *,
-    access_control_service: AccessControlService,
+    access_control_service: ConversionIdentityResolver,
     anonymous_fingerprint: str | None,
     user_token: str | None,
     authorization: str | None,
