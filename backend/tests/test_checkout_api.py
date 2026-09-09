@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.application import ContactDeliveryError, ContactDeliveryResult, ContactProviderNotConfiguredError
@@ -233,6 +234,40 @@ def test_checkout_status_read_and_admin_payment_link_update() -> None:
         assert latest_status.status_code == 200
         assert latest_status.json()["intent_id"] == intent_id
         assert latest_status.json()["status"] == "AWAITING_PAYMENT"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    "payment_link",
+    [
+        "javascript:alert(document.cookie)",
+        "http://[invalid-ipv6",
+    ],
+)
+def test_admin_payment_link_rejects_script_url(payment_link: str) -> None:
+    fake_contact = FakeContactService()
+    access_control = _AccessControlServiceInMemory(
+        state_file=Path("backend/tmp/checkout-access-control-state.json"),
+        token_secret="test-secret",
+        admin_emails={"admin@example.com"},
+    )
+    app.dependency_overrides[get_access_control_service] = lambda: access_control
+    app.dependency_overrides[get_contact_service] = lambda: fake_contact
+    client = TestClient(app)
+    try:
+        _create_admin_user(access_control)
+        _login_admin(client)
+        user_token = _create_user_token(access_control)
+        created = _create_checkout_intent(client, user_token=user_token, plan_code="essencial")
+
+        response = client.post(
+            f"/admin/checkout/intents/{created['intent_id']}/payment-link",
+            json={"payment_link": payment_link},
+        )
+
+        assert response.status_code == 400
+        assert "http" in response.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
 

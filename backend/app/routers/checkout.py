@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 
 from app.application import (
@@ -36,6 +38,22 @@ def _format_price_brl(price_cents: int) -> str:
     reais = value // 100
     cents = value % 100
     return f"R$ {reais},{cents:02d}"
+
+
+def _is_safe_payment_link(value: str) -> bool:
+    if not value or len(value) > 2048 or any(ord(character) < 32 for character in value):
+        return False
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() in {"http", "https"}
+        and bool(hostname)
+        and not parsed.username
+        and not parsed.password
+    )
 
 
 def _next_step_for_status(status: str) -> str:
@@ -291,6 +309,8 @@ def set_checkout_intent_payment_link(
     clean_payment_link = payload.payment_link.strip()
     if not clean_intent_id or not clean_payment_link:
         raise HTTPException(status_code=400, detail="intent_id and payment_link are required.")
+    if not _is_safe_payment_link(clean_payment_link):
+        raise HTTPException(status_code=400, detail="payment_link must be a valid HTTP or HTTPS URL.")
 
     try:
         intent = access_control_service.mark_checkout_intent_awaiting_payment(

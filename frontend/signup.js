@@ -1,4 +1,6 @@
 (function () {
+  "use strict";
+
   const form = document.getElementById("signup-form");
   const statusMsg = document.getElementById("status-msg");
   const loginLink = document.getElementById("login-link");
@@ -6,145 +8,12 @@
   const googleSignupBtn = document.getElementById("google-signup-btn");
   const googleSignupDivider = document.getElementById("google-signup-divider");
   const acceptedTermsError = document.getElementById("accepted-terms-error");
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const USER_TOKEN_COOKIE = "ofxsimples_user_token";
-  const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
   const PENDING_EMAIL_KEY = "ofxsimples_pending_verification_email";
   const PENDING_DELIVERY_KEY = "ofxsimples_pending_verification_delivery";
-
-  function isIpv4Host(hostname) {
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
-  }
-
-  function normalizeDomainCandidate(value) {
-    return String(value || "").trim().toLowerCase().replace(/^\.+/, "");
-  }
-
-  function getConfiguredSharedCookieAllowlist() {
-    const configured = window.__OFX_TOKEN_SHARED_COOKIE_ALLOWLIST__;
-    if (!Array.isArray(configured)) {
-      return TOKEN_SHARED_COOKIE_ALLOWLIST;
-    }
-    const normalized = configured
-      .map(function (item) {
-        return normalizeDomainCandidate(item);
-      })
-      .filter(function (item) {
-        return /^[a-z0-9.-]+$/.test(item) && item.includes(".");
-      });
-    if (normalized.length) {
-      return normalized;
-    }
-    return TOKEN_SHARED_COOKIE_ALLOWLIST;
-  }
-
-  function resolveLegacySharedCookieDomain() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const labels = host.split(".").filter(Boolean);
-    if (labels.length < 2) {
-      return null;
-    }
-    if (labels.length >= 3 && labels[labels.length - 2] === "com" && labels[labels.length - 1] === "br") {
-      return `.${labels.slice(-3).join(".")}`;
-    }
-    return `.${labels.slice(-2).join(".")}`;
-  }
-
-  function resolveSharedCookieDomain() {
-    if (window.location.protocol !== "https:") {
-      return null;
-    }
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const allowedDomains = getConfiguredSharedCookieAllowlist();
-    for (const allowedDomain of allowedDomains) {
-      if (host === allowedDomain || host.endsWith(`.${allowedDomain}`)) {
-        return `.${allowedDomain}`;
-      }
-    }
-    return null;
-  }
-
-  function readUserTokenCookie() {
-    const entries = String(document.cookie || "").split(";");
-    for (const entry of entries) {
-      const [namePart, ...valueParts] = entry.split("=");
-      const name = String(namePart || "").trim();
-      if (name !== USER_TOKEN_COOKIE) continue;
-      const rawValue = valueParts.join("=");
-      const decoded = decodeURIComponent(String(rawValue || "").trim());
-      if (decoded) return decoded;
-    }
-    return "";
-  }
-
-  function writeUserTokenCookie(token) {
-    const safeToken = encodeURIComponent(String(token || "").trim());
-    if (!safeToken) return;
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function clearUserTokenCookie() {
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    const legacySharedDomain = resolveLegacySharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-    if (legacySharedDomain && legacySharedDomain !== sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${legacySharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function getStoredUserToken() {
-    const localToken = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    if (localToken) {
-      writeUserTokenCookie(localToken);
-      return localToken;
-    }
-    const cookieToken = readUserTokenCookie();
-    if (cookieToken) {
-      localStorage.setItem(USER_TOKEN_KEY, cookieToken);
-      return cookieToken;
-    }
-    return "";
-  }
-
-  function storeUserToken(token) {
-    const safeToken = String(token || "").trim();
-    localStorage.setItem(USER_TOKEN_KEY, safeToken);
-    writeUserTokenCookie(safeToken);
-  }
-
-  function clearUserToken() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    clearUserTokenCookie();
-  }
-
-  function resolveApiBase() {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const isLocalHost = host === "localhost" || host === "127.0.0.1";
-    const isDevFrontend = isLocalHost && port !== "8000";
-    if (isDevFrontend) return "http://127.0.0.1:8000";
-    if (window.location.origin && window.location.origin !== "null") return window.location.origin;
-    return "http://127.0.0.1:8000";
-  }
-
-  const apiBase = resolveApiBase();
+  const session = window.OfxSession;
 
   function setStatus(message, kind) {
+    if (!statusMsg) return;
     statusMsg.textContent = message || "";
     statusMsg.className = "status";
     if (kind) statusMsg.classList.add(kind);
@@ -172,48 +41,21 @@
   }
 
   function syncGoogleSignupDivider() {
-    if (!(googleSignupBtn instanceof HTMLElement) || !(googleSignupDivider instanceof HTMLElement)) {
-      return;
-    }
+    if (!(googleSignupBtn instanceof HTMLElement) || !(googleSignupDivider instanceof HTMLElement)) return;
     googleSignupDivider.hidden = googleSignupBtn.hidden;
   }
 
   function getNextPath() {
     const params = new URLSearchParams(window.location.search);
     const next = String(params.get("next") || "").trim();
-    if (!next.startsWith("/")) return "/ofx-convert.html";
+    if (!next.startsWith("/") || next.startsWith("//")) return "/ofx-convert.html";
     return next;
   }
 
-  async function getSessionValidationState(token) {
-    if (!token) return "missing";
-    try {
-      const response = await fetch(`${apiBase}/auth/me`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        return "valid";
-      }
-      if (response.status === 401) {
-        return "invalid";
-      }
-      return "unknown";
-    } catch (_error) {
-      return "unknown";
-    }
-  }
-
   async function bootstrapExistingSession() {
-    const existingToken = getStoredUserToken();
-    if (!existingToken) return;
-    const sessionState = await getSessionValidationState(existingToken);
-    if (sessionState === "valid") {
-      window.location.href = getNextPath();
-      return;
-    }
-    if (sessionState === "invalid") {
-      clearUserToken();
-    }
+    if (!session) return;
+    const currentUser = await session.getCurrentUser();
+    if (currentUser) window.location.href = getNextPath();
   }
 
   function getReason() {
@@ -227,48 +69,55 @@
   }
 
   async function postSignup(payload) {
-    const response = await fetch(`${apiBase}/auth/register`, {
+    if (!session) throw new Error("Cliente de sessão indisponível.");
+    const response = await fetch(`${session.apiBase}/auth/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(function () {
+      return {};
+    });
     if (!response.ok) throw new Error(data.detail || "Falha no cadastro.");
     return data;
   }
 
-  if (loginLink) {
-    loginLink.href = `./login.html?next=${encodeURIComponent(getNextPath())}`;
+  async function startCookieSession(email, password) {
+    if (!session) throw new Error("Cliente de sessão indisponível.");
+    const response = await session.login({ email, password });
+    const payload = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      const detail = payload && payload.detail;
+      throw new Error(
+        detail && typeof detail === "object" ? detail.message : detail || "Falha ao iniciar a sessão.",
+      );
+    }
   }
 
-  if (topLoginLink) {
-    topLoginLink.href = `./login.html?next=${encodeURIComponent(getNextPath())}`;
-  }
+  if (loginLink) loginLink.href = `./login.html?next=${encodeURIComponent(getNextPath())}`;
+  if (topLoginLink) topLoginLink.href = `./login.html?next=${encodeURIComponent(getNextPath())}`;
 
   if (getReason() === "quota") {
-    setStatus("Voce atingiu o limite gratuito. Crie sua conta para liberar +10 conversoes.", null);
+    setStatus("Você atingiu o limite gratuito. Crie sua conta para liberar +10 conversões.", null);
   }
-
   if (getReason() === "google_signup_required") {
-    setStatus("Nao encontramos uma conta para este Google. Aceite os termos e continue com Google para criar sua conta.", null);
+    setStatus(
+      "Não encontramos uma conta para este Google. Aceite os termos e continue com Google para criar sua conta.",
+      null,
+    );
   }
 
   if (form) {
     const name = document.getElementById("name");
     const email = document.getElementById("email");
-    if (name instanceof HTMLInputElement && !name.value.trim()) {
-      name.value = getPrefillValue("prefill_name");
-    }
-    if (email instanceof HTMLInputElement && !email.value.trim()) {
-      email.value = getPrefillValue("prefill_email");
-    }
-  }
+    if (name instanceof HTMLInputElement && !name.value.trim()) name.value = getPrefillValue("prefill_name");
+    if (email instanceof HTMLInputElement && !email.value.trim()) email.value = getPrefillValue("prefill_email");
 
-  if (form) {
-    form.addEventListener("submit", async (event) => {
+    form.addEventListener("submit", async function (event) {
       event.preventDefault();
-      const name = document.getElementById("name");
-      const email = document.getElementById("email");
       const password = document.getElementById("password");
       const acceptedTerms = document.getElementById("accepted-terms");
       const productUpdatesOptIn = document.getElementById("product-updates-opt-in");
@@ -282,7 +131,7 @@
         return;
       }
       if (!acceptedTerms.checked) {
-        setTermsError("Voce precisa aceitar os Termos de Uso e a Politica de Privacidade.");
+        setTermsError("Você precisa aceitar os Termos de Uso e a Política de Privacidade.");
         focusTermsField();
         return;
       }
@@ -302,7 +151,7 @@
           window.location.href = "./verificar-email.html?pending=1";
           return;
         }
-        storeUserToken(String(payload.user_token || ""));
+        await startCookieSession(email.value, password.value);
         setStatus("Conta criada com sucesso.", "success");
         window.location.href = getNextPath();
       } catch (error) {
@@ -311,32 +160,28 @@
     });
   }
 
-  if (googleSignupBtn) {
-    googleSignupBtn.addEventListener("click", () => {
+  if (googleSignupBtn && session) {
+    googleSignupBtn.addEventListener("click", function () {
       const acceptedTerms = document.getElementById("accepted-terms");
       const productUpdatesOptIn = document.getElementById("product-updates-opt-in");
-      if (!(acceptedTerms instanceof HTMLInputElement) || !(productUpdatesOptIn instanceof HTMLInputElement)) {
-        return;
-      }
+      if (!(acceptedTerms instanceof HTMLInputElement) || !(productUpdatesOptIn instanceof HTMLInputElement)) return;
       if (!acceptedTerms.checked) {
-        setTermsError("Aceite os Termos de Uso e a Politica de Privacidade para continuar com Google.");
+        setTermsError("Aceite os Termos de Uso e a Política de Privacidade para continuar com Google.");
         focusTermsField();
         return;
       }
       setTermsError("");
       const next = encodeURIComponent(getNextPath());
-      const productUpdatesOptInValue = productUpdatesOptIn.checked ? "1" : "0";
+      const updates = productUpdatesOptIn.checked ? "1" : "0";
       window.location.href =
-        `${apiBase}/auth/google/start?next=${next}&flow=signup&accepted_terms=1&product_updates_opt_in=${productUpdatesOptInValue}`;
+        `${session.apiBase}/auth/google/start?next=${next}&flow=signup&accepted_terms=1&product_updates_opt_in=${updates}`;
     });
   }
 
   const acceptedTerms = document.getElementById("accepted-terms");
   if (acceptedTerms instanceof HTMLInputElement) {
-    acceptedTerms.addEventListener("change", () => {
-      if (acceptedTerms.checked) {
-        setTermsError("");
-      }
+    acceptedTerms.addEventListener("change", function () {
+      if (acceptedTerms.checked) setTermsError("");
     });
   }
 

@@ -1,146 +1,15 @@
 (function () {
+  "use strict";
+
   const form = document.getElementById("login-form");
   const statusMsg = document.getElementById("status-msg");
   const signupLink = document.getElementById("signup-link");
   const googleLoginBtn = document.getElementById("google-login-btn");
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const USER_TOKEN_COOKIE = "ofxsimples_user_token";
-  const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
   const PENDING_EMAIL_KEY = "ofxsimples_pending_verification_email";
-
-  function isIpv4Host(hostname) {
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
-  }
-
-  function normalizeDomainCandidate(value) {
-    return String(value || "").trim().toLowerCase().replace(/^\.+/, "");
-  }
-
-  function getConfiguredSharedCookieAllowlist() {
-    const configured = window.__OFX_TOKEN_SHARED_COOKIE_ALLOWLIST__;
-    if (!Array.isArray(configured)) {
-      return TOKEN_SHARED_COOKIE_ALLOWLIST;
-    }
-    const normalized = configured
-      .map(function (item) {
-        return normalizeDomainCandidate(item);
-      })
-      .filter(function (item) {
-        return /^[a-z0-9.-]+$/.test(item) && item.includes(".");
-      });
-    if (normalized.length) {
-      return normalized;
-    }
-    return TOKEN_SHARED_COOKIE_ALLOWLIST;
-  }
-
-  function resolveLegacySharedCookieDomain() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const labels = host.split(".").filter(Boolean);
-    if (labels.length < 2) {
-      return null;
-    }
-    if (labels.length >= 3 && labels[labels.length - 2] === "com" && labels[labels.length - 1] === "br") {
-      return `.${labels.slice(-3).join(".")}`;
-    }
-    return `.${labels.slice(-2).join(".")}`;
-  }
-
-  function resolveSharedCookieDomain() {
-    if (window.location.protocol !== "https:") {
-      return null;
-    }
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const allowedDomains = getConfiguredSharedCookieAllowlist();
-    for (const allowedDomain of allowedDomains) {
-      if (host === allowedDomain || host.endsWith(`.${allowedDomain}`)) {
-        return `.${allowedDomain}`;
-      }
-    }
-    return null;
-  }
-
-  function readUserTokenCookie() {
-    const entries = String(document.cookie || "").split(";");
-    for (const entry of entries) {
-      const [namePart, ...valueParts] = entry.split("=");
-      const name = String(namePart || "").trim();
-      if (name !== USER_TOKEN_COOKIE) continue;
-      const rawValue = valueParts.join("=");
-      const decoded = decodeURIComponent(String(rawValue || "").trim());
-      if (decoded) return decoded;
-    }
-    return "";
-  }
-
-  function writeUserTokenCookie(token) {
-    const safeToken = encodeURIComponent(String(token || "").trim());
-    if (!safeToken) return;
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function clearUserTokenCookie() {
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    const legacySharedDomain = resolveLegacySharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-    if (legacySharedDomain && legacySharedDomain !== sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${legacySharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function getStoredUserToken() {
-    const localToken = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    if (localToken) {
-      writeUserTokenCookie(localToken);
-      return localToken;
-    }
-    const cookieToken = readUserTokenCookie();
-    if (cookieToken) {
-      localStorage.setItem(USER_TOKEN_KEY, cookieToken);
-      return cookieToken;
-    }
-    return "";
-  }
-
-  function storeUserToken(token) {
-    const safeToken = String(token || "").trim();
-    localStorage.setItem(USER_TOKEN_KEY, safeToken);
-    writeUserTokenCookie(safeToken);
-  }
-
-  function clearUserToken() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    clearUserTokenCookie();
-  }
-
-  function resolveApiBase() {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const isLocalHost = host === "localhost" || host === "127.0.0.1";
-    const isDevFrontend = isLocalHost && port !== "8000";
-    if (isDevFrontend) return "http://127.0.0.1:8000";
-    if (window.location.origin && window.location.origin !== "null") return window.location.origin;
-    return "http://127.0.0.1:8000";
-  }
-
-  const apiBase = resolveApiBase();
+  const session = window.OfxSession;
 
   function setStatus(message, kind) {
+    if (!statusMsg) return;
     statusMsg.textContent = message || "";
     statusMsg.className = "status";
     if (kind) statusMsg.classList.add(kind);
@@ -149,7 +18,7 @@
   function getNextPath() {
     const params = new URLSearchParams(window.location.search);
     const next = String(params.get("next") || "").trim();
-    if (!next.startsWith("/")) return "/client-area.html";
+    if (!next.startsWith("/") || next.startsWith("//")) return "/client-area.html";
     return next;
   }
 
@@ -159,48 +28,22 @@
     return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
   }
 
-  async function getSessionValidationState(token) {
-    if (!token) return "missing";
-    try {
-      const response = await fetch(`${apiBase}/auth/me`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        return "valid";
-      }
-      if (response.status === 401) {
-        return "invalid";
-      }
-      return "unknown";
-    } catch (_error) {
-      return "unknown";
-    }
-  }
-
   async function bootstrapExistingSession() {
+    if (!session) return;
     if (shouldForceAuth()) {
-      clearUserToken();
+      await session.logout();
       return;
     }
-    const existingToken = getStoredUserToken();
-    if (!existingToken) return;
-    const sessionState = await getSessionValidationState(existingToken);
-    if (sessionState === "valid") {
-      window.location.href = getNextPath();
-      return;
-    }
-    if (sessionState === "invalid") {
-      clearUserToken();
-    }
+    const currentUser = await session.getCurrentUser();
+    if (currentUser) window.location.href = getNextPath();
   }
 
   async function postLogin(payload) {
-    const response = await fetch(`${apiBase}/auth/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+    if (!session) throw new Error("Cliente de sessão indisponível.");
+    const response = await session.login(payload);
+    const data = await response.json().catch(function () {
+      return {};
     });
-    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const detail = data && data.detail;
       const error = new Error(
@@ -217,15 +60,14 @@
   }
 
   if (form) {
-    form.addEventListener("submit", async (event) => {
+    form.addEventListener("submit", async function (event) {
       event.preventDefault();
       const email = document.getElementById("email");
       const password = document.getElementById("password");
       if (!(email instanceof HTMLInputElement) || !(password instanceof HTMLInputElement)) return;
       try {
         setStatus("Validando acesso...", null);
-        const payload = await postLogin({ email: email.value, password: password.value });
-        storeUserToken(String(payload.user_token || ""));
+        await postLogin({ email: email.value, password: password.value });
         setStatus("Login realizado com sucesso.", "success");
         window.location.href = getNextPath();
       } catch (error) {
@@ -239,10 +81,10 @@
     });
   }
 
-  if (googleLoginBtn) {
-    googleLoginBtn.addEventListener("click", () => {
+  if (googleLoginBtn && session) {
+    googleLoginBtn.addEventListener("click", function () {
       const next = encodeURIComponent(getNextPath());
-      window.location.href = `${apiBase}/auth/google/start?next=${next}&flow=login`;
+      window.location.href = `${session.apiBase}/auth/google/start?next=${next}&flow=login`;
     });
   }
 

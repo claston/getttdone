@@ -1,14 +1,30 @@
 ﻿(function () {
-  const STORAGE_KEY = 'ofx_privacy_preferences_v1';
+  const LEGACY_STORAGE_KEY = 'ofx_privacy_preferences_v1';
+  const COOKIE_NAME = 'ofx_privacy_preferences_v1';
   const POLICY_VERSION = '2026-05-15';
   const GTM_ID = 'GTM-KXD6TMPC';
 
   function readPrefs() {
+    const entries = String(document.cookie || '').split(';');
+    for (const entry of entries) {
+      const parts = entry.split('=');
+      const name = String(parts.shift() || '').trim();
+      if (name !== COOKIE_NAME) continue;
+      try {
+        const parsed = JSON.parse(decodeURIComponent(parts.join('=')));
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (_) {
+        return null;
+      }
+    }
+
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
+      savePrefs(parsed);
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       return parsed;
     } catch (_) {
       return null;
@@ -23,7 +39,8 @@
       policyVersion: POLICY_VERSION,
       timestamp: new Date().toISOString()
     };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(payload))}; Path=/; Max-Age=15552000; SameSite=Lax${secure}`;
     return payload;
   }
 

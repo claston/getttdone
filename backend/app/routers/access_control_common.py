@@ -26,6 +26,8 @@ SESSION_REFRESH_COOKIE_NAME = (
 SESSION_ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("SESSION_ACCESS_TOKEN_TTL_SECONDS", "900"))
 SESSION_REFRESH_TOKEN_TTL_SECONDS = int(os.getenv("SESSION_REFRESH_TOKEN_TTL_SECONDS", "1209600"))
 SESSION_COOKIE_SECURE = read_bool_env("SESSION_COOKIE_SECURE", default=is_production_env())
+SESSION_REFRESH_COOKIE_PATH = "/auth/session"
+LEGACY_SESSION_REFRESH_COOKIE_PATH = "/auth/session/refresh"
 
 
 def _default_anonymous_identity_cookie_name() -> str:
@@ -99,6 +101,13 @@ def set_session_cookies(response: JSONResponse, *, access_token: str, refresh_to
         samesite="lax",
         path="/",
     )
+    response.delete_cookie(
+        key=SESSION_REFRESH_COOKIE_NAME,
+        path=LEGACY_SESSION_REFRESH_COOKIE_PATH,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=True,
+        samesite="strict",
+    )
     response.set_cookie(
         key=SESSION_REFRESH_COOKIE_NAME,
         value=refresh_token,
@@ -106,7 +115,7 @@ def set_session_cookies(response: JSONResponse, *, access_token: str, refresh_to
         httponly=True,
         secure=SESSION_COOKIE_SECURE,
         samesite="strict",
-        path="/auth/session/refresh",
+        path=SESSION_REFRESH_COOKIE_PATH,
     )
 
 
@@ -120,7 +129,14 @@ def clear_session_cookies(response: JSONResponse) -> None:
     )
     response.delete_cookie(
         key=SESSION_REFRESH_COOKIE_NAME,
-        path="/auth/session/refresh",
+        path=SESSION_REFRESH_COOKIE_PATH,
+        secure=SESSION_COOKIE_SECURE,
+        httponly=True,
+        samesite="strict",
+    )
+    response.delete_cookie(
+        key=SESSION_REFRESH_COOKIE_NAME,
+        path=LEGACY_SESSION_REFRESH_COOKIE_PATH,
         secure=SESSION_COOKIE_SECURE,
         httponly=True,
         samesite="strict",

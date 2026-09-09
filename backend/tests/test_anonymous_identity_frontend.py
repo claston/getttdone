@@ -18,8 +18,9 @@ def test_anonymous_frontends_migrate_legacy_storage_without_creating_new_fingerp
 def test_anonymous_frontend_requests_include_server_cookie_credentials() -> None:
     index_source = (FRONTEND_ROOT / "index.js").read_text(encoding="utf-8")
     convert_source = (FRONTEND_ROOT / "ofx-convert.js").read_text(encoding="utf-8")
+    session_source = (FRONTEND_ROOT / "auth-session.js").read_text(encoding="utf-8")
 
     assert 'fetch(`${apiBase}/reconcile`, {' in index_source
     assert 'credentials: "include"' in index_source
-    assert 'fetch(`${apiBase}/api/conversions/upload`, {' in convert_source
-    assert 'credentials: "include"' in convert_source
+    assert 'session.request(`${apiBase}/api/conversions/upload`, {' in convert_source
+    assert 'credentials: "include"' in session_source

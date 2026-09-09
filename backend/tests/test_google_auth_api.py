@@ -1,9 +1,10 @@
 from fastapi.testclient import TestClient
 
-from app.application import GoogleOAuthConfig, GoogleOAuthService, GoogleOAuthStateError
+from app.application import GoogleOAuthCallbackResult, GoogleOAuthConfig, GoogleOAuthService, GoogleOAuthStateError
 from app.application.access_control import AccessControlService
-from app.dependencies import get_google_oauth_service
+from app.dependencies import get_access_control_service, get_google_oauth_service
 from app.main import app
+from app.routers.auth import SESSION_ACCESS_COOKIE_NAME, SESSION_REFRESH_COOKIE_NAME
 
 
 class _FakeConfig:
@@ -25,15 +26,17 @@ class FakeGoogleOAuthService:
         _ = (flow_mode, terms_accepted, product_updates_opt_in)
         return f"https://accounts.google.com/mock?next={next_path}"
 
-    def build_callback_redirect_url(self, *, code: str, state: str) -> str:
-        return (
-            "http://localhost:3000/auth-callback.html"
-            f"?user_token=test-token-{code}-{state}&next=%2Fclient-area.html&provider=google"
+    def complete_callback(self, *, code: str, state: str) -> GoogleOAuthCallbackResult:
+        return GoogleOAuthCallbackResult(
+            redirect_url=(
+                "http://localhost:3000/auth-callback.html"
+                f"?next=%2Fclient-area.html&provider=google&proof={code}-{state}"
+            )
         )
 
 
 class FakeGoogleOAuthServiceWithError(FakeGoogleOAuthService):
-    def build_callback_redirect_url(self, *, code: str, state: str) -> str:
+    def complete_callback(self, *, code: str, state: str) -> GoogleOAuthCallbackResult:
         _ = (code, state)
         raise GoogleOAuthStateError
 
@@ -80,7 +83,7 @@ def test_google_auth_callback_redirects_to_frontend_callback() -> None:
     assert response.status_code == 307
     location = response.headers["location"]
     assert location.startswith("http://localhost:3000/auth-callback.html")
-    assert "user_token=test-token-abc123-state123" in location
+    assert "user_token=" not in location
     assert "next=%2Fclient-area.html" in location
 
     app.dependency_overrides.clear()
@@ -131,6 +134,7 @@ def test_google_signup_records_initial_access_and_login_records_return(tmp_path)
     )
     signup_redirect = oauth.build_callback_redirect_url(code="signup-code", state=signup_state)
     assert "auth-callback.html" in signup_redirect
+    assert "user_token=" not in signup_redirect
     user = access_control.get_user_by_email("erica@example.com")
     signup_events = access_control.list_user_login_events_for_admin(user_id=user.user_id)
     assert len(signup_events) == 1
@@ -142,6 +146,48 @@ def test_google_signup_records_initial_access_and_login_records_return(tmp_path)
     )
     login_redirect = oauth.build_callback_redirect_url(code="login-code", state=login_state)
     assert "auth-callback.html" in login_redirect
+    assert "user_token=" not in login_redirect
     events = access_control.list_user_login_events_for_admin(user_id=user.user_id)
     assert len(events) == 2
     assert events[0]["auth_method"] == "google_oauth"
+
+
+def test_google_callback_sets_http_only_session_without_url_credential(tmp_path) -> None:
+    access_control = AccessControlService(
+        state_file=tmp_path / "access-control-state.json",
+        token_secret="test-secret",
+    )
+    oauth = StubGoogleOAuthService(
+        access_control_service=access_control,
+        profile={
+            "sub": "google-cookie-user",
+            "email": "cookie@example.com",
+            "name": "Cookie User",
+            "email_verified": True,
+        },
+    )
+    state, _ = access_control.create_google_oauth_state(
+        next_path="/client-area.html",
+        flow_mode="signup",
+        terms_accepted=True,
+    )
+    app.dependency_overrides[get_google_oauth_service] = lambda: oauth
+    app.dependency_overrides[get_access_control_service] = lambda: access_control
+    client = TestClient(app)
+    try:
+        response = client.get(
+            f"/auth/google/callback?code=google-code&state={state}",
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 307
+        assert "user_token=" not in response.headers["location"]
+        assert response.cookies.get(SESSION_ACCESS_COOKIE_NAME)
+        assert response.cookies.get(SESSION_REFRESH_COOKIE_NAME)
+        assert "httponly" in response.headers.get("set-cookie", "").lower()
+
+        me = client.get("/auth/me")
+        assert me.status_code == 200
+        assert me.json()["email"] == "cookie@example.com"
+    finally:
+        app.dependency_overrides.clear()

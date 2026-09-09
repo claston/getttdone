@@ -36,8 +36,28 @@ def assert_logged_out_links(base_url: str, route: str) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(base_url=base_url)
+        page.route(
+            "**/auth/me",
+            lambda request_route: request_route.fulfill(
+                status=401,
+                content_type="application/json",
+                body='{"detail":"Not authenticated"}',
+            ),
+        )
+        page.route(
+            "**/auth/session/refresh",
+            lambda request_route: request_route.fulfill(
+                status=401,
+                content_type="application/json",
+                body='{"detail":"Missing refresh session token"}',
+            ),
+        )
         page.goto(route, wait_until="domcontentloaded")
-        page.wait_for_selector("#top-auth-primary-link")
+        page.wait_for_function(
+            """document.querySelector('#top-auth-login-link')?.getAttribute('href') ===
+                    '/login.html?next=%2Fofx-convert.html' &&
+                document.querySelector('#top-auth-primary-link')?.getAttribute('href') === '/ofx-convert.html'"""
+        )
 
         login_href = page.get_attribute("#top-auth-login-link", "href")
         primary_href = page.get_attribute("#top-auth-primary-link", "href")
@@ -53,17 +73,23 @@ def assert_logged_in_links(base_url: str, route: str) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context(base_url=base_url)
-        context.add_init_script(
-            """
-            localStorage.setItem("ofxsimples_user_token", "smoke-token");
-            localStorage.setItem("ofxsimples_profile_hint", "qa@ofxsimples.test");
-            """
+        context.route(
+            "**/auth/me",
+            lambda request_route: request_route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"email":"qa@ofxsimples.test"}',
+            ),
         )
         page = context.new_page()
         page.goto(route, wait_until="domcontentloaded")
-        page.wait_for_selector("#top-auth-primary-link")
+        page.wait_for_function(
+            "document.querySelector('#top-auth-primary-link')?.getAttribute('href') === '/client-area.html'"
+        )
         primary_href = page.get_attribute("#top-auth-primary-link", "href")
         assert primary_href == "/client-area.html", f"{route}: unexpected logged-in primary href: {primary_href!r}"
+        assert page.evaluate("localStorage.getItem('ofxsimples_user_token')") is None
+        assert page.evaluate("localStorage.getItem('ofxsimples_profile_hint')") is None
         browser.close()
 
 

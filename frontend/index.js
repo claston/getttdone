@@ -94,9 +94,8 @@ function bindDropzone(config) {
     }
 
     const DEFAULT_API_BASE = resolveDefaultApiBase();
-    const API_BASE_KEY = "ofxsimples_api_base";
-    const USER_TOKEN_KEY = "ofxsimples_user_token";
     const ANON_FINGERPRINT_KEY = "ofxsimples_anon_fingerprint";
+    const session = window.OfxSession;
     const showReportBtn = document.getElementById("show-report-btn");
     const topCtaStart = document.getElementById("top-cta-start");
     const topCtaSignup = document.getElementById("top-cta-signup");
@@ -144,6 +143,7 @@ function bindDropzone(config) {
     let filteredReconcileRows = [];
     let reconcileCurrentPage = 1;
     let reconcileStatusFilter = "all";
+    let hasAuthenticatedSession = false;
     const reconcileStatusButtons = reconcileStatusFilters
         ? Array.from(reconcileStatusFilters.querySelectorAll("button[data-status]"))
         : [];
@@ -166,13 +166,7 @@ function bindDropzone(config) {
     }
 
     function getApiBase() {
-        return normalizeApiBase(localStorage.getItem(API_BASE_KEY) || DEFAULT_API_BASE);
-    }
-
-    function getUserToken() {
-        const raw = localStorage.getItem(USER_TOKEN_KEY);
-        const token = String(raw || "").trim();
-        return token || null;
+        return normalizeApiBase(DEFAULT_API_BASE);
     }
 
     let anonymousSessionPromise = null;
@@ -202,12 +196,17 @@ function bindDropzone(config) {
         }
     }
 
-    function syncTopCtaBySession() {
+    async function syncTopCtaBySession() {
         if (!topCtaStart) {
             return;
         }
-        if (getUserToken()) {
-            topCtaStart.textContent = "Minha area";
+        try {
+            hasAuthenticatedSession = !!(session && (await session.getCurrentUser()));
+        } catch (_error) {
+            hasAuthenticatedSession = false;
+        }
+        if (hasAuthenticatedSession) {
+            topCtaStart.textContent = "Minha área";
             if (topCtaSignup) {
                 topCtaSignup.classList.add("hidden");
             }
@@ -264,7 +263,7 @@ function bindDropzone(config) {
         }
 
         if (normalized.includes("ambiguous column mapping")) {
-            return "Nao consegui identificar com seguranca as colunas da planilha. Use nomes mais claros como Data, Descricao e Valor.";
+            return "Não consegui identificar com segurança as colunas da planilha. Use nomes mais claros como Data, Descrição e Valor.";
         }
 
         return message || "Falha ao processar conciliacao.";
@@ -291,7 +290,7 @@ function bindDropzone(config) {
             contas_a_receber: "Contas a receber",
             contas_a_pagar: "Contas a pagar",
             planilha_contabil_debito_credito: "Planilha contabil debito/credito",
-            generico_financeiro: "Documento financeiro generico"
+            generico_financeiro: "Documento financeiro genérico"
         };
         return labels[semanticType] || "Documento financeiro";
     }
@@ -305,7 +304,7 @@ function bindDropzone(config) {
         const hasConfidence = Number.isFinite(confidence);
         const confidencePercent = hasConfidence ? Math.max(0, Math.min(100, Math.round(confidence * 100))) : null;
         const confidenceLabel = confidencePercent === null ? "n/a" : `${confidencePercent}%`;
-        return `Tipo detectado: ${semanticTypeLabel(semanticType)} | Confianca: ${confidenceLabel}`;
+        return `Tipo detectado: ${semanticTypeLabel(semanticType)} | Confiança: ${confidenceLabel}`;
     }
 
     function setSemanticHint(node, text) {
@@ -331,7 +330,7 @@ function bindDropzone(config) {
     function problemTypeMeta(type) {
         const meta = {
             missing_payment: {
-                title: "Pagamento nao encontrado",
+                title: "Pagamento não encontrado",
                 badge: "Critico",
                 accent: "border-red-200 bg-red-50/90",
                 badgeClass: "bg-red-100 text-red-700",
@@ -340,7 +339,7 @@ function bindDropzone(config) {
                 label: "Maior impacto"
             },
             missing_receipt: {
-                title: "Recebimento nao registrado",
+                title: "Recebimento não registrado",
                 badge: "Atencao",
                 accent: "border-orange-200 bg-orange-50/90",
                 badgeClass: "bg-orange-100 text-orange-700",
@@ -358,7 +357,7 @@ function bindDropzone(config) {
                 label: "Revisar pares"
             },
             possible_duplicate: {
-                title: "Possivel duplicidade",
+                title: "Possível duplicidade",
                 badge: "Observacao",
                 accent: "border-slate-200 bg-slate-50/90",
                 badgeClass: "bg-slate-100 text-slate-700",
@@ -554,7 +553,7 @@ function bindDropzone(config) {
     async function fetchDemoFileAsFile(url, filename) {
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
-            throw new Error(`Nao foi possivel carregar o arquivo de demo (${filename}).`);
+            throw new Error(`Não foi possível carregar o arquivo de demo (${filename}).`);
         }
 
         const blob = await response.blob();
@@ -1154,7 +1153,7 @@ ${meta.percent}
 
     if (topCtaStart) {
         topCtaStart.addEventListener("click", function () {
-            if (getUserToken()) {
+            if (hasAuthenticatedSession) {
                 window.location.href = "./client-area.html";
                 return;
             }
@@ -1177,4 +1176,4 @@ ${meta.percent}
     void ensureAnonymousSession().catch(function () {
         // A ação de envio tentará novamente e exibirá o erro ao usuário.
     });
-    syncTopCtaBySession();
+    void syncTopCtaBySession();

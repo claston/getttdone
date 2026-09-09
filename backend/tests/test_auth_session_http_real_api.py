@@ -194,7 +194,7 @@ def test_http_auth_session_refresh_rotates_cookie_and_detects_reuse() -> None:
             events = access_control.list_user_login_events_for_admin(user_id=register.json()["user_id"])
             assert len(events) == 2
 
-            client.cookies.set(SESSION_REFRESH_COOKIE_NAME, old_refresh, path="/auth/session/refresh")
+            client.cookies.set(SESSION_REFRESH_COOKIE_NAME, old_refresh, path="/auth/session")
             reuse = client.post(f"{base_url}/auth/session/refresh")
             assert reuse.status_code == 401
 
@@ -225,8 +225,10 @@ def test_http_auth_session_logout_revokes_session_cookie() -> None:
             assert logout.status_code == 200
 
             me = client.get(f"{base_url}/auth/me")
+            refresh = client.post(f"{base_url}/auth/session/refresh")
 
     assert me.status_code == 401
+    assert refresh.status_code == 401
 
 
 def test_http_admin_deactivation_blocks_user_login() -> None:

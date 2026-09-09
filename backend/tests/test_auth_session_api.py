@@ -77,6 +77,51 @@ def test_session_login_sets_http_only_cookies_and_me_works_without_bearer() -> N
         shutil.rmtree(state_dir, ignore_errors=True)
 
 
+def test_legacy_token_can_be_migrated_once_to_http_only_cookie_session() -> None:
+    state_dir = Path(mkdtemp(prefix="auth-session-api-"))
+    client, _service = _build_client(state_dir)
+    try:
+        register = client.post(
+            "/auth/register",
+            json={
+                "name": "Erica",
+                "email": "erica@example.com",
+                "password": "strong-pass",
+                "accepted_terms": True,
+            },
+        )
+        legacy_token = register.json()["user_token"]
+
+        migrated = client.post(
+            "/auth/session/migrate",
+            headers={"Authorization": f"Bearer {legacy_token}"},
+        )
+
+        assert migrated.status_code == 200
+        assert "user_token" not in migrated.json()
+        assert migrated.cookies.get(SESSION_ACCESS_COOKIE_NAME)
+        assert migrated.cookies.get(SESSION_REFRESH_COOKIE_NAME)
+        assert "httponly" in migrated.headers.get("set-cookie", "").lower()
+
+        me = client.get("/auth/me")
+        assert me.status_code == 200
+        assert me.json()["email"] == "erica@example.com"
+    finally:
+        app.dependency_overrides.clear()
+        shutil.rmtree(state_dir, ignore_errors=True)
+
+
+def test_legacy_session_migration_rejects_missing_token() -> None:
+    state_dir = Path(mkdtemp(prefix="auth-session-api-"))
+    client, _service = _build_client(state_dir)
+    try:
+        response = client.post("/auth/session/migrate")
+        assert response.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+        shutil.rmtree(state_dir, ignore_errors=True)
+
+
 def test_session_refresh_rotates_token_and_detects_reuse() -> None:
     state_dir = Path(mkdtemp(prefix="auth-session-api-"))
     client, service = _build_client(state_dir)
@@ -108,12 +153,12 @@ def test_session_refresh_rotates_token_and_detects_reuse() -> None:
         events = service.list_user_login_events_for_admin(user_id=register.json()["user_id"])
         assert len(events) == 2
 
-        client.cookies.set(SESSION_REFRESH_COOKIE_NAME, old_refresh, path="/auth/session/refresh")
+        client.cookies.set(SESSION_REFRESH_COOKIE_NAME, old_refresh, path="/auth/session")
         reuse = client.post("/auth/session/refresh")
         assert reuse.status_code == 401
         assert "reuse" in str(reuse.json().get("detail", "")).lower()
 
-        client.cookies.set(SESSION_REFRESH_COOKIE_NAME, new_refresh, path="/auth/session/refresh")
+        client.cookies.set(SESSION_REFRESH_COOKIE_NAME, new_refresh, path="/auth/session")
         broken_family = client.post("/auth/session/refresh")
         assert broken_family.status_code == 401
     finally:
@@ -148,6 +193,9 @@ def test_session_logout_revokes_cookie_session() -> None:
 
         me = client.get("/auth/me")
         assert me.status_code == 401
+
+        refresh = client.post("/auth/session/refresh")
+        assert refresh.status_code == 401
     finally:
         app.dependency_overrides.clear()
         shutil.rmtree(state_dir, ignore_errors=True)

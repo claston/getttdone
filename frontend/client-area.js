@@ -1,4 +1,7 @@
 (function () {
+  "use strict";
+
+  const session = window.OfxSession;
   const profileEmail = document.getElementById("profile-email");
   const accountEmail = document.getElementById("account-email");
   const accountAvatar = document.getElementById("account-avatar");
@@ -24,10 +27,6 @@
   const statusMsg = document.getElementById("status-msg");
   const logoutBtn = document.getElementById("logout-btn");
   const viewAllLink = document.getElementById("view-all-link");
-  const USER_TOKEN_KEY = "ofxsimples_user_token";
-  const USER_TOKEN_COOKIE = "ofxsimples_user_token";
-  const TOKEN_SHARED_COOKIE_ALLOWLIST = ["ofxsimples.com.br"];
-  const PROFILE_HINT_KEY = "ofxsimples_profile_hint";
   const TRANSIENT_OVERLAY_SELECTORS = [
     "#quota-lock-overlay",
     ".quota-lock-overlay",
@@ -41,147 +40,7 @@
   const COLD_START_TIMEOUT_MS = 5500;
   let unlockRetryTimer = null;
 
-  function isIpv4Host(hostname) {
-    return /^\d{1,3}(\.\d{1,3}){3}$/.test(String(hostname || "").trim());
-  }
-
-  function normalizeDomainCandidate(value) {
-    return String(value || "").trim().toLowerCase().replace(/^\.+/, "");
-  }
-
-  function getConfiguredSharedCookieAllowlist() {
-    const configured = window.__OFX_TOKEN_SHARED_COOKIE_ALLOWLIST__;
-    if (!Array.isArray(configured)) {
-      return TOKEN_SHARED_COOKIE_ALLOWLIST;
-    }
-    const normalized = configured
-      .map(function (item) {
-        return normalizeDomainCandidate(item);
-      })
-      .filter(function (item) {
-        return /^[a-z0-9.-]+$/.test(item) && item.includes(".");
-      });
-    if (normalized.length) {
-      return normalized;
-    }
-    return TOKEN_SHARED_COOKIE_ALLOWLIST;
-  }
-
-  function resolveLegacySharedCookieDomain() {
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const labels = host.split(".").filter(Boolean);
-    if (labels.length < 2) {
-      return null;
-    }
-    if (labels.length >= 3 && labels[labels.length - 2] === "com" && labels[labels.length - 1] === "br") {
-      return `.${labels.slice(-3).join(".")}`;
-    }
-    return `.${labels.slice(-2).join(".")}`;
-  }
-
-  function resolveSharedCookieDomain() {
-    if (window.location.protocol !== "https:") {
-      return null;
-    }
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    if (!host || host === "localhost" || isIpv4Host(host)) {
-      return null;
-    }
-    const allowedDomains = getConfiguredSharedCookieAllowlist();
-    for (const allowedDomain of allowedDomains) {
-      if (host === allowedDomain || host.endsWith(`.${allowedDomain}`)) {
-        return `.${allowedDomain}`;
-      }
-    }
-    return null;
-  }
-
-  function readUserTokenCookie() {
-    const entries = String(document.cookie || "").split(";");
-    for (const entry of entries) {
-      const [namePart, ...valueParts] = entry.split("=");
-      const name = String(namePart || "").trim();
-      if (name !== USER_TOKEN_COOKIE) continue;
-      const rawValue = valueParts.join("=");
-      const decoded = decodeURIComponent(String(rawValue || "").trim());
-      if (decoded) return decoded;
-    }
-    return "";
-  }
-
-  function writeUserTokenCookie(token) {
-    const safeToken = encodeURIComponent(String(token || "").trim());
-    if (!safeToken) return;
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=${safeToken}; Path=/; Max-Age=2592000; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function clearUserTokenCookie() {
-    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
-    const sharedDomain = resolveSharedCookieDomain();
-    const legacySharedDomain = resolveLegacySharedCookieDomain();
-    document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
-    if (sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${sharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-    if (legacySharedDomain && legacySharedDomain !== sharedDomain) {
-      document.cookie = `${USER_TOKEN_COOKIE}=; Path=/; Max-Age=0; Domain=${legacySharedDomain}; SameSite=Lax${secureAttr}`;
-    }
-  }
-
-  function resolveApiBase() {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const isLocalHost = host === "localhost" || host === "127.0.0.1";
-    const isDevFrontend = isLocalHost && port !== "8000";
-    if (isDevFrontend) {
-      return "http://127.0.0.1:8000";
-    }
-    if (window.location.origin && window.location.origin !== "null") {
-      return window.location.origin;
-    }
-    return "http://127.0.0.1:8000";
-  }
-
-  const apiBase = resolveApiBase();
-
-  function getUserToken() {
-    const localToken = String(localStorage.getItem(USER_TOKEN_KEY) || "").trim();
-    if (localToken) {
-      writeUserTokenCookie(localToken);
-      return localToken;
-    }
-    const cookieToken = readUserTokenCookie();
-    if (cookieToken) {
-      localStorage.setItem(USER_TOKEN_KEY, cookieToken);
-      return cookieToken;
-    }
-    return null;
-  }
-
-  function clearUserToken() {
-    localStorage.removeItem(USER_TOKEN_KEY);
-    localStorage.removeItem(PROFILE_HINT_KEY);
-    clearUserTokenCookie();
-  }
-
-  function getProfileHint() {
-    return String(localStorage.getItem(PROFILE_HINT_KEY) || "").trim() || "conta";
-  }
-
-  function setProfileHint(email) {
-    const value = String(email || "").trim();
-    if (value) {
-      localStorage.setItem(PROFILE_HINT_KEY, value);
-    }
-  }
+  const apiBase = session ? session.apiBase : window.location.origin;
 
   function forceUnlockTransientUi() {
     if (document.body) {
@@ -230,7 +89,7 @@
   }
 
   function bootstrapAccountPreview() {
-    const email = getProfileHint();
+    const email = "conta";
     if (accountEmail) {
       accountEmail.textContent = email;
     }
@@ -436,6 +295,15 @@
     return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
 
+  function safePaymentLink(value) {
+    try {
+      const url = new URL(String(value || "").trim());
+      return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
   function setOrderStatusVisible(visible) {
     if (!orderStatusCard) return;
     orderStatusCard.classList.toggle("hidden", !visible);
@@ -503,7 +371,7 @@
     }
     if (orderStatusValue) orderStatusValue.textContent = formatOrderStatus(data.status);
     if (orderNextStep) orderNextStep.textContent = formatOrderNextStep(data.next_step);
-    const link = String(data.payment_link || "").trim();
+    const link = safePaymentLink(data.payment_link);
     if (link) {
       if (orderPaymentLink) orderPaymentLink.setAttribute("href", link);
       if (orderPaymentLinkLine) orderPaymentLinkLine.classList.remove("hidden");
@@ -542,7 +410,7 @@
         : null;
 
       try {
-        const response = await fetch(url, {
+        const response = await session.request(url, {
           ...requestInit,
           ...(controller ? { signal: controller.signal } : {}),
         });
@@ -576,8 +444,7 @@
     return new Map(items.map((item) => [String(item.code || "").trim().toLowerCase(), item]));
   }
 
-  async function loadOrderData(token, requestedIntentId) {
-    const requestInit = token ? { headers: { authorization: `Bearer ${token}` } } : undefined;
+  async function loadOrderData(requestedIntentId) {
     const orders = [];
     const seenIntentIds = new Set();
     function pushOrder(item) {
@@ -592,7 +459,7 @@
       try {
         const requestedOrder = await fetchJson(
           `${apiBase}/checkout/intents/${encodeURIComponent(requestedIntentId)}`,
-          requestInit,
+          undefined,
           { attempts: 2 },
         );
         pushOrder(requestedOrder);
@@ -602,7 +469,7 @@
     }
 
     try {
-      const latestOrder = await fetchJson(`${apiBase}/checkout/intents/latest`, requestInit, { attempts: 2 });
+      const latestOrder = await fetchJson(`${apiBase}/checkout/intents/latest`, undefined, { attempts: 2 });
       pushOrder(latestOrder);
     } catch (_error) {
       // Optional source for history.
@@ -611,17 +478,14 @@
   }
 
   async function loadClientArea() {
-    const token = getUserToken();
     forceUnlockTransientUi();
     scheduleForceUnlockTransientUi();
 
     try {
       const query = new URL(window.location.href).searchParams;
       const requestedIntentId = String(query.get("checkout_intent") || "").trim();
-      const authHeaders = token ? { authorization: `Bearer ${token}` } : null;
-      const authInit = authHeaders ? { headers: authHeaders } : undefined;
-      const mePromise = fetchJson(`${apiBase}/auth/me`, authInit, { attempts: 3 });
-      const historyPromise = fetchJson(`${apiBase}/client/conversions?limit=20`, authInit, { attempts: 3 });
+      const mePromise = fetchJson(`${apiBase}/auth/me`, undefined, { attempts: 3 });
+      const historyPromise = fetchJson(`${apiBase}/client/conversions?limit=20`, undefined, { attempts: 3 });
       const plansPromise = fetchJson(`${apiBase}/plans`, undefined, { attempts: 3 }).catch(() => ({ items: [] }));
 
       const history = await historyPromise;
@@ -642,7 +506,6 @@
       if (accountAvatar) {
         accountAvatar.textContent = getInitialLabel(me.name || me.email || "U");
       }
-      setProfileHint(me.email || "");
       const quotaMode = String(me.quota_mode || "conversion").toLowerCase();
       if (quotaMode === "pages") {
         quotaText.textContent = `${me.quota_remaining} / ${me.quota_limit}`;
@@ -671,7 +534,7 @@
 
       void Promise.all([
         plansPromise.then((plansCatalog) => mapPlansByCode(plansCatalog)),
-        loadOrderData(token, requestedIntentId),
+        loadOrderData(requestedIntentId),
       ]).then(([plansByCode, orders]) => {
         renderOrderRows(orders);
         const pendingOrder =
@@ -683,7 +546,7 @@
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao carregar área do cliente.";
       if (message.toLowerCase().includes("invalid user token")) {
-        clearUserToken();
+        await session.logout();
         window.location.href = "./login.html?next=%2Fclient-area.html";
         return;
       }
@@ -698,9 +561,9 @@
   }
 
   if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
+    logoutBtn.addEventListener("click", async function () {
       closeAccountMenu();
-      clearUserToken();
+      if (session) await session.logout();
       window.location.replace("./ofx-convert.html?logout=1");
     });
   }

@@ -100,6 +100,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "FilesystemConversionJobRepository",
     ),
     "GoogleOAuthAccountNotFoundError": ("app.application.errors", "GoogleOAuthAccountNotFoundError"),
+    "GoogleOAuthCallbackResult": ("app.application.google_oauth_service", "GoogleOAuthCallbackResult"),
     "GoogleOAuthConfig": ("app.application.google_oauth_service", "GoogleOAuthConfig"),
     "GoogleOAuthExchangeError": ("app.application.errors", "GoogleOAuthExchangeError"),
     "GoogleOAuthNotConfiguredError": ("app.application.errors", "GoogleOAuthNotConfiguredError"),
